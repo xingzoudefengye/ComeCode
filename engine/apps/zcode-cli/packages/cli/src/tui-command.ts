@@ -73,6 +73,7 @@ export const runTuiCommand = async (
             initialMode: currentCliMode(modeState),
             initialModel: metadata.model,
             initialThoughtLevel: metadata.thoughtLevel,
+            initialSessionId: metadata.sessionId,
             loginRequired: metadata.loginRequired,
             locale: metadata.locale ?? startupLocale,
             theme: metadata.theme ?? "auto",

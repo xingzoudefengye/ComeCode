@@ -3,8 +3,8 @@ import type { TuiCopy } from "@zcode/i18n";
 import React from "react";
 import { DEFAULT_TUI_COPY } from "./app-locale.js";
 import { palette } from "./app-model.js";
-import { InputComposerStatus } from "./app-input-status.js";
 import { wordWrappedLineCount } from "./app-terminal-width.js";
+import { activeTuiTheme } from "./theme/index.js";
 
 const h = React.createElement as (
   type: React.ElementType | string,
@@ -12,25 +12,19 @@ const h = React.createElement as (
   ...children: React.ReactNode[]
 ) => React.ReactElement;
 
-const INPUT_DEFAULT_EDITOR_ROWS = 2;
+const INPUT_DEFAULT_EDITOR_ROWS = 1;
 const INPUT_MIN_EDITOR_ROWS = INPUT_DEFAULT_EDITOR_ROWS;
 const INPUT_MAX_EDITOR_ROWS = 6;
-const INPUT_FRAME_CHROME_ROWS = 3;
-const INPUT_PANE_STATUS_ROWS = 1;
-const INPUT_CHROME_ROWS = INPUT_FRAME_CHROME_ROWS + INPUT_PANE_STATUS_ROWS;
+// 输入框只包含边框本身的上下两行；状态栏已移到输入框外部。
+const INPUT_FRAME_CHROME_ROWS = 2;
+const INPUT_CHROME_ROWS = INPUT_FRAME_CHROME_ROWS;
 const INPUT_CONTENT_FALLBACK_WIDTH = 80;
 const INPUT_MIN_CONTENT_WIDTH = 8;
-const INPUT_PANE_HORIZONTAL_CHROME_WIDTH = 4;
 
 const INPUT_PANE_MIN_HEIGHT = INPUT_MIN_EDITOR_ROWS + INPUT_CHROME_ROWS;
 const INPUT_PANE_MAX_HEIGHT = INPUT_MAX_EDITOR_ROWS + INPUT_CHROME_ROWS;
 const INPUT_PANE_BORDER = true;
 const INPUT_PANE_BORDER_STYLE = "rounded";
-const INPUT_PANE_STATUS_SPACER_STYLE = {
-  flexGrow: 1,
-  minHeight: 0,
-} as const;
-
 const PROMPT_TEXTAREA_KEY_BINDINGS = [
   { name: "return", action: "submit" },
   { name: "linefeed", action: "submit" },
@@ -58,13 +52,10 @@ export function InputPane({
   contentWidth,
   copy = DEFAULT_TUI_COPY,
   focused,
-  mode,
-  model,
   onInput,
   onSubmit,
   editorRef,
   resetCursorToEndVersion,
-  thoughtLevel,
   value,
 }: {
   busy: boolean;
@@ -72,12 +63,9 @@ export function InputPane({
   copy?: TuiCopy;
   editorRef?: React.MutableRefObject<PromptInputEditor | null>;
   focused: boolean;
-  mode?: string;
-  model: string;
   onInput: (value: string) => void;
   onSubmit: (value: string) => void;
   resetCursorToEndVersion: number;
-  thoughtLevel: string;
   value: string;
 }): React.ReactElement {
   const textareaRef = React.useRef<TextareaRenderable | null>(null);
@@ -138,12 +126,9 @@ export function InputPane({
   const handleSubmit = React.useCallback(() => {
     onSubmit(textareaRef.current?.plainText ?? value);
   }, [onSubmit, value]);
-  const title = inputPaneTitle(copy, mode);
-
   return h(
     "box",
     {
-      title,
       style: inputPaneContainerStyle(focused, editorRows),
     },
     h("textarea", {
@@ -156,20 +141,8 @@ export function InputPane({
       ref: setTextareaRef,
       style: inputPaneTextareaStyle(editorRows),
     }),
-    h("box", { style: INPUT_PANE_STATUS_SPACER_STYLE }),
-    h(InputComposerStatus, {
-      contentWidth: inputPaneStatusContentWidth(contentWidth),
-      model,
-      thoughtLevel,
-    }),
   );
 }
-
-function inputPaneTitle(copy: TuiCopy, mode?: string): string {
-  const title = mode ? formatInputModeLabel(mode) : copy.input.title;
-  return ` ${title} `;
-}
-
 function inputPanePlaceholder(copy: TuiCopy, busy: boolean): string {
   return busy ? copy.input.busyPlaceholder : copy.input.placeholder;
 }
@@ -191,7 +164,7 @@ function inputPaneContainerStyle(
   return {
     backgroundColor: palette.panel,
     border: INPUT_PANE_BORDER,
-    borderColor: focused ? palette.accent : palette.border,
+    borderColor: focused ? activeTuiTheme().borderSubtle : palette.panel,
     borderStyle: INPUT_PANE_BORDER_STYLE,
     flexDirection: "column",
     height,
@@ -240,19 +213,6 @@ function normalizeInputContentWidth(contentWidth?: number): number {
   return Math.max(INPUT_MIN_CONTENT_WIDTH, Math.floor(contentWidth));
 }
 
-function inputPaneStatusContentWidth(contentWidth?: number): number | undefined {
-  if (contentWidth === undefined || !Number.isFinite(contentWidth)) return undefined;
-  return Math.max(
-    INPUT_MIN_CONTENT_WIDTH,
-    Math.floor(contentWidth) - INPUT_PANE_HORIZONTAL_CHROME_WIDTH,
-  );
-}
-
 function normalizeEditorRows(rows: number): number {
   return Math.min(INPUT_MAX_EDITOR_ROWS, Math.max(INPUT_MIN_EDITOR_ROWS, Math.floor(rows)));
-}
-
-function formatInputModeLabel(mode: string): string {
-  if (mode.length === 0) return mode;
-  return `${mode.slice(0, 1).toUpperCase()}${mode.slice(1)}`;
 }

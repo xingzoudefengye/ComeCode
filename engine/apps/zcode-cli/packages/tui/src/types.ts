@@ -22,7 +22,7 @@ export type TuiContextUsage = Pick<SessionProjection, "contextUsed" | "contextWi
 
 export type TuiSessionMetadata = Pick<
   TuiSubmitPromptResult,
-  "locale" | "model" | "theme" | "thoughtLevel" | "modelOptions" | "effortOptions" | "loginRequired"
+  "locale" | "model" | "theme" | "thoughtLevel" | "modelOptions" | "effortOptions" | "loginRequired" | "sessionId"
 >;
 
 export type TuiSwitchableMode = Extract<CollaborationMode, "plan" | "build" | "edit" | "yolo">;
@@ -301,6 +301,7 @@ export type TuiOptions = {
   initialMode?: CollaborationMode;
   initialModel?: string;
   initialResult?: TuiSubmitPromptResult;
+  initialSessionId?: string;
   initialThoughtLevel?: string;
   loginRequired?: boolean;
   locale?: SupportedLocale;
@@ -342,6 +343,7 @@ export type TuiStartupOptions = Pick<
   | "initialMode"
   | "initialModel"
   | "initialThoughtLevel"
+  | "initialSessionId"
   | "loginRequired"
   | "locale"
   | "theme"

@@ -200,11 +200,13 @@ export type NetworkRequest = {
 };
 
 export type ContextUsage = {
+  compactThreshold?: number;
   contextUsed?: number;
   contextWindow?: number;
 };
 
 export type CacheStats = {
+  hitRate?: number;
   cachedMessages?: number;
   cacheReadTokens?: number;
   lastCacheHit?: boolean;

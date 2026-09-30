@@ -27,6 +27,25 @@ export interface TuiCopy {
   };
   input: {
     activeStatusHint: string;
+    runtimePhase: Record<
+      | "idle"
+      | "working"
+      | "model"
+      | "tool"
+      | "waiting"
+      | "retrying"
+      | "compacting"
+      | "completed"
+      | "failed"
+      | "cancelled",
+      string
+    >;
+    runtimeElapsed(seconds: number): string;
+    runtimeLastActivity(seconds: number): string;
+    runtimeStale: string;
+    runtimeBackground(count: number): string;
+    compactAt(tokens: string): string;
+    cacheHit(percent: number): string;
     busyPlaceholder: string;
     placeholder: string;
     queuedMore(count: number): string;

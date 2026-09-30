@@ -1,9 +1,9 @@
 import type { ModelUsageSummary, TodoItem, TurnId } from "@zcode/contracts";
 import { getZCodeCopy } from "@zcode/i18n";
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { AppView } from "./app-view.js";
+import { AppView, type TuiAppProps } from "./app-view.js";
 import type { PromptInputEditor } from "./app-input-pane.js";
-import { selectionCopyStatus, type SelectionCopyResult } from "./app-copy.js";
+import { selectionCopyStatus } from "./app-copy.js";
 import { useClipboardImagePaste } from "./app-clipboard-image.js";
 import { useFileMentionController } from "./app-file-mentions.js";
 import { useTuiKeyboardControls } from "./app-keyboard.js";
@@ -38,13 +38,6 @@ import { useTuiApplyResult } from "./app-result.js";
 import { useSubagents } from "./app-subagents.js";
 import type { TuiOptions } from "./types.js";
 
-type TuiAppProps = {
-  copySelection: () => Promise<SelectionCopyResult>;
-  hasCopyableSelection: () => boolean;
-  options: TuiOptions;
-  onExit: (code: number) => void;
-};
-
 export function TuiApp({
   copySelection,
   hasCopyableSelection,
@@ -67,6 +60,9 @@ export function TuiApp({
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState(initialResult?.mode ?? options.initialMode ?? "build");
   const [model, setModel] = useState(initialResult?.model ?? options.initialModel ?? "unknown");
+  const [sessionId] = useState(
+    initialResult?.sessionId ?? options.initialSessionId ?? options.getMainSessionId?.() ?? "",
+  );
   const [thoughtLevel, setThoughtLevel] = useState(
     initialResult?.thoughtLevel ?? options.initialThoughtLevel ?? "",
   );
@@ -368,6 +364,7 @@ export function TuiApp({
   });
 
   return React.createElement(AppView, {
+    runtimeActivity: applySessionEvent.activity,
     subagents,
     toggleSidebar: sidebar.toggleSidebar,
     activeTurnId,
@@ -386,6 +383,7 @@ export function TuiApp({
     liveModelText,
     mode,
     model,
+    sessionId,
     messages,
     modifiedFiles,
     networkRequests,

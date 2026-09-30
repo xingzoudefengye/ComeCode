@@ -4,6 +4,7 @@ import React from "react";
 import { applySessionEventToState } from "./app-events.js";
 import { describeSessionEvent } from "./state.js";
 import { isSubagentToolMirror } from "./app-subagent-events.js";
+import { useRuntimeActivity, type RuntimeActivity } from "./app-runtime-activity.js";
 
 type SessionEventHandlers = Parameters<typeof applySessionEventToState>[1];
 
@@ -73,17 +74,18 @@ function applyMainSessionEvent(
 
 export function useSessionEventApplier(
   input: SessionEventApplierInput,
-): (event: SessionEvent) => void {
+): ((event: SessionEvent) => void) & { activity: RuntimeActivity } {
   const appliedEventIdsRef = React.useRef<Set<string>>(new Set());
+  const runtimeActivity = useRuntimeActivity(input.getMainSessionId, input.observeSessionEvent);
   const applyEvent = React.useCallback(
     (event: SessionEvent) => {
-      input.observeSessionEvent?.(event);
+      runtimeActivity.onEvent(event);
       applyMainSessionEvent(event, appliedEventIdsRef.current, input);
     },
-    [input],
+    [input, runtimeActivity.onEvent],
   );
   useSessionEventSubscription(input.subscribeSessionEvents, applyEvent);
-  return applyEvent;
+  return Object.assign(applyEvent, { activity: runtimeActivity.activity });
 }
 
 /** A stable subscription survives renders; both event sources share the applier. */
