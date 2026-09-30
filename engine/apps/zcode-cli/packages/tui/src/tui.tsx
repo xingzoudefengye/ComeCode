@@ -28,7 +28,7 @@ export const runTui = async (options: TuiOptions): Promise<number> => {
     exitOnCtrlC: false,
     // Session replacement can raise SIGPIPE while closing MCP pipes. OpenTUI's
     // default exit signals include it and would destroy the entire TUI.
-    exitSignals: ["SIGINT", "SIGTERM", "SIGQUIT", "SIGABRT", "SIGHUP", "SIGBREAK", "SIGBUS"],
+    exitSignals: ["SIGTERM", "SIGQUIT", "SIGABRT", "SIGHUP", "SIGBREAK", "SIGBUS"],
     consoleOptions: {
       keyBindings: [
         {
@@ -65,6 +65,22 @@ async function runTuiWithRenderer(options: TuiOptions, renderer: CliRenderer): P
     exitCode = code;
     renderer.destroy();
   };
+
+  // SIGINT 两次确认退出逻辑
+  let lastSigintTime = 0;
+  const SIGINT_DOUBLE_PRESS_WINDOW_MS = 2000;
+  const handleSigint = () => {
+    const now = Date.now();
+    if (now - lastSigintTime < SIGINT_DOUBLE_PRESS_WINDOW_MS) {
+      // 两次 Ctrl+C 在 2 秒内，退出
+      onExit(130);
+    } else {
+      // 第一次 Ctrl+C，记录时间但不退出
+      lastSigintTime = now;
+    }
+  };
+  process.on("SIGINT", handleSigint);
+
   const handleThemeMode = (mode: UiThemeMode) => {
     if (destroyed) return;
     terminalThemeMode = mode;
@@ -124,6 +140,7 @@ async function runTuiWithRenderer(options: TuiOptions, renderer: CliRenderer): P
   const closed = new Promise<number>((resolve) => {
     renderer.once(CliRenderEvents.DESTROY, () => {
       destroyed = true;
+      process.off("SIGINT", handleSigint);
       renderer.off(CliRenderEvents.FRAME, initialize);
       renderer.off(CliRenderEvents.THEME_MODE, handleThemeMode);
       themeModeListeners.clear();
