@@ -4,6 +4,20 @@ import {
   type ProviderRegistryView,
 } from "./registry.js";
 
+// Modified by ComeCode：默认推理档位从「最高档」改为优先 high，其次 balanced/medium，
+// 都没有才退回 index 0；用户仍可用 /effort 自行调整。
+const PREFERRED_DEFAULT_REASONING_LEVELS = ["high", "balanced", "medium"] as const;
+
+export function pickDefaultReasoningLevel(values: readonly string[]): string | undefined {
+  for (const preferred of PREFERRED_DEFAULT_REASONING_LEVELS) {
+    const matched = values.find((value) => value === preferred);
+    if (matched) return matched;
+  }
+  // 退回到第一个非 disabled/none 的值；如果全是 disabled/none 或为空则返回 values[0]
+  const fallback = values.find((value) => value !== "disabled" && value !== "none");
+  return fallback ?? values[0];
+}
+
 export type InitialModelSelectionResolution =
   | {
       readonly source: "configured-default" | "registry-fallback";
@@ -62,7 +76,9 @@ export function completeNewModelSelection(
   const model = registry.providers
     .find((provider) => provider.providerId === selection.providerId)
     ?.models.find((candidate) => candidate.modelId === selection.modelId);
-  const reasoningLevel = model?.config.optionSpecs.reasoningLevel.values.at(-1);
+  const reasoningLevel = pickDefaultReasoningLevel(
+    model?.config.optionSpecs.reasoningLevel.values ?? [],
+  );
   if (!reasoningLevel) return undefined;
   return {
     providerId: selection.providerId,
