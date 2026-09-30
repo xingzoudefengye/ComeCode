@@ -490,3 +490,22 @@ export {
   type ConfigFactoryOptions,
   type ConfigResult,
 } from "./config-factory.js";
+export {
+  CONFIG_FILE_NAME,
+  extractCliWorkingDirectory,
+  extractProviderCliOverrides,
+  maskSecret,
+  materializeUnifiedConfig,
+  parseUnifiedConfigToml,
+  resolveUnifiedConfig,
+  resolveUnifiedConfigPaths,
+  toPublicUnifiedConfig,
+  type MaterializeUnifiedConfigOptions,
+  type ResolvedUnifiedConfig,
+  type UnifiedConfigDiagnostics,
+  type UnifiedConfigDocument,
+  type UnifiedConfigLoadOptions,
+  type UnifiedConfigPaths,
+  type UnifiedProviderDefinition,
+  type UnifiedProviderType,
+} from "./provider-config.js";

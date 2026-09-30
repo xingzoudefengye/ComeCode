@@ -81,6 +81,8 @@ api_key_env = "NEWAPI_API_KEY"   # 推荐引用环境变量，也可直接写 ap
 
 配置优先级：命令行参数 > 环境变量 > 项目配置 > 用户配置 > 内置默认。
 
+配置诊断命令：`comecode config path` 查看配置路径，`comecode config show` 查看合并后的脱敏配置，`comecode config check` 校验配置。运行时还可用 `--model <model>` 和 `--provider <id>` 临时覆盖默认选择。
+
 ## 5. 与 cc-switch / 现有生态兼容
 
 cc-switch 通过改写各工具的配置文件来切换 Provider，而不是只设置环境变量。兼容分两层：

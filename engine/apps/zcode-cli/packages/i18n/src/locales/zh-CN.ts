@@ -19,6 +19,7 @@ export const zhCN: ZCodeCopy = {
 命令:
   app-server 运行 ZCode Protocol stdio app server
   commands   列出自定义 slash commands（\`commands list\`）
+  config     管理统一 Provider 配置（\`config path|show|check\`）
   doctor     检查运行时和打包假设
   login [zai|bigmodel]  通过浏览器授权登录
   logout     删除共享的 Z.AI 登录凭据
@@ -45,6 +46,8 @@ export const zhCN: ZCodeCopy = {
   --force-mcs      对 Anthropic provider 强制启用 mid-conversation system 投影
   --locale <locale>  UI 语言：en-US、zh-CN 或 auto
   --mode <mode>    prompt 权限模式：build、edit、plan 或 yolo（--prompt 默认 yolo）
+  --model <model>  覆盖当前 Provider 配置中的默认模型
+  --provider <id>  覆盖当前 Provider 配置中的 Provider ID
   --resume <sessionId>  按 sessionId 恢复持久化 session（sess_...）
   --target <text>  在 headless 模式运行或设置 session goal
   --target-replace 替换 --target 已存在的 goal

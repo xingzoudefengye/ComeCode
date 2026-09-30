@@ -1,5 +1,11 @@
 import { existsSync, realpathSync } from "node:fs";
-import { normalizeComeCodeEnv, resolveComeCodeDataRoot } from "@zcode/adapters/config";
+import {
+  extractCliWorkingDirectory,
+  extractProviderCliOverrides,
+  materializeUnifiedConfig,
+  normalizeComeCodeEnv,
+  resolveComeCodeDataRoot,
+} from "@zcode/adapters/config";
 import { dirname, join, resolve } from "node:path";
 import {
   materializeZCodeBuiltinProviderConfig,
@@ -55,6 +61,16 @@ export async function prepareCliProviderRuntimeEnv(
   const explicitZCodeBuiltin = env[ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]?.trim();
   const explicitPersonal = env[ZCODE_PERSONAL_PROVIDER_CONFIG_FILE_ENV]?.trim();
   const dataBaseDir = resolveComeCodeDataRoot(env, options.dataBaseDir);
+  const personalFilePath =
+    explicitPersonal ?? join(dataBaseDir, "v2", PERSONAL_PROVIDER_CONFIG_FILE_NAME);
+  // 统一 config.toml 只在 CLI 边界 materialize，旧 Provider Registry 继续读取 JSON。
+  await materializeUnifiedConfig({
+    cwd: extractCliWorkingDirectory(options.argv),
+    env,
+    targetProviderFile: personalFilePath,
+    legacyProviderFile: personalFilePath,
+    cliOverrides: extractProviderCliOverrides(options.argv),
+  });
   if (explicitZCodeBuiltin && explicitPersonal) {
     return {
       [ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]: explicitZCodeBuiltin,
@@ -69,8 +85,6 @@ export async function prepareCliProviderRuntimeEnv(
       entrypoint: options.entrypoint ?? process.argv[1],
       sea: options.sea ?? getSeaProviderConfigAssets(),
     }));
-  const personalFilePath =
-    explicitPersonal ?? join(dataBaseDir, "v2", PERSONAL_PROVIDER_CONFIG_FILE_NAME);
   // Modified by ComeCode：随包目录是唯一默认来源，不读取 CDN 活跃缓存。
   return {
     [ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]: zcodeBuiltinFilePath,
