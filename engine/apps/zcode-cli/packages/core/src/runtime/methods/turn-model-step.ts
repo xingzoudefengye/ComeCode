@@ -69,6 +69,7 @@ import {
   recordMainTurnModelUsage,
 } from "./turn-model-step-usage.js";
 import { estimateCurrentModelInputTokens } from "./compact.js";
+import { getAutoCompactThreshold } from "../../compact/policy.js";
 import {
   resolveModelStepMaxOutputTokens,
   resolveNormalRequestMaxOutputTokens,
@@ -596,6 +597,17 @@ async function runModelBackedTurnStepImpl(
     SessionEventType.ModelComplete,
     {
       content: state.modelResponse,
+      ...(querySource === "main_turn" && this.config.compact?.enabled !== false
+        ? {
+            compactThreshold: getAutoCompactThreshold({
+              contextWindow: executionContextWindow,
+              ...this.config.compact,
+              maxOutputTokens: resolveNormalRequestMaxOutputTokens({
+                modelMaxOutputTokens: model.optionSpecs.maxOutputTokens.max,
+              }),
+            }),
+          }
+        : {}),
       // 桌面 continuous 实时事件只携带当前 model_complete payload。
       // 如果主轮次只发 usage 不发 contextWindow，旧 task stream 无法生成 usage_update，
       // 长程任务中输入栏会拿不到 context meter 的 size 而隐藏。

@@ -25,8 +25,18 @@ export function normalizeUsage(usage?: Partial<LanguageModelUsage>): ModelUsage 
     inputTokens: usage?.inputTokens,
     outputTokens: usage?.outputTokens,
     totalTokens: usage?.totalTokens,
-    cacheReadTokens: usage?.inputTokenDetails?.cacheReadTokens,
-    cacheWriteTokens: usage?.inputTokenDetails?.cacheWriteTokens,
+    cacheReadTokens:
+      usage?.inputTokenDetails?.cacheReadTokens ??
+      numberProperty(rawUsage, "cache_read_input_tokens") ??
+      numberProperty(
+        isRecord(rawUsage?.prompt_tokens_details) ? rawUsage.prompt_tokens_details : undefined,
+        "cached_tokens",
+      ) ??
+      numberProperty(rawUsage, "prompt_cache_hit_tokens") ??
+      numberProperty(rawUsage, "cachedContentTokenCount"),
+    cacheWriteTokens:
+      usage?.inputTokenDetails?.cacheWriteTokens ??
+      numberProperty(rawUsage, "cache_creation_input_tokens"),
     reasoningTokens: usage?.outputTokenDetails?.reasoningTokens,
     ...(webSearchRequests !== undefined || webFetchRequests !== undefined
       ? {

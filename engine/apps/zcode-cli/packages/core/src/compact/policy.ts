@@ -10,7 +10,7 @@ export const DEFAULT_AUTOCOMPACT_OUTPUT_RESERVE_TOKENS = 32_000;
 const PREFLIGHT_AUTOCOMPACT_OUTPUT_RESERVE_TOKENS = 21_000;
 export const MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000;
 export const AUTOCOMPACT_BUFFER_TOKENS = 13_000;
-export const DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT = 100;
+export const DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT = 60;
 export const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3;
 
 export interface AutoCompactPolicyConfig {
@@ -65,7 +65,7 @@ export interface AutoCompactDecision {
 }
 
 export function getEffectiveContextWindowSize(config: AutoCompactPolicyConfig = {}): number {
-  const contextWindow = positiveInt(config.contextWindow) ?? DEFAULT_COMPACT_CONTEXT_WINDOW;
+  const contextWindow = resolveContextWindow(config);
   // provider 的 context window 是 input + output 共享窗口；自动压缩只能让出输入侧，
   // 因此阈值分母必须先扣掉当前模型允许的 output token，而不是继续吃完整 contextWindow。
   const reserve = Math.min(getAutoCompactOutputReserveTokens(config), contextWindow);
@@ -84,7 +84,23 @@ export function getAutoCompactOutputReserveTokens(config: AutoCompactPolicyConfi
 export function getAutoCompactThreshold(config: AutoCompactPolicyConfig = {}): number {
   const effectiveContextWindow = getEffectiveContextWindowSize(config);
   const buffer = positiveInt(config.bufferTokens) ?? AUTOCOMPACT_BUFFER_TOKENS;
-  return Math.max(0, effectiveContextWindow - buffer);
+  // 百分比遵循用户策略，小窗口仍先满足输出预留和安全余量。
+  return Math.min(
+    Math.floor((resolveContextWindow(config) * getAutoCompactThresholdPercent(config)) / 100),
+    Math.max(0, effectiveContextWindow - buffer),
+  );
+}
+
+function resolveContextWindow(config: AutoCompactPolicyConfig): number {
+  const window = positiveInt(config.contextWindow);
+  return window && window > 0 ? window : DEFAULT_COMPACT_CONTEXT_WINDOW;
+}
+
+function getAutoCompactThresholdPercent(config: AutoCompactPolicyConfig): number {
+  const percent = config.thresholdPercentOverride;
+  return percent !== undefined && Number.isFinite(percent) && percent > 0 && percent <= 100
+    ? percent
+    : DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT;
 }
 
 export function shouldAutoCompact(input: {
@@ -94,11 +110,11 @@ export function shouldAutoCompact(input: {
   tokenOverride?: AutoCompactTokenOverride;
 }): AutoCompactDecision {
   const config = input.config ?? {};
-  const contextWindow = positiveInt(config.contextWindow) ?? DEFAULT_COMPACT_CONTEXT_WINDOW;
+  const contextWindow = resolveContextWindow(config);
   const effectiveContextWindow = getEffectiveContextWindowSize(config);
   const outputReserveTokens = Math.min(getAutoCompactOutputReserveTokens(config), contextWindow);
   const threshold = getAutoCompactThreshold(config);
-  const thresholdPercent = DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT;
+  const thresholdPercent = getAutoCompactThresholdPercent(config);
   const estimatedTokenCount = estimateMessageTokens(input.messages);
   const tokenCount = input.tokenOverride?.tokenCount ?? estimatedTokenCount;
   const tokenSource = input.tokenOverride?.source ?? "estimate";

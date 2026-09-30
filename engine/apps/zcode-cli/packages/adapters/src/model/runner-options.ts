@@ -45,11 +45,15 @@ export function createGenerateTextOptions(input: {
     input.resolved.providerOptions,
     input.request.providerOptions,
   );
-  const providerOptionsWithMetadata = mergeAnthropicRequestMetadata({
-    metadataUserId: input.anthropicMetadataUserId,
-    providerKind: input.resolved.providerKind,
-    providerOptions,
-  });
+  const providerOptionsWithMetadata = mergeSessionPromptCacheKey(
+    mergeAnthropicRequestMetadata({
+      metadataUserId: input.anthropicMetadataUserId,
+      providerKind: input.resolved.providerKind,
+      providerOptions,
+    }),
+    input.resolved.providerKind,
+    input.statusContext.sessionId,
+  );
   const requestProviderOptions = withNativeGenerateOutputFormat({
     providerOptions: providerOptionsWithMetadata,
     responseJsonSchema: input.request.responseJsonSchema,
@@ -111,11 +115,15 @@ export function createStreamTextOptions(input: {
     input.resolved.providerOptions,
     input.request.providerOptions,
   );
-  const requestProviderOptions = mergeAnthropicRequestMetadata({
-    metadataUserId: input.anthropicMetadataUserId,
-    providerKind: input.resolved.providerKind,
-    providerOptions,
-  });
+  const requestProviderOptions = mergeSessionPromptCacheKey(
+    mergeAnthropicRequestMetadata({
+      metadataUserId: input.anthropicMetadataUserId,
+      providerKind: input.resolved.providerKind,
+      providerOptions,
+    }),
+    input.resolved.providerKind,
+    input.statusContext.sessionId,
+  );
   return removeUndefined({
     model: input.resolved.model,
     messages: toAiSdkMessages(input.request.messages, {
@@ -173,6 +181,23 @@ function toAiSdkToolChoice(
   toolChoice?: ModelToolChoice,
 ): AiSdkGenerateTextOptions["toolChoice"] | undefined {
   return toolChoice as AiSdkGenerateTextOptions["toolChoice"] | undefined;
+}
+
+function mergeSessionPromptCacheKey(
+  providerOptions: Record<string, unknown> | undefined,
+  providerKind: ResolvedAiSdkModel["providerKind"],
+  sessionId?: string,
+): Record<string, unknown> | undefined {
+  if (providerKind !== "openai" || !sessionId) return providerOptions;
+  const openai = providerOptions?.openai;
+  if (
+    openai !== undefined &&
+    (openai === null || typeof openai !== "object" || Array.isArray(openai))
+  )
+    return providerOptions;
+  const options = (openai ?? {}) as Record<string, unknown>;
+  if (Object.hasOwn(options, "promptCacheKey")) return providerOptions;
+  return { ...providerOptions, openai: { ...options, promptCacheKey: `comecode:${sessionId}` } };
 }
 
 function mergeProviderOptions(
