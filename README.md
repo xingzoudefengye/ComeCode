@@ -32,6 +32,7 @@ ZCode 已经具备 Coding Agent 的大部分能力，ComeCode 的主要工作是
 | --- | --- | --- |
 | Agent 循环 / 规划 | 已有（turn-machine、TodoWrite、plan 模式、子 Agent） | 复用 |
 | 工具 | Read/Write/Edit/Bash/Glob/Grep/WebFetch/WebSearch/MCP/Skill 等 | 复用；可选增加 Codex 风格 `apply_patch` |
+| 目标模式 `/goal` | 已有（设定目标后自动续跑，完成校验器判断是否达成，可暂停/恢复） | 复用；补预算上限（轮数/token/时间）与后台展示 |
 | 权限 | plan / build / edit / yolo / auto + hooks | 复用 |
 | Provider | Anthropic Messages、OpenAI Responses、OpenAI Chat 兼容；内置 GLM/DeepSeek/Qwen/Moonshot/OpenAI/Anthropic 等 | 去掉 z.ai 登录、网关、CDN 依赖；补 Gemini；读取标准环境变量 |
 | 上下文压缩 | 已有自动 / 手动 / micro compact | 复用，调整总结写入 `.ai/` |
@@ -117,7 +118,20 @@ cc-switch ──> Codex / Claude Code 配置 ──(导入或读取)──> Come
 
 写入规则：AI 对 `.ai/` 的修改走 Edit 工具，受权限控制，终端里可见 diff；单个文件有大小上限，超出后再做一次摘要。
 
-## 7. Prompt Cache 优化
+## 7. 目标模式与永续会话
+
+目标模式：`/goal <目标>` 设定一个可验证的目标（如"所有测试通过"），Agent 自动迭代：执行 → 校验 → 未达成则继续。必须带预算上限（最大轮数、token、时长），触达上限或连续多轮无进展时暂停并通知用户。建议配合 build/edit 权限模式或沙箱使用，不建议无限制 yolo。
+
+永续会话：一个终端窗口可以长期使用，不需要因为上下文满了而重开。原理像细胞更新，保留"骨架"，持续替换"细胞"：
+
+- 固定层（不压缩）：系统提示词、项目规则、`.ai/` 记忆快照、当前目标与任务。
+- 近期层（原文）：最近若干轮对话。
+- 摘要层（滚动）：更早的对话压缩成摘要，摘要本身超限时再次合并。
+- 归档层（落盘）：被压缩掉的原文保存到 `.ai/.local/`，需要时可按关键词检索回来。
+
+需要说明的边界：上下文窗口是有限的，所以"无限"指的是会话能一直进行，不是模型记得全部细节。多次压缩后早期细节必然会丢失，重要信息要靠沉淀到 `.ai/` 文件和归档检索来保住。
+
+## 8. Prompt Cache 优化
 
 请求结构保持稳定前缀：
 
@@ -134,7 +148,7 @@ cc-switch ──> Codex / Claude Code 配置 ──(导入或读取)──> Come
 - 时间、cwd、git 状态等易变信息放在最后一条消息里，不放进系统提示词。
 - 后台展示每次请求的 cache 命中 token 数和命中率，用数据验证效果。
 
-## 8. Web 管理后台
+## 9. Web 管理后台
 
 轻量单页应用，由 CLI 进程直接托管静态文件，通过 WebSocket 订阅 Agent 事件。
 
@@ -146,19 +160,19 @@ cc-switch ──> Codex / Claude Code 配置 ──(导入或读取)──> Come
 
 安全：默认只监听 `127.0.0.1`，启动时生成随机 token 拼在打印的 URL 中；API Key 在界面上脱敏显示。
 
-## 9. 版本路线
+## 10. 版本路线
 
 | 版本 | 目标 | 关键内容 |
 | --- | --- | --- |
 | V0.1 | 本地跑通 | 构建 ZCode CLI；对外改名为 `comecode`；数据目录改为 `~/.comecode`；去掉必须登录 |
 | V0.2 | 多模型 | 标准环境变量；`config.toml`；Gemini；cc-switch 导入；去掉 z.ai 网关和 CDN 依赖 |
-| V0.3 | 长期会话 | `.ai/` 目录；压缩摘要写入记忆；兼容 CLAUDE.md；cache 命中统计 |
+| V0.3 | 长期会话 | `.ai/` 目录；永续会话分层压缩；目标模式预算；压缩摘要写入记忆；兼容 CLAUDE.md；cache 命中统计 |
 | V0.4 | Web 后台 | CLI 内嵌 server；配置、会话、记忆、状态、日志页面 |
 | V0.5 | 开源发布 | npm 发布、安装脚本、文档、Docker、插件机制说明、上游同步流程 |
 
 每个版本结束都要满足：能构建、能在 Windows / macOS / Linux 启动、核心流程有测试。
 
-## 10. 许可证与署名
+## 11. 许可证与署名
 
 - ZCode 与 Codex 均为 Apache-2.0。ComeCode 同样使用 Apache-2.0。
 - 保留两个上游的 LICENSE 与 NOTICE，在 NOTICE 中说明派生关系；修改过的文件注明已修改。

@@ -36,6 +36,7 @@ M0 基线
                         └─ M3 记忆与缓存（与 M4 可并行）
                             T3.1 .ai/ 加载 ─ T3.2 记忆写入 ─ T3.3 CLAUDE.md 兼容
                             T3.4 缓存稳定性 ─ T3.5 缓存统计
+                            T3.7 目标模式加固 ─ T3.8 永续会话（依赖 T3.1）
                         └─ M4 Web 后台（与 M3 可并行）
                             T4.1 内嵌 server ─ T4.2 事件总线 ─ T4.3 前端骨架
                             ─ T4.4~T4.8 各页面
@@ -193,6 +194,28 @@ M0 基线
 - 做法：从各 Provider 的 usage 中读取缓存 token（Anthropic `cache_read_input_tokens`/`cache_creation_input_tokens`，OpenAI `prompt_tokens_details.cached_tokens`，DeepSeek `prompt_cache_hit_tokens`，Gemini `cachedContentTokenCount`），统一成 `{input, cached, output}`；TUI 状态栏显示本会话命中率；写入会话记录，供 Web 后台展示。
 - 验收：单测覆盖各家字段映射；在至少两家模型上实测数值合理。
 
+### T3.7 目标模式（/goal）加固
+- 依赖：T3.0
+- 位置：`CLI/cli/src/command-center/handlers/goal.ts`、`CLI/core/src/runtime/methods/target.ts`（已有续跑、完成校验器、暂停/恢复、运行计时）
+- 做法：
+  - 先读懂现有实现，补文档到 `docs/memory-internals.md` 的"目标模式"一节。
+  - 补预算：`/goal <目标> --max-turns 50 --max-tokens 2M --max-time 2h`，以及配置文件默认值；触达上限时暂停，而不是停止。
+  - 无进展检测：连续 N 轮没有文件改动，且校验结果不变时暂停并提示。
+  - 目标和当前进度写入永续会话的固定层（T3.8），压缩后不丢失。
+  - 参考 `codex/codex-rs/tui/src/goal_*.rs`、`chatwidget/goal_*.rs` 的交互（状态栏显示预算、暂停原因）。
+- 验收：用一个"让某个失败测试通过"的样例项目实测能自动迭代完成；预算用尽时正确暂停；单测覆盖预算和无进展判断。
+
+### T3.8 永续会话：分层滚动压缩
+- 依赖：T3.0、T3.1
+- 位置：`CLI/core/src/compact/`（policy、rounds、prompt）、`CLI/core/src/agent/compact-session.ts`
+- 做法：
+  - 上下文分四层：固定层（系统提示词、规则、`.ai/` 快照、当前目标与 todo，永不压缩）、近期层（最近 K 轮原文）、摘要层（滚动摘要）、归档层（原文落盘到 `.ai/.local/archive/`）。
+  - 压缩只处理"摘要层 + 最老的近期轮次"，固定层原样保留；摘要超过预算时，把多段摘要再合并一次（分代合并，避免每次都重写全部摘要）。
+  - 压缩前先触发 T3.2 的记忆沉淀，保证决定、任务、问题不会只存在于摘要里。
+  - 新增 `RecallArchive` 工具：按关键词或时间段检索归档原文（可以先用 ripgrep，后续再考虑向量检索）。
+  - 压缩后 cache 前缀只在固定层之后变化，保持命中（和 T3.4 联动）。
+- 验收：写一个压力测试，模拟 20 次以上的连续压缩：固定层内容逐字不变；上下文 token 始终低于阈值；早期一条关键决定能通过 `.ai/decisions.md` 或 `RecallArchive` 找回。
+
 ### T3.6（可选）Codex 风格 apply_patch 工具
 - 依赖：T0.1
 - 做法：参考 `codex/codex-rs/apply-patch/src/`（parser、seek_sequence 模糊匹配）和 `codex/codex-rs/core/assets/tools/apply_patch.lark` 用 TS 实现；作为 JSON 字符串参数工具提供（非 OpenAI 模型不支持 Lark freeform 工具）；通过配置按模型启用。注意 Apache-2.0 署名。
@@ -237,7 +260,7 @@ M0 基线
 
 ### T4.7 Agent 状态页
 - 依赖：T4.3
-- 内容：当前正在执行的工具和参数摘要（正在读取 xxx、正在执行测试、修改 xxx.py）、本会话 token 用量和 cache 命中率曲线、权限确认请求的只读展示（确认仍在终端完成）。
+- 内容：当前目标与预算消耗（T3.7）、上下文各层 token 占比与压缩次数（T3.8）、当前正在执行的工具和参数摘要（正在读取 xxx、正在执行测试、修改 xxx.py）、本会话 token 用量和 cache 命中率曲线、权限确认请求的只读展示（确认仍在终端完成）。
 
 ### T4.8 日志页
 - 依赖：T4.3
