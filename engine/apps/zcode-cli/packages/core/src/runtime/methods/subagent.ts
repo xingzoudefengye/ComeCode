@@ -331,7 +331,8 @@ export function createDefaultSubagentPort(
           appVersion: this.appVersion,
           eventSink: {
             onSessionEvent: async (event) => {
-              request.reportActivity?.();
+              if (options?.signal?.aborted) return;
+              request.reportActivity?.(event);
               // child runtime 的事件已经按 childSessionId 落库，但旧链路只把
               // 少量工具事件镜像给 parent sink，导致 UI 订阅 child topic 后只能拿到打开时
               // 的 hydration，后续流式内容不会更新。raw child event 只通知父 runtime 的
@@ -395,7 +396,28 @@ export function createDefaultSubagentPort(
         });
       }
       request.registerMessageSink?.(createSubagentMessageSink(childRuntime, request));
+      let cancelCleanup: Promise<void> | undefined;
+      const onAbort = () => {
+        childRuntime.sealBackgroundTaskNotifications({
+          reason: "subagent_cancelled",
+          traceContext: request.traceContext,
+        });
+        // child 即使忽略取消也要立即回收其后台命令，不能等 executeTurn 退出。
+        cancelCleanup ??= childRuntime.cancelRunningRuntimeBackgroundTasks({
+          reason: "subagent_cancelled",
+          traceContext: request.traceContext,
+        });
+        void cancelCleanup.catch((error: unknown) =>
+          this.logger?.warn("Subagent cancellation cleanup failed", {
+            agentId: request.agentId,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      };
+      options?.signal?.addEventListener("abort", onAbort, { once: true });
+      if (options?.signal?.aborted) onAbort();
       try {
+        options?.signal?.throwIfAborted();
         return await childRuntime.executeTurn(request.prompt, undefined, {
           abortSignal: options?.signal,
           // 子 Runtime 的首轮输入来自父 Agent，而不是真实用户直接输入；保留源事实，避免
@@ -405,16 +427,15 @@ export function createDefaultSubagentPort(
           traceContext: request.traceContext,
         });
       } finally {
+        options?.signal?.removeEventListener("abort", onAbort);
         const cancelled = options?.signal?.aborted === true;
         childRuntime.sealBackgroundTaskNotifications({
           reason: cancelled ? "subagent_cancelled" : "subagent_terminal",
           traceContext: request.traceContext,
         });
         if (cancelled) {
-          await childRuntime.cancelRunningRuntimeBackgroundTasks({
-            reason: "subagent_cancelled",
-            traceContext: request.traceContext,
-          });
+          onAbort();
+          await cancelCleanup;
         }
       }
     },
