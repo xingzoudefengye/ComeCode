@@ -3,10 +3,27 @@
 // 两件事放一起是因为它们同源于一条事件；顺带让 app-events.ts 的 switch 留在 max-lines 之内。
 import type React from "react";
 import type { ModelUsageSummary } from "@zcode/contracts";
-import type { CacheStats, Message } from "./app-model.js";
+import type { CacheStats, ContextUsage, Message } from "./app-model.js";
 import { cacheStatsFromPayload, usageFromPayload } from "./app-event-data.js";
 import { projectedTranscriptHasResponse } from "./app-transcript-stream.js";
-import { stringField } from "./state.js";
+import { asRecord, numberField, stringField } from "./state.js";
+
+export function applyModelCacheAndBudgetEvent(
+  payload: Record<string, unknown>,
+  setCacheStats: React.Dispatch<React.SetStateAction<CacheStats | undefined>>,
+  setContextUsage: React.Dispatch<React.SetStateAction<ContextUsage>>,
+): void {
+  const hitRate = numberField(asRecord(payload.cacheHit), "hitRate");
+  if (
+    hitRate !== undefined &&
+    numberField(asRecord(payload.usage), "cacheReadTokens") !== undefined
+  ) {
+    setCacheStats((current) => ({ ...current, hitRate }));
+  }
+  const compactThreshold = numberField(payload, "compactThreshold");
+  if (compactThreshold !== undefined || payload.querySource === "main_turn")
+    setContextUsage((current) => ({ ...current, compactThreshold }));
+}
 
 /**
  * turn_complete 携带权威 `response`；只在转写里**还没有**这段文本时补上。
@@ -46,5 +63,5 @@ export function applyTurnCompleteEvent(
   if (turnUsage) setUsage(turnUsage);
 
   const cacheStats = cacheStatsFromPayload(payload);
-  if (cacheStats) setCacheStats(cacheStats);
+  if (cacheStats) setCacheStats((current) => ({ ...current, ...cacheStats }));
 }

@@ -42,6 +42,15 @@ import type { TuiEffortOption, TuiModeOption, TuiOptions } from "./types.js";
 import type { TuiWorkflowCard } from "./app-workflow-mirror.js";
 import type { SubagentItem, SubagentsController } from "./app-subagents.js";
 import { SubagentView } from "./app-subagent-view.js";
+import type { RuntimeActivity } from "./app-runtime-activity.js";
+import type { SelectionCopyResult } from "./app-copy.js";
+
+export type TuiAppProps = {
+  copySelection: () => Promise<SelectionCopyResult>;
+  hasCopyableSelection: () => boolean;
+  options: TuiOptions;
+  onExit: (code: number) => void;
+};
 
 const h = React.createElement as (
   type: React.ElementType | string,
@@ -50,6 +59,7 @@ const h = React.createElement as (
 ) => React.ReactElement;
 
 export function AppView(props: {
+  runtimeActivity?: RuntimeActivity;
   subagents?: SubagentsController;
   toggleSidebar?: () => boolean;
   activeTurnId?: TurnId;
@@ -73,6 +83,7 @@ export function AppView(props: {
   modeOptions: readonly TuiModeOption[];
   modeSelection?: ModeCommandSelectionState;
   model: string;
+  sessionId?: string;
   modifiedFiles: ModifiedFileStat[];
   modelOptions: readonly NonNullable<TuiOptions["modelOptions"]>[number][];
   modelSelection?: ModelCommandSelectionState;
@@ -143,6 +154,7 @@ export function AppView(props: {
         mcpStatus,
         mode: props.mode,
         model: props.model,
+        sessionId: props.sessionId,
         modifiedFiles: props.modifiedFiles,
         networkRequests: props.networkRequests,
         onToggleSection: props.toggleSidebarSection,
@@ -201,6 +213,9 @@ export function AppView(props: {
               selection: actionSelection,
             })
           : h(ComposerInputArea, {
+              runtimeActivity: props.runtimeActivity,
+              backgroundCount: props.subagents?.directory.running.length ?? 0,
+              cacheHitRate: props.cacheStats?.hitRate,
               focused: !readOnly,
               busy: props.busy,
               contentWidth: actionPanelContentWidth,
@@ -217,6 +232,7 @@ export function AppView(props: {
               modeOptions: props.modeOptions,
               modeSelection: props.modeSelection,
               model: props.model,
+              sessionId: props.sessionId,
               modelOptions: props.modelOptions,
               modelSelection: props.modelSelection,
               queuedInputs,
@@ -232,6 +248,9 @@ export function AppView(props: {
 }
 
 function ComposerInputArea(props: {
+  runtimeActivity?: RuntimeActivity;
+  backgroundCount?: number;
+  cacheHitRate?: number;
   focused?: boolean;
   busy: boolean;
   contentWidth: number;
@@ -248,6 +267,7 @@ function ComposerInputArea(props: {
   modeOptions: readonly TuiModeOption[];
   modeSelection?: ModeCommandSelectionState;
   model: string;
+  sessionId?: string;
   modelOptions: readonly NonNullable<TuiOptions["modelOptions"]>[number][];
   modelSelection?: ModelCommandSelectionState;
   queuedInputs: QueuedInput[];
@@ -319,19 +339,23 @@ function ComposerInputArea(props: {
       copy: props.copy,
       editorRef: props.editorRef,
       focused: props.focused ?? true,
-      mode: props.mode,
-      model: props.model,
       onInput: props.setDraftValue,
       onSubmit: props.submitValue,
       resetCursorToEndVersion: props.inputCursorToEndVersion,
-      thoughtLevel: props.thoughtLevel,
       value: props.draft,
     }),
     h(InputActiveStatus, {
+      runtimeActivity: props.runtimeActivity,
+      backgroundCount: props.backgroundCount,
+      cacheHitRate: props.cacheHitRate,
       active: props.busy,
       contentWidth: props.contentWidth,
       contextUsage: props.contextUsage,
       copy: props.copy,
+      mode: props.mode,
+      model: props.model,
+      sessionId: props.sessionId,
+      thoughtLevel: props.thoughtLevel,
     }),
   );
 }

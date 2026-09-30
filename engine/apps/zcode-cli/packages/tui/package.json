@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && node scripts/build.mjs",
+    "build": "tsc --emitDeclarationOnly && node scripts/build.mjs",
     "clean": "node ../../scripts/clean-dist.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src",

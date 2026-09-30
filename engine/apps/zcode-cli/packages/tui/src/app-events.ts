@@ -23,7 +23,11 @@ import {
 } from "./app-modified-files.js";
 import { applyModelNetworkEvent, applyNetworkRequestEvent } from "./app-network-events.js";
 import { appendSystemErrorMessage } from "./app-transcript-errors.js";
-import { applyTurnCompleteEvent, applyTurnCompleteFallbackResponse } from "./app-turn-complete.js";
+import {
+  applyModelCacheAndBudgetEvent,
+  applyTurnCompleteEvent,
+  applyTurnCompleteFallbackResponse,
+} from "./app-turn-complete.js";
 import { applyToolTranscriptEvent } from "./app-tool-transcript.js";
 import { DEFAULT_TUI_COPY } from "./app-locale.js";
 import { removeQueuedInputs, upsertQueuedInput } from "./app-queued-inputs.js";
@@ -101,6 +105,7 @@ export function applySessionEventToState(
       handlers.setStatus(copy.status.modelCalling);
       break;
     case SessionEventType.ModelSelected:
+      handlers.setContextUsage((current) => ({ ...current, compactThreshold: undefined }));
       applyModelSelectedEvent(payload, handlers.setModel, handlers.setThoughtLevel);
       break;
     case SessionEventType.ModelStreaming:
@@ -121,6 +126,7 @@ export function applySessionEventToState(
       handlers.setStatus(copy.status.retryingStream);
       break;
     case SessionEventType.ModelComplete:
+      applyModelCacheAndBudgetEvent(payload, handlers.setCacheStats, handlers.setContextUsage);
       applyModelCompleteEvent(
         payload,
         handlers.setUsage,

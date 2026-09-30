@@ -5,7 +5,8 @@ import { useCallback, useMemo, useState } from "react";
 export const SIDEBAR_WIDTH = 42;
 export const SIDEBAR_HORIZONTAL_PADDING_COLUMNS = 1;
 export const SIDEBAR_CONTENT_WIDTH = SIDEBAR_WIDTH - SIDEBAR_HORIZONTAL_PADDING_COLUMNS * 2;
-const SIDEBAR_AUTO_VISIBLE_BREAKPOINT = 120;
+// 约 115 列的常见 Windows 终端仍能容纳 42 列侧栏；否则核心上下文会消失。
+const SIDEBAR_AUTO_VISIBLE_BREAKPOINT = 100;
 export const SIDEBAR_OVERLAY_BACKGROUND = RGBA.fromInts(0, 0, 0, 70);
 
 type SidebarPreference = "auto" | "hidden";
@@ -35,7 +36,8 @@ type SidebarController = {
 
 const DEFAULT_SIDEBAR_STATE: SidebarControllerState = {
   narrowOverlayOpen: false,
-  preference: "auto",
+  // 主会话默认保持完整宽度；需要时通过现有侧栏切换入口临时打开。
+  preference: "hidden",
   sections: {
     subagents: true,
     apis: true,

@@ -6,6 +6,7 @@ import { palette } from "./app-model.js";
 import { modelDisplayParts } from "./app-model-ref.js";
 import { spinnerFrame, useSpinnerFrame } from "./app-motion.js";
 import { displayWidth, truncateDisplay } from "./app-terminal-width.js";
+import { STALE_ACTIVITY_WARNING_MS, type RuntimeActivity } from "./app-runtime-activity.js";
 
 const h = React.createElement as (
   type: React.ElementType | string,
@@ -26,74 +27,190 @@ const TOKEN_COUNT_KILO = 1_000;
 const TOKEN_COUNT_MEGA = TOKEN_COUNT_KILO * TOKEN_COUNT_KILO;
 const TOKEN_COUNT_DECIMAL_PLACES = 1;
 
-type InputComposerStatusParts = {
-  model: string;
-  provider: string;
-  thought: string;
-};
-
 export function InputActiveStatus({
   active,
   contentWidth,
   contextUsage,
   copy = DEFAULT_TUI_COPY,
   frameMs,
+  runtimeActivity,
+  backgroundCount,
+  cacheHitRate,
+  mode,
+  model,
+  sessionId,
+  thoughtLevel,
 }: {
   active: boolean;
   contentWidth?: number;
   contextUsage?: ContextUsage;
   copy?: TuiCopy;
   frameMs?: number;
+  runtimeActivity?: RuntimeActivity;
+  backgroundCount?: number;
+  cacheHitRate?: number;
+  mode?: string;
+  model?: string;
+  sessionId?: string;
+  thoughtLevel?: string;
 }): React.ReactElement {
-  if (frameMs !== undefined || !active) {
-    return inputActiveStatusRow(copy, active ? spinnerFrame(frameMs ?? 0) : undefined, {
+  const terminal =
+    runtimeActivity && ["completed", "failed", "cancelled"].includes(runtimeActivity.phase);
+  const running =
+    !terminal &&
+    (active || (runtimeActivity?.startedAt !== undefined && runtimeActivity.phase !== "idle"));
+  const details = {
+    runtimeActivity,
+    backgroundCount,
+    cacheHitRate,
+    composerLabel: composerStatusLabel(mode, model, sessionId, thoughtLevel),
+  };
+  if (frameMs !== undefined || !running) {
+    return inputActiveStatusRow(copy, running ? spinnerFrame(frameMs ?? 0) : undefined, {
       contentWidth,
       contextUsage,
+      ...details,
     });
   }
-  return h(InputActiveStatusContent, { contentWidth, contextUsage, copy });
+  return h(InputActiveStatusContent, { contentWidth, contextUsage, copy, ...details });
 }
 
 function InputActiveStatusContent({
   contentWidth,
   contextUsage,
   copy,
+  runtimeActivity,
+  backgroundCount,
+  cacheHitRate,
+  composerLabel,
 }: {
   contentWidth?: number;
   contextUsage?: ContextUsage;
   copy: TuiCopy;
+  runtimeActivity?: RuntimeActivity;
+  backgroundCount?: number;
+  cacheHitRate?: number;
+  composerLabel?: string;
 }): React.ReactElement {
-  return inputActiveStatusRow(copy, useSpinnerFrame(true), { contentWidth, contextUsage });
+  return inputActiveStatusRow(copy, useSpinnerFrame(true), {
+    contentWidth,
+    contextUsage,
+    runtimeActivity,
+    backgroundCount,
+    cacheHitRate,
+    composerLabel,
+  });
 }
 
 export function InputComposerStatus({
   contentWidth,
+  mode,
   model,
+  sessionId,
   thoughtLevel,
 }: {
   contentWidth?: number;
+  mode?: string;
   model: string;
+  sessionId?: string;
   thoughtLevel: string;
 }): React.ReactElement {
-  return inputComposerStatusRow({
-    contentWidth,
-    model,
-    thoughtLevel,
-  });
+  const maxWidth = composerStatusMetadataWidth(contentWidth);
+  const modelParts = modelDisplayParts(model);
+  const modelLabel =
+    modelParts.provider === "-" ? modelParts.model : `${modelParts.provider}/${modelParts.model}`;
+  const modeLabel = mode ? `${mode.slice(0, 1).toUpperCase()}${mode.slice(1)}` : "-";
+  const thoughtLabel = thoughtLevel.trim() || "default";
+  const sessionLabel = sessionId ? shortenSessionId(sessionId) : "session";
+  const status = truncateDisplay(
+    `${modeLabel} | ${modelLabel} | ${thoughtLabel} | ${sessionLabel}`,
+    maxWidth,
+  );
+  return h(
+    "box",
+    { style: { alignItems: "center", flexDirection: "row", height: COMPOSER_STATUS_HEIGHT, width: "100%" } },
+    h("text", { style: { fg: palette.text, flexShrink: 1 } }, status),
+  );
+}
+
+function composerStatusLabel(
+  mode?: string,
+  model?: string,
+  sessionId?: string,
+  thoughtLevel?: string,
+): string | undefined {
+  if (!model && !mode && !sessionId && !thoughtLevel) return undefined;
+  const modelParts = model ? modelDisplayParts(model) : undefined;
+  const modelLabel = modelParts
+    ? modelParts.provider === "-"
+      ? modelParts.model
+      : `${modelParts.provider}/${modelParts.model}`
+    : "-";
+  const modeLabel = mode ? `${mode.slice(0, 1).toUpperCase()}${mode.slice(1)}` : "-";
+  const thoughtLabel = thoughtLevel?.trim() || "default";
+  const sessionLabel = sessionId ? shortenSessionId(sessionId) : "session";
+  return `${modeLabel} | ${modelLabel} | ${thoughtLabel} | ${sessionLabel}`;
 }
 
 function inputActiveStatusRow(
   copy: TuiCopy,
   frame?: string,
-  options: { contentWidth?: number; contextUsage?: ContextUsage } = {},
+  options: {
+    contentWidth?: number;
+    contextUsage?: ContextUsage;
+    runtimeActivity?: RuntimeActivity;
+    backgroundCount?: number;
+    cacheHitRate?: number;
+    composerLabel?: string;
+  } = {},
 ): React.ReactElement {
-  const contextBadge = fitStatusContextBadge(
+  const activity = options.runtimeActivity;
+  const now = Date.now();
+  const idleMs =
+    activity?.lastActivityAt === undefined ? 0 : Math.max(0, now - activity.lastActivityAt);
+  const running = frame !== undefined;
+  const phase =
+    activity?.phase === "idle" && running
+      ? "working"
+      : (activity?.phase ?? (running ? "working" : "idle"));
+  const label = [
+    copy.input.runtimePhase[phase],
+    ...(running && activity?.startedAt
+      ? [copy.input.runtimeElapsed(Math.floor((now - activity.startedAt) / 1_000))]
+      : []),
+    ...(running && activity?.lastActivityAt && phase !== "waiting"
+      ? [
+          idleMs >= STALE_ACTIVITY_WARNING_MS
+            ? copy.input.runtimeStale
+            : copy.input.runtimeLastActivity(Math.floor(idleMs / 1_000)),
+        ]
+      : []),
+    ...(options.backgroundCount ? [copy.input.runtimeBackground(options.backgroundCount)] : []),
+  ].join(" | ");
+  const combinedLabel = options.composerLabel
+    ? `${options.composerLabel} | ${label}`
+    : label;
+  const contextLabel = [
     inputContextUsageBadge(options.contextUsage),
-    activeStatusContextBadgeWidth({
-      contentWidth: options.contentWidth,
-      copy,
-      frame,
-    }),
+    ...(options.contextUsage?.compactThreshold !== undefined
+      ? [copy.input.compactAt(formatCompactTokenCount(options.contextUsage.compactThreshold))]
+      : []),
+    ...(options.cacheHitRate !== undefined
+      ? [copy.input.cacheHit(Math.round(options.cacheHitRate * 100))]
+      : []),
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  const rowWidth =
+    normalizeComposerStatusContentWidth(options.contentWidth) -
+    ACTIVE_STATUS_HORIZONTAL_PADDING_WIDTH;
+  const metadataWidth = Math.min(displayWidth(contextLabel), Math.floor(rowWidth * 0.45));
+  const contextBadge = fitStatusContextBadge(contextLabel || undefined, metadataWidth);
+  const labelWidth = Math.max(
+    0,
+    rowWidth -
+      (contextBadge ? displayWidth(contextBadge) + ACTIVE_STATUS_CONTEXT_SPACER_WIDTH : 0) -
+      (frame ? displayWidth(frame) + 1 : 0),
   );
   return h(
     "box",
@@ -105,73 +222,38 @@ function inputActiveStatusRow(
         width: "100%",
       },
     },
-    frame
-      ? h(
-          "box",
-          { style: { flexDirection: "row", flexShrink: 0 } },
-          h(
+    h(
+      "box",
+      { style: { flexDirection: "row", flexShrink: 0 } },
+      frame
+        ? h(
             "text",
             { style: { fg: palette.accent, flexShrink: 0, width: displayWidth(frame) } },
             frame,
-          ),
-          h("text", { style: { fg: palette.muted } }, " "),
-          h("text", { style: { fg: palette.muted } }, copy.input.activeStatusHint),
-        )
-      : null,
+          )
+        : null,
+      frame ? h("text", { style: { fg: palette.muted } }, " ") : null,
+      h(
+        "text",
+        {
+          style: {
+            fg:
+              idleMs >= STALE_ACTIVITY_WARNING_MS && running && phase !== "waiting"
+                ? palette.warning
+                : palette.muted,
+          },
+        },
+            truncateDisplay(combinedLabel, labelWidth),
+      ),
+    ),
     contextBadge ? h("box", { style: { flexGrow: 1, minWidth: 1 } }) : null,
     contextBadge ? h("text", { style: { fg: palette.muted, flexShrink: 0 } }, contextBadge) : null,
   );
 }
 
-function inputComposerStatusRow({
-  contentWidth,
-  model,
-  thoughtLevel,
-}: {
-  contentWidth?: number;
-  model: string;
-  thoughtLevel: string;
-}): React.ReactElement {
-  const parts = inputComposerStatusParts(
-    model,
-    thoughtLevel,
-    composerStatusMetadataWidth(contentWidth),
-  );
-  return h(
-    "box",
-    {
-      style: {
-        alignItems: "center",
-        flexDirection: "row",
-        flexShrink: 0,
-        height: COMPOSER_STATUS_HEIGHT,
-        width: "100%",
-      },
-    },
-    h(
-      "box",
-      { style: { flexDirection: "row", flexShrink: 1, minWidth: 1 } },
-      h("text", { style: { fg: palette.text, flexShrink: 1 } }, parts.model),
-      h("text", { style: { fg: palette.muted } }, ` ${parts.provider} | `),
-      h("text", { style: { fg: palette.warning, flexShrink: 0 } }, parts.thought),
-    ),
-  );
-}
-
-function inputComposerStatusParts(
-  modelSelection: string,
-  thoughtLevel: string,
-  maxWidth?: number,
-): InputComposerStatusParts {
-  const modelParts = modelDisplayParts(modelSelection);
-  const thought = thoughtLevel.trim();
-  return fitComposerStatusParts(
-    {
-      ...modelParts,
-      thought: thought || "-",
-    },
-    maxWidth,
-  );
+function shortenSessionId(sessionId: string): string {
+  const value = sessionId.trim();
+  return value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-6)}` : value;
 }
 
 function inputContextUsageBadge(contextUsage?: ContextUsage): string | undefined {
@@ -182,7 +264,7 @@ function inputContextUsageBadge(contextUsage?: ContextUsage): string | undefined
   const window = contextUsage?.contextWindow;
   if (!validContextWindow(window)) return usedLabel;
 
-  return `${usedLabel} (${formatComposerPercent(used / window)})`;
+  return `${usedLabel}/${formatCompactTokenCount(window)} (${formatComposerPercent(used / window)})`;
 }
 
 function composerStatusMetadataWidth(contentWidth?: number): number {
@@ -193,26 +275,6 @@ function composerStatusMetadataWidth(contentWidth?: number): number {
   );
 }
 
-function activeStatusContextBadgeWidth({
-  contentWidth,
-  copy,
-  frame,
-}: {
-  contentWidth?: number;
-  copy: TuiCopy;
-  frame?: string;
-}): number | undefined {
-  const rowWidth = normalizeComposerStatusContentWidth(contentWidth);
-  const activeHintWidth = frame
-    ? displayWidth(frame) + 1 + displayWidth(copy.input.activeStatusHint)
-    : 0;
-  const activeSpacerWidth = activeHintWidth > 0 ? ACTIVE_STATUS_CONTEXT_SPACER_WIDTH : 0;
-  const availableWidth =
-    rowWidth - ACTIVE_STATUS_HORIZONTAL_PADDING_WIDTH - activeHintWidth - activeSpacerWidth;
-  if (availableWidth < STATUS_MIN_CONTEXT_WIDTH) return undefined;
-  return Math.floor(availableWidth);
-}
-
 function fitStatusContextBadge(
   contextBadge: string | undefined,
   maxWidth?: number,
@@ -221,50 +283,6 @@ function fitStatusContextBadge(
   if (maxWidth === undefined || !Number.isFinite(maxWidth)) return contextBadge;
   if (maxWidth < STATUS_MIN_CONTEXT_WIDTH) return undefined;
   return truncateDisplay(contextBadge, Math.floor(maxWidth));
-}
-
-function fitComposerStatusParts(
-  parts: InputComposerStatusParts,
-  maxWidth?: number,
-): InputComposerStatusParts {
-  if (maxWidth === undefined || !Number.isFinite(maxWidth)) return parts;
-  const width = Math.max(1, Math.floor(maxWidth));
-  const separatorWidth = displayWidth(" | ");
-  const modelProviderGapWidth = 1;
-  const thoughtWidth = displayWidth(parts.thought);
-  const modelProviderWidth =
-    displayWidth(parts.model) + modelProviderGapWidth + displayWidth(parts.provider);
-
-  if (modelProviderWidth + separatorWidth + thoughtWidth <= width) return parts;
-
-  const modelProviderBudget = width - separatorWidth - thoughtWidth;
-  if (modelProviderBudget <= 0) {
-    return {
-      model: "",
-      provider: "",
-      thought: truncateDisplay(parts.thought, width),
-    };
-  }
-
-  if (modelProviderBudget <= modelProviderGapWidth) {
-    return {
-      ...parts,
-      model: truncateDisplay(parts.model, modelProviderBudget),
-      provider: "",
-    };
-  }
-
-  const providerBudget = Math.min(
-    displayWidth(parts.provider),
-    Math.max(1, Math.floor(modelProviderBudget * 0.4)),
-  );
-  const modelBudget = Math.max(1, modelProviderBudget - providerBudget - modelProviderGapWidth);
-
-  return {
-    ...parts,
-    model: truncateDisplay(parts.model, modelBudget),
-    provider: truncateDisplay(parts.provider, providerBudget),
-  };
 }
 
 function normalizeComposerStatusContentWidth(contentWidth?: number): number {
