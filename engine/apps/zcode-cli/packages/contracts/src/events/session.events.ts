@@ -763,6 +763,8 @@ export interface NetworkRequestStatusPayload {
 }
 
 export interface ModelCompletePayload {
+  /** Runtime 实际自动压缩阈值，展示层不得重新推算预算。 */
+  compactThreshold?: number;
   cacheHit?: {
     inputTokens: number;
     cacheReadTokens: number;
