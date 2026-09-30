@@ -5,5 +5,7 @@
 # 临时产物
 *.log
 tmp/
+/.pnpm-store/
+/comecode终端会话界面右侧.png
 
 .idea/

@@ -3,7 +3,7 @@ import type { TuiThemeTokens } from "./types.js";
 
 export const DEFAULT_TUI_THEME_MODE: UiThemeMode = "dark";
 
-// Modified by ComeCode：改用 Claude Code 风格的低调暖色调（暖灰底 + 陶土橙强调），去掉原来的蓝色。
+// Modified by ComeCode：使用低对比中性表面，让用户消息只比背景略亮。
 export const DARK_TUI_THEME: TuiThemeTokens = {
   mode: "dark",
   primary: "#cc9b7a",
@@ -20,7 +20,7 @@ export const DARK_TUI_THEME: TuiThemeTokens = {
   backgroundPanel: "#1b1a18",
   backgroundElement: "#26241f",
   backgroundMenu: "#1b1a18",
-  backgroundMessageUser: "#2a2925",
+  backgroundMessageUser: "#1d1d1d",
   border: "#3d3a35",
   borderActive: "#cc9b7a",
   borderSubtle: "#2a2823",
@@ -78,7 +78,7 @@ export const LIGHT_TUI_THEME: TuiThemeTokens = {
   backgroundPanel: "#ffffff",
   backgroundElement: "#efeae1",
   backgroundMenu: "#ffffff",
-  backgroundMessageUser: "#f2ece1",
+  backgroundMessageUser: "#f5f3ef",
   border: "#d8d1c5",
   borderActive: "#a3532c",
   borderSubtle: "#e8e3d9",
