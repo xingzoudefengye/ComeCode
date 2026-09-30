@@ -106,16 +106,11 @@ M0 基线
 
 ## M2 Provider 系统（V0.2）
 
-### T2.1 统一配置文件 config.toml
+### T2.1 统一配置文件 config.toml（已完成，2026-10-01）
 - 依赖：T1.2
-- 位置：新增 `CLI/adapters/src/config/comecode-config.ts`；对接现有的 personal provider 加载逻辑（`provider_config.json`）。
-- 做法：
-  - 解析 `~/.comecode/config.toml` 和项目 `.comecode/config.toml`，格式见 README 第 4 节。
-  - 转换成 ZCode 内部的 personal provider 结构，这样不用改 runtime。`type` 映射：`openai-chat`→`openai-chat-completions`，`openai-responses`→`openai-responses`，`anthropic`→`anthropic-messages`，`gemini`→T2.3 实现。
-  - 支持 `api_key_env` 引用环境变量；配置文件里的明文 key 在日志中脱敏。
-  - 优先级：命令行参数 > 环境变量 > 项目配置 > 用户配置 > 内置默认；新增 `--model`、`--provider` 参数。
-  - 新增 `comecode config path|show|check` 子命令（show 时 key 脱敏）。
-- 验收：单测覆盖解析、合并优先级、类型映射、错误提示（缺字段、未知 type）；用 NewAPI 或任意 OpenAI 兼容端点实测对话。
+- 实现：`CLI/adapters/src/config/provider-config.ts`，在 CLI 边界转换为兼容的 `provider_config.json`，不改 Provider Registry 和内部协议。
+- 已完成：用户级/项目级配置发现、最小 TOML 子集、标准环境变量归一化、CLI 覆盖、`config path|show|check`、API Key 脱敏、OpenAI/Anthropic type 映射，以及 Gemini 仅检查不执行。
+- 验证：统一配置单测覆盖解析、合并优先级、环境变量、脱敏、兼容 materialize；未实现 Gemini 原生适配、配置导入和 Web 后台，分别留给 T2.3、T2.4、M4。
 
 ### T2.2 标准环境变量零配置启动
 - 依赖：T2.1

@@ -70,6 +70,12 @@ export const parseGlobalArgs = (argv: string[]) =>
       mode: {
         type: "string",
       },
+      model: {
+        type: "string",
+      },
+      provider: {
+        type: "string",
+      },
       verbose: {
         type: "boolean",
       },

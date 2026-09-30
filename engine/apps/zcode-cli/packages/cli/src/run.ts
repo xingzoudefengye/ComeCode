@@ -17,6 +17,7 @@ import { detectCliLocale } from "./locale.js";
 import { loadBootstrapModule } from "./bootstrap-loader.js";
 import { runEmbeddedSearchCli } from "./internal-search/embedded-search-cli.js";
 import { runCommandsCommand } from "./commands-command.js";
+import { runConfigCommand } from "./config-command.js";
 import { resolveCliCwd } from "./cwd.js";
 import { runLoginCommand, runLogoutCommand } from "./login-command.js";
 import { CLI_COMMAND_NAME, CLI_PROCESS_NAME } from "./process-name.js";
@@ -547,6 +548,11 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       );
     case "doctor":
       return runDoctor(ctx, options, workingDirectory);
+    case "config":
+      return await runConfigCommand(ctx, options, commandDeps, parsed.positionals.slice(1), {
+        model: parsed.values.model as string | undefined,
+        provider: parsed.values.provider as string | undefined,
+      });
     case "login":
       return await runLoginCommand(
         ctx,

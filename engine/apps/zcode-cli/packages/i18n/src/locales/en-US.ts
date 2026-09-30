@@ -19,6 +19,7 @@ With no command, ${CLI_COMMAND} opens the full-screen TUI.
 Commands:
   app-server Run the ZCode Protocol stdio app server
   commands   List custom slash commands (\`commands list\`)
+  config     Manage unified Provider config (\`config path|show|check\`)
   doctor     Inspect runtime and packaging assumptions
   login [zai|bigmodel]  Sign in through browser authorization
   logout     Remove the shared Z.AI login credentials
@@ -45,6 +46,8 @@ Options:
   --force-mcs      Force mid-conversation system projection for Anthropic providers
   --locale <locale>  UI locale: en-US, zh-CN, or auto
   --mode <mode>    Permission mode for prompts: build, edit, plan, or yolo (default: yolo for --prompt)
+  --model <model>  Override the configured default model
+  --provider <id>  Override the configured Provider ID
   --resume <sessionId>  Resume a persisted session by sessionId (sess_...)
   --target <text>  Run or set the session goal in headless mode
   --target-replace Replace any existing session goal set by --target
