@@ -30,7 +30,8 @@ export const initialSessionProjection = {
   turnCount: 0,
   totalTokenCount: 0,
   contextUsed: 0,
-  contextWindow: 200000,
+  // 没有 Provider 真实窗口时，与自动压缩策略保持一致的默认值。
+  contextWindow: 512000,
   pendingPermissions: [] as PendingPermission[],
   pendingSteerInputs: [] as PendingSteerInputInfo[],
   activeToolCalls: [] as ActiveToolCall[],
