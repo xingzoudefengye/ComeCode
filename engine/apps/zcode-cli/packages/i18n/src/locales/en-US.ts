@@ -1,5 +1,7 @@
+import { CLI_COMMAND, PRODUCT_NAME } from "@zcode/contracts";
 import type { ZCodeCopy } from "../types.js";
 
+// Modified by ComeCode：用户可见的产品名/命令名改为引用 brand 常量。
 export const enUS: ZCodeCopy = {
   locale: "en-US",
   cli: {
@@ -7,12 +9,12 @@ export const enUS: ZCodeCopy = {
       localeUnsupported: (value) =>
         `Unsupported --locale value: ${value}. Supported locales: en-US, zh-CN, auto.`,
     },
-    help: (version) => `zcode ${version}
+    help: (version) => `${CLI_COMMAND} ${version}
 
 Usage:
-  zcode [command] [options]
+  ${CLI_COMMAND} [command] [options]
 
-With no command, zcode opens the full-screen TUI.
+With no command, ${CLI_COMMAND} opens the full-screen TUI.
 
 Commands:
   app-server Run the ZCode Protocol stdio app server
@@ -287,7 +289,7 @@ Slash Commands:
     },
     terminal: {
       requiresInteractive: "TUI requires an interactive terminal.",
-      starting: "Starting ZCode... Ctrl+C to exit",
+      starting: `Starting ${PRODUCT_NAME}... Ctrl+C to exit`,
     },
     transcript: {
       compact: {
