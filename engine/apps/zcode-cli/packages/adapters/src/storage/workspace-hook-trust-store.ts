@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { homedir, uptime } from "node:os";
+import { resolveComeCodeDataRoot, resolveComeCodeStorageRoot } from "../config/comecode-env.js";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { WorkspaceHookTrustRecord, WorkspaceHookTrustStoreFile } from "@zcode/contracts";
@@ -125,19 +126,21 @@ export interface WorkspaceHookTrustStoreRevokeOptions {
 export interface WorkspaceHookTrustStorePathOptions {
   homeDir?: string;
   userConfigPath?: string;
+  env?: Record<string, string | undefined>;
 }
 
 export async function resolveWorkspaceHookTrustStorePath(
   options: WorkspaceHookTrustStorePathOptions = {},
 ): Promise<string> {
   const home = resolve(options.homeDir ?? homedir());
+  const dataRoot = resolveComeCodeDataRoot(options.env, options.homeDir);
   const userConfigPath = resolve(
-    options.userConfigPath ?? join(home, ".zcode", "cli", "config.json"),
+    options.userConfigPath ?? join(dataRoot, "cli", "config.json"),
   );
   const config = await readUserConfig(userConfigPath);
   const storage = isRecord(config.storage) ? config.storage : {};
   const configured = typeof storage.dir === "string" ? storage.dir.trim() : "";
-  const storageRoot = configured ? resolveTrustedUserPath(configured, home) : join(home, ".zcode");
+  const storageRoot = configured ? resolveTrustedUserPath(configured, home) : resolveComeCodeStorageRoot(options.env ?? (options.homeDir ? { COMECODE_DATA_BASE_DIR: options.homeDir } : process.env));
   return join(storageRoot, SECURITY_DIRECTORY, TRUST_STORE_FILE);
 }
 

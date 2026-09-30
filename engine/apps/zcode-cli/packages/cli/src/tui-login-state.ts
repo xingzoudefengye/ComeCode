@@ -1,9 +1,8 @@
-import { getZCodeCopy } from "@zcode/i18n";
+import { providerSetupResponse } from "./provider-setup.js";
 import type { CommandCenterApp } from "./command-center.js";
 
 export function loginRequiredResponse(locale?: string): string {
-  const copy = getZCodeCopy(locale).tui.loginRequired;
-  return [copy.message, copy.help].join("\n");
+  return providerSetupResponse(locale);
 }
 
 /** Registry already applies provider/account availability, including personal providers. */

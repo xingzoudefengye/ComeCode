@@ -1,6 +1,6 @@
 // Config Factory - Load and merge all config sources
 
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type {
   ConfigPort,
   HookConfigSource,
@@ -23,6 +23,7 @@ import {
 import { createConfigPort } from "./index.js";
 import { loadFileConfig, getDefaultConfigPath, type LoadedConfig } from "./file-config.adapter.js";
 import { parseEnvConfig } from "./env-config.adapter.js";
+import { resolveComeCodeStorageRoot } from "./comecode-env.js";
 import { mergeConfigs, createPrioritizedConfig } from "./config-merger.js";
 import { createNodeLoggerFactory } from "../logging/index.js";
 import {
@@ -34,7 +35,7 @@ import {
 } from "./project-config.adapter.js";
 
 export interface ConfigFactoryOptions {
-  /** Path to user config file (default: ~/.zcode/cli/config.json) */
+  /** Path to user config file (default: ~/.comecode/cli/config.json) */
   userConfigPath?: string;
   /** Path to project config file */
   projectConfigPath?: string;
@@ -121,21 +122,30 @@ export interface PluginConfigSources {
  *
  * Priority (lowest to highest):
  * 1. System defaults
- * 2. User config file (~/.zcode/cli/config.json)
+ * 2. User config file (~/.comecode/cli/config.json)
  * 3. Project config files (root to cwd, then explicit projectConfigPath)
- * 4. Environment variables (ZCODE_*)
+ * 4. Environment variables (COMECODE_* with ZCODE_* fallback)
  * 5. CLI overrides
  */
 export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
   // 1. System defaults
   const configs: ReturnType<typeof createPrioritizedConfig>[] = [
-    createPrioritizedConfig(DefaultRuntimeConfig, ConfigScope.System),
+    createPrioritizedConfig(
+      {
+        ...DefaultRuntimeConfig,
+        storage: {
+          dir: resolveComeCodeStorageRoot(options.env),
+          sessionDbPath: join(resolveComeCodeStorageRoot(options.env), "cli", "db", "db.sqlite"),
+        },
+      },
+      ConfigScope.System,
+    ),
   ];
 
   // 2. User config file
   const userConfigResult: LoadedConfig = options.skipUserConfig
-    ? { config: {}, diagnostics: [], path: getDefaultConfigPath(), loaded: false }
-    : loadFileConfig(options.userConfigPath);
+    ? { config: {}, diagnostics: [], path: getDefaultConfigPath(options.env), loaded: false }
+    : loadFileConfig(options.userConfigPath ?? getDefaultConfigPath(options.env));
 
   if (userConfigResult.loaded) {
     configs.push(
