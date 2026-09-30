@@ -3,6 +3,7 @@ import type { TuiCopy } from "@zcode/i18n";
 import type { ThoughtTranscriptPart } from "./app-model.js";
 import { palette } from "./app-model.js";
 import { DEFAULT_TUI_COPY } from "./app-locale.js";
+import { activeTuiTheme } from "./theme/index.js";
 
 const h = React.createElement as (
   type: React.ElementType | string,
@@ -41,6 +42,7 @@ function ThoughtTranscriptPartFrame({
   part: ThoughtTranscriptPart;
 }): React.ReactElement {
   const label = thoughtPlaceholderLabel(part, copy);
+  const theme = activeTuiTheme();
   const marker = expanded ? EXPANDED_MARKER : COLLAPSED_MARKER;
 
   return h(
@@ -50,8 +52,8 @@ function ThoughtTranscriptPartFrame({
       style: {
         backgroundColor: "transparent",
         flexDirection: "column",
-        marginBottom: 1,
-        marginTop: 1,
+        marginBottom: 0,
+        marginTop: 0,
         width: "100%",
       },
     },
@@ -59,7 +61,7 @@ function ThoughtTranscriptPartFrame({
       "text",
       {
         selectable: false,
-        style: { fg: part.status === "thinking" ? palette.accent : palette.muted },
+        style: { fg: part.status === "thinking" ? palette.accent : theme.info },
       },
       `${marker} ${label}`,
     ),
@@ -69,7 +71,7 @@ function ThoughtTranscriptPartFrame({
             "text",
             {
               key: "thought-content",
-              style: { fg: palette.muted, width: "100%", wrapMode: "word" },
+              style: { fg: theme.textMuted, width: "100%", wrapMode: "word" },
             },
             part.text.trim(),
           ),

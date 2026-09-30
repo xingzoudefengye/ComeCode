@@ -24,6 +24,7 @@ export function ToolTranscriptPartView({
   terminalWidth?: number;
 }): React.ReactElement {
   const statusColor = colorForStatus(part.status);
+  const theme = activeTuiTheme();
   const title = part.title ?? `Tool ${part.toolName} ${part.status}`;
   const outputLines = part.output ? restoredOutputLines(part.output, terminalWidth) : [];
   // tool rows should align with assistant text; child detail rows carry their own indent.
@@ -33,15 +34,15 @@ export function ToolTranscriptPartView({
       style: {
         backgroundColor: "transparent",
         flexDirection: "column",
-        marginTop: 1,
+        marginTop: 0,
         width: "100%",
       },
     },
-    h("text", { style: { fg: part.title ? palette.muted : statusColor } }, title),
+    h("text", { style: { fg: statusColor } }, title),
     ...part.detailLines.map((line, index) =>
       h(
         "text",
-        { key: `detail-${index}`, style: { fg: palette.muted } },
+        { key: `detail-${index}`, style: { fg: theme.info } },
         `${TOOL_DETAIL_INDENT}${line}`,
       ),
     ),
@@ -51,7 +52,7 @@ export function ToolTranscriptPartView({
             ? [
                 h(
                   "text",
-                  { key: "result-title", style: { fg: palette.muted } },
+                  { key: "result-title", style: { fg: theme.info } },
                   `${TOOL_DETAIL_INDENT}${part.resultDisplay.title}`,
                 ),
               ]
@@ -63,13 +64,13 @@ export function ToolTranscriptPartView({
       ? [
           h(
             "text",
-            { key: "output-title", style: { fg: palette.muted } },
+            { key: "output-title", style: { fg: theme.info } },
             `${TOOL_DETAIL_INDENT}output:`,
           ),
           ...outputLines.map((line, index) =>
             h(
               "text",
-              { key: `output-${index}`, style: { fg: palette.muted } },
+              { key: `output-${index}`, style: { fg: theme.textMuted } },
               `${TOOL_OUTPUT_LINE_INDENT}${line}`,
             ),
           ),

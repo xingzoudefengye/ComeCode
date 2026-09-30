@@ -14,7 +14,7 @@ import { installScriptSource } from "./zcode-distribution/installer.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const defaultOutDir = resolve(root, "dist", "zcode");
-const defaultBaseUrl = (await loadEndpointEnv()).ZCODE_DIST_BASE_URL?.trim() || "";
+const defaultBaseUrl = (await loadEndpointEnv()).COMECODE_DIST_BASE_URL?.trim() || "https://localhost:3000/comecode/";
 const packageDirName = "zcode";
 const usage = `Usage:
   pnpm build:zcode
@@ -100,9 +100,12 @@ function commandText(command, args) {
 
 function run(command, args, options = {}) {
   console.log(`[zcode] ${commandText(command, args)}`);
+  // Windows 上 pnpm/npm 需要 .cmd 后缀或 shell,tar 不需要
+  const needsShell = process.platform === "win32" && (command === "pnpm" || command === "npm");
   const result = spawnSync(command, args, {
     cwd: root,
     stdio: "inherit",
+    shell: needsShell,
     ...options,
   });
   if (result.error) {
@@ -232,11 +235,13 @@ async function createTarball({ packageParent, releaseDir, tarballName }) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  if (!options.help && !options.baseUrl)
-    throw new Error("Configure ZCODE_DIST_BASE_URL in .env or pass --base-url");
   if (options.help) {
     console.log(usage);
     return;
+  }
+  // 本地开发构建时 baseUrl 使用默认占位值
+  if (!options.baseUrl) {
+    console.log("[comecode] 使用默认 baseUrl(本地开发):", defaultBaseUrl);
   }
 
   const rootPackageJson = await readJson(resolve(root, "package.json"));

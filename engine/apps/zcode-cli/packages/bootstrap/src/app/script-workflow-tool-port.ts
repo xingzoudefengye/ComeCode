@@ -1,4 +1,4 @@
-import { homedir } from "node:os";
+import { resolveComeCodeDataRoot } from "@zcode/adapters/config";
 import { join, resolve } from "node:path";
 import {
   WORKFLOW_RUN_ID_PATTERN,
@@ -315,7 +315,7 @@ async function resolveNamedWorkflowPath(
   const fileName = workflowFileName(name);
   const candidates = [
     join(deps.workingDirectory, ".zcode", "workflows", fileName),
-    join(homedir(), ".zcode", "workflows", fileName),
+    join(resolveComeCodeDataRoot(), "workflows", fileName),
   ];
   const builtIn = BUILTIN_WORKFLOW_ALLOWLIST.get(name);
   if (builtIn) candidates.push(builtIn);

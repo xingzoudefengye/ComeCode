@@ -25,57 +25,75 @@ export function toAiSdkTools(
     return undefined;
   }
 
-  const entries = tools.flatMap((contract): [string, ToolSet[string]][] => {
-    if (contract.providerNative) {
-      const providerTool = toAiSdkProviderNativeTool(contract, options);
-      return providerTool ? [[contract.name, providerTool]] : [];
-    }
+  // MCP/插件注册顺序可能不同，wire 顺序固定才能复用相同工具前缀。
+  const entries = tools
+    .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+    .flatMap((contract): [string, ToolSet[string]][] => {
+      if (contract.providerNative) {
+        const providerTool = toAiSdkProviderNativeTool(contract, options);
+        return providerTool ? [[contract.name, providerTool]] : [];
+      }
 
-    const strictSchema = resolveStrictToolSchema(contract, options);
-    const baseTool = {
-      description: contract.description,
-      inputSchema: jsonSchema<unknown>(
-        normalizeToolInputSchema(
-          contract.name,
-          strictSchema ?? (contract.inputSchema as JsonSchema),
-          options,
+      const strictSchema = resolveStrictToolSchema(contract, options);
+      const baseTool = {
+        description: contract.description,
+        inputSchema: jsonSchema<unknown>(
+          canonicalizeSchema(
+            normalizeToolInputSchema(
+              contract.name,
+              strictSchema ?? (contract.inputSchema as JsonSchema),
+              options,
+            ),
+          ),
         ),
-      ),
-      ...(strictSchema === undefined ? {} : { strict: true }),
-      needsApproval: contract.needsApproval,
-      ...providerOptionsForClientTool(options),
-    };
+        ...(strictSchema === undefined ? {} : { strict: true }),
+        needsApproval: contract.needsApproval,
+        ...providerOptionsForClientTool(options),
+      };
 
-    if (!contract.execute) {
-      return [[contract.name, tool<unknown, never>(baseTool)]];
-    }
+      if (!contract.execute) {
+        return [[contract.name, tool<unknown, never>(baseTool)]];
+      }
 
-    return [
-      [
-        contract.name,
-        tool<unknown, unknown>({
-          ...baseTool,
-          execute: async (input, options) =>
-            contract.execute?.(input, {
-              toolCallId: options.toolCallId,
-              abortSignal: options.abortSignal,
-              metadata: {
-                readOnly: contract.readOnly,
-                destructive: contract.destructive,
-                concurrentSafe: contract.concurrentSafe,
-                requiresUserInteraction: contract.requiresUserInteraction,
-                sideEffectScope: contract.sideEffectScope,
-                maxOutputBytes: contract.maxOutputBytes,
-                timeoutMs: contract.timeoutMs,
-                experimentalContext: options.experimental_context,
-              },
-            }),
-        }),
-      ],
-    ];
-  });
+      return [
+        [
+          contract.name,
+          tool<unknown, unknown>({
+            ...baseTool,
+            execute: async (input, options) =>
+              contract.execute?.(input, {
+                toolCallId: options.toolCallId,
+                abortSignal: options.abortSignal,
+                metadata: {
+                  readOnly: contract.readOnly,
+                  destructive: contract.destructive,
+                  concurrentSafe: contract.concurrentSafe,
+                  requiresUserInteraction: contract.requiresUserInteraction,
+                  sideEffectScope: contract.sideEffectScope,
+                  maxOutputBytes: contract.maxOutputBytes,
+                  timeoutMs: contract.timeoutMs,
+                  experimentalContext: options.experimental_context,
+                },
+              }),
+          }),
+        ],
+      ];
+    });
 
   return entries.length > 0 ? (Object.fromEntries(entries) as ToolSet) : undefined;
+}
+
+function canonicalizeSchema<T>(value: T): T {
+  // 数组（如 enum、prefixItems）的次序有语义，只固定 JSON 对象键。
+  if (Array.isArray(value)) return value.map(canonicalizeSchema) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalizeSchema((value as Record<string, unknown>)[key])]),
+    ) as T;
+  }
+  return value;
 }
 
 /**

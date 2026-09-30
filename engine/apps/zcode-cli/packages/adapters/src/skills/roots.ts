@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { SkillRoot, SkillSource } from "@zcode/contracts";
+import { resolveComeCodeDataRoot } from "../config/comecode-env.js";
 
 const GIT_MARKER = ".git";
 const HOME_PREFIX = "~/";
@@ -24,7 +25,7 @@ export async function resolveDefaultSkillRoots(
   const resolvedWorkingDirectory = resolve(workingDirectory);
   const roots: SkillRoot[] = [];
   const includeZcode = options.includeZcodeSkills ?? true;
-  const home = options.homeDirectory ?? homedir();
+  const home = options.homeDirectory ?? dirname(resolveComeCodeDataRoot());
   let priority = 0;
   const nextPriority = () => {
     priority += PRIORITY_STEP;
@@ -99,7 +100,14 @@ function skillRootsForBase(
   // 合并而不是 fallback：用户可能同时安装原生 `.zcode` skill 和兼容 `.agents` skill。
   // 同一级别仍保持 `.zcode` 优先，后续同名按 root 顺序解析。
   return [
-    root(join(baseDirectory, ZCODE_DIR, SKILLS_DIR), scope, "zcode", nextPriority()),
+    root(
+      scope === "user"
+        ? join(resolveComeCodeDataRoot(process.env, baseDirectory), SKILLS_DIR)
+        : join(baseDirectory, ZCODE_DIR, SKILLS_DIR),
+      scope,
+      "zcode",
+      nextPriority(),
+    ),
     root(join(baseDirectory, AGENTS_DIR, SKILLS_DIR), scope, "agents", nextPriority()),
   ];
 }

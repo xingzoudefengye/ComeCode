@@ -3,7 +3,7 @@
 // ============================================================
 
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { normalizeComeCodeEnv, resolveComeCodeStorageRoot } from "../config/comecode-env.js";
 import { join } from "node:path";
 import type { LogContext, LogEntry, Logger, LoggerFactory, LogRedactor } from "@zcode/contracts";
 import { LogLevel, LogLevelName } from "@zcode/contracts";
@@ -168,9 +168,10 @@ export class NodeFileLogger implements Logger {
 }
 
 export function createNodeLoggerFactory(options: NodeLoggerFactoryOptions = {}): NodeLoggerFactory {
+  options = { ...options, env: normalizeComeCodeEnv(options.env ?? process.env) };
   let currentLevel = options.minLevel ?? getDefaultMinLevel(options.env);
   let retentionCleanupScheduled = false;
-  const logDir = options.logDir ?? options.env?.ZCODE_LOG_DIR ?? getDefaultLogDir();
+  const logDir = options.logDir ?? options.env?.ZCODE_LOG_DIR ?? getDefaultLogDir(options.env);
   const consoleStream =
     typeof options.console === "object"
       ? options.console.stream
@@ -219,8 +220,8 @@ export function createNodeLoggerFactory(options: NodeLoggerFactoryOptions = {}):
   };
 }
 
-export function getDefaultLogDir(): string {
-  return join(homedir(), ".zcode", "cli", "log");
+export function getDefaultLogDir(env: NodeJS.ProcessEnv = process.env): string {
+  return join(resolveComeCodeStorageRoot(env), "cli", "log");
 }
 
 function getDefaultMinLevel(env: NodeJS.ProcessEnv | undefined): LogLevel {

@@ -4,6 +4,7 @@
 
 import { readFile, stat } from "node:fs/promises";
 import { arch, homedir, release } from "node:os";
+import { resolveComeCodeDataRoot } from "../config/comecode-env.js";
 import { basename, dirname, join, resolve } from "node:path";
 import { formatLocalIsoDate } from "@zcode/contracts";
 import type {
@@ -234,7 +235,15 @@ async function findDefaultUserInstructionFile(
     return undefined;
   }
 
-  const filePath = join(resolveUserHomeDir(env), ".zcode", "AGENTS.md");
+  const filePath = join(
+    resolveComeCodeDataRoot(
+      env,
+      env.COMECODE_DATA_BASE_DIR?.trim() ||
+        env.ZCODE_DATA_BASE_DIR?.trim() ||
+        resolveUserHomeDir(env),
+    ),
+    "AGENTS.md",
+  );
   if (await isFile(filePath)) {
     return { filePath, fileName: "AGENTS.md" };
   }

@@ -17,6 +17,7 @@ import {
   waitForHeadlessWorkflowSettle,
 } from "./headless-workflow.js";
 import { runLoginCommand, runLogoutCommand } from "./login-command.js";
+import { providerSetupResponse } from "./provider-setup.js";
 import { resolveResumeSession } from "./resume.js";
 import { readRuntimeEventSubscriber } from "./runtime-event-subscriber.js";
 import {
@@ -209,6 +210,13 @@ export const runPrompt = async (
           },
     );
     browserRuntime = createCliHeadlessBrowserRuntime(options, deps);
+    if (
+      !providerRegistryRuntime.runtime.registryService
+        .getView()
+        .providers.some((provider) => provider.models.length > 0)
+    ) {
+      throw new Error(providerSetupResponse(options.locale ?? options.detectedLocale, appEnv));
+    }
     app = await createApp({
       browserControlPort: browserRuntime?.browserControlPort,
       env: appEnv,

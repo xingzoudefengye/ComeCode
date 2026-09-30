@@ -16,8 +16,6 @@ const h = React.createElement as (
   ...children: React.ReactNode[]
 ) => React.ReactElement;
 
-const USER_MESSAGE_VERTICAL_PADDING = 1;
-
 export function ContentPane({
   animateEmptyLogo = false,
   copy = DEFAULT_TUI_COPY,
@@ -51,12 +49,12 @@ export function ContentPane({
         backgroundColor: palette.background,
         border: false,
         flexGrow: 1,
-        marginBottom: 1,
+        marginBottom: 0,
         minHeight: 8,
         contentOptions: {
           backgroundColor: palette.background,
           flexDirection: "column",
-          padding: 1,
+          padding: 0,
         },
         rootOptions: {
           backgroundColor: palette.background,
@@ -114,7 +112,10 @@ export function MessageRow({
   const isUserMessage = message.role === "user";
   const rowBackground = isUserMessage ? palette.userMessageBackground : palette.background;
   const assistantText = message.role === "agent";
-  const plainTextColor = message.role === "system" ? palette.warning : palette.text;
+  const plainTextColor =
+    message.role === "system"
+      ? palette.warning
+      : palette.text;
 
   return h(
     "box",
@@ -122,12 +123,12 @@ export function MessageRow({
       style: {
         backgroundColor: rowBackground,
         flexDirection: "column",
-        marginBottom: 1,
-        minHeight: 2,
-        paddingLeft: 1,
-        paddingRight: 1,
-        paddingBottom: isUserMessage ? USER_MESSAGE_VERTICAL_PADDING : 0,
-        paddingTop: isUserMessage ? USER_MESSAGE_VERTICAL_PADDING : 0,
+        marginBottom: 0,
+        minHeight: 1,
+        paddingLeft: isUserMessage ? 1 : 0,
+        paddingRight: isUserMessage ? 1 : 0,
+        paddingBottom: 0,
+        paddingTop: 0,
         width: "100%",
       },
     },
@@ -235,7 +236,7 @@ function CompactTimelineRow({
       style: {
         backgroundColor: palette.background,
         flexDirection: "column",
-        marginBottom: 1,
+        marginBottom: 0,
         minHeight: 1,
         paddingLeft: 1,
         paddingRight: 1,
