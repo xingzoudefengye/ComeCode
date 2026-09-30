@@ -1,6 +1,7 @@
 import { ModelErrorCode, ModelProtocolError } from "@zcode/contracts";
 import {
   normalizeModelSelection,
+  pickDefaultReasoningLevel,
   type ModelSelection,
   type Provider,
   type ProviderModel,
@@ -45,7 +46,9 @@ export function completeAuxiliaryRegistryModelSelection(
   selection: ModelSelection,
 ): ModelSelection {
   const model = registry.getModel(selection.providerId, selection.modelId);
-  const reasoningLevel = model?.config.optionSpecs.reasoningLevel.values[0];
+  const reasoningLevel = pickDefaultReasoningLevel(
+    model?.config.optionSpecs.reasoningLevel.values ?? [],
+  );
   if (!reasoningLevel) return selection;
   return {
     providerId: selection.providerId,
@@ -193,7 +196,7 @@ function toModelOption(provider: Provider, model: ProviderModel): ZCodeModelOpti
     maxOutputTokens: optionSpecs.maxOutputTokens.max,
     reasoning: {
       levels: reasoning.values.map((level) => ({ value: level, label: level })),
-      defaultLevel: reasoning.values.at(-1),
+      defaultLevel: pickDefaultReasoningLevel(reasoning.values),
     },
     properties: {
       inputFormat: properties.inputFormat,

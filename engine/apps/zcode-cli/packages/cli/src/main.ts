@@ -10,6 +10,7 @@ import { installCliProcessErrorBoundary } from "./process-errors.js";
 import { installProtocolStderrBoundary } from "./protocol-stderr.js";
 import { createProtocolProcessLifecycle } from "./protocol-lifecycle.js";
 import { isProtocolServerInvocation } from "./arguments.js";
+import { ensureWindowsConsoleUtf8 } from "./windows-console-utf8.js";
 
 void main();
 
@@ -48,6 +49,8 @@ async function main(): Promise<void> {
     : undefined;
 
   try {
+    // Modified by ComeCode：中文 Windows（GBK 代码页）下 TUI 乱码，渲染前切到 UTF-8，退出时恢复。
+    if (isTui) await ensureWindowsConsoleUtf8();
     if (!argv.includes("--prepare-storage"))
       Object.assign(process.env, await ensureSeaRuntimeTools());
     lifecycle?.signal.throwIfAborted();
