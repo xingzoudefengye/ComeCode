@@ -276,8 +276,14 @@ export function loadKnownMarketplacesSync(storageRoot: string): KnownMarketplace
   return [];
 }
 
-export function ensureDefaultPluginMarketplaces(storageRoot: string): KnownMarketplaceRecord[] {
+export function ensureDefaultPluginMarketplaces(
+  storageRoot: string,
+  options: { enabled?: boolean } = {},
+): KnownMarketplaceRecord[] {
   const known = loadKnownMarketplacesSync(storageRoot);
+  // Modified by ComeCode：不自动注册远程市场；已有官方记录默认仅作本地历史保留。
+  if (options.enabled !== true)
+    return known.filter((record) => !isOfficialMarketplaceId(record.id));
   const existingIds = new Set(known.map((record) => record.id));
   const now = new Date().toISOString();
   const missing = DEFAULT_PLUGIN_MARKETPLACES.filter(
@@ -1871,7 +1877,7 @@ async function writeKnownMarketplaces(
   });
 }
 
-function writeKnownMarketplacesSync(
+export function writeKnownMarketplacesSync(
   storageRoot: string,
   marketplaces: KnownMarketplaceRecord[],
 ): void {

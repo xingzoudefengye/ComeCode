@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, win32 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -29,12 +30,14 @@ import {
   parseMarketplaceSourceInput,
   parseEntryStoreListing,
   readPluginSourceIdentityPin,
+  resolveInstalledPluginRoot,
   removeMarketplace,
   uninstallMarketplacePlugin,
   updateMarketplace,
   validateLocalPluginPath,
   validateMarketplacePlugin,
   validateMarketplaceSource,
+  writeKnownMarketplacesSync,
   type DescribeMarketplacePluginResult,
   type InstalledPluginRecord,
   type KnownMarketplaceRecord,
@@ -270,13 +273,13 @@ export function getZCodePluginsOverview(
   options: ResolveZCodePluginsOptions = {},
 ): ZCodePluginsOverviewData {
   const { configResult, pluginStorageRoot, workingDirectory } = resolvePluginContext(options);
-  ensureDefaultPluginMarketplaces(pluginStorageRoot);
+  ensureConfiguredPluginMarketplaces(pluginStorageRoot, configResult);
   const outcome = resolveZCodePlugins({
     ...options,
     configResult,
     pluginStorageRoot,
   });
-  const known = loadKnownMarketplacesSync(pluginStorageRoot);
+  const known = ensureConfiguredPluginMarketplaces(pluginStorageRoot, configResult);
   const effectiveMarketplaces = resolveEffectiveMarketplaceRecords({
     configResult,
     known,
@@ -509,12 +512,13 @@ export async function removeZCodePluginMarketplace(
 export async function updateZCodePluginMarketplace(
   options: UpdateZCodeMarketplaceOptions,
 ): Promise<ZCodeMarketplaceUpdateData> {
-  const { configResult, pluginStorageRoot, workingDirectory } = resolvePluginContext(options);
-  ensureDefaultPluginMarketplaces(pluginStorageRoot);
+  const { configResult, pluginStorageRoot } = resolvePluginContext(options);
+  assertRemoteMarketplaceEnabled(configResult, options.marketplace);
+  ensureConfiguredPluginMarketplaces(pluginStorageRoot, configResult);
   const declared = resolveDeclaredMarketplaceSources({
     configResult,
   });
-  const known = loadKnownMarketplacesSync(pluginStorageRoot);
+  const known = ensureConfiguredPluginMarketplaces(pluginStorageRoot, configResult);
   const knownById = new Map(known.map((record) => [record.id, record]));
   const targetIds = resolveMarketplaceRefreshTargetIds({
     declaredIds: declared.keys(),
@@ -591,7 +595,19 @@ export async function installZCodeMarketplacePlugin(
   options: InstallZCodeMarketplacePluginOptions,
 ): Promise<ZCodePluginInstallData> {
   const { configResult, pluginStorageRoot, workingDirectory } = resolvePluginContext(options);
-  ensureDefaultPluginMarketplaces(pluginStorageRoot);
+  ensureConfiguredPluginMarketplaces(pluginStorageRoot, configResult);
+  const pluginId = `${options.pluginName}@${options.marketplace}`;
+  const bundledEntry = loadMarketplaceManifestSync(
+    pluginStorageRoot,
+    options.marketplace,
+  )?.plugins.find((entry) => entry.name === options.pluginName);
+  const isSuppressedBundledOfficial =
+    options.marketplace === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE &&
+    configResult.config.plugins.suppressedBuiltins.includes(pluginId) &&
+    (bundledEntry?.source === "filesystem" || bundledEntry?.source === "sea");
+  if (!isSuppressedBundledOfficial) {
+    assertRemoteMarketplaceEnabled(configResult, options.marketplace);
+  }
   if (options.dryRun === true) {
     const declarationSource = resolveDeclaredMarketplaceSources({
       configResult,
@@ -636,15 +652,6 @@ export async function installZCodeMarketplacePlugin(
       ).map(toPluginDiagnostic),
     };
   }
-  const pluginId = `${options.pluginName}@${options.marketplace}`;
-  const bundledEntry = loadMarketplaceManifestSync(
-    pluginStorageRoot,
-    options.marketplace,
-  )?.plugins.find((entry) => entry.name === options.pluginName);
-  const isSuppressedBundledOfficial =
-    options.marketplace === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE &&
-    configResult.config.plugins.suppressedBuiltins.includes(pluginId) &&
-    (bundledEntry?.source === "filesystem" || bundledEntry?.source === "sea");
   if (isSuppressedBundledOfficial) {
     // 内置插件的 filesystem/SEA entry 只是 Catalog 指针，不是普通 Marketplace source。
     // 直接安装必须复用 restore，避免把同一份官方 cache 写进 installed_plugins.json，
@@ -954,8 +961,14 @@ export async function resetZCodePluginConfig(
 export async function validateZCodePlugin(
   options: ValidateZCodePluginOptions,
 ): Promise<PluginLoadOutcome["diagnostics"]> {
-  const { pluginStorageRoot } = resolvePluginContext(options);
-  ensureDefaultPluginMarketplaces(pluginStorageRoot);
+  const { configResult, pluginStorageRoot } = resolvePluginContext(options);
+  if (
+    options.source ||
+    !hasLocalMarketplacePlugin(pluginStorageRoot, options.marketplace, options.pluginName)
+  ) {
+    assertRemoteMarketplaceEnabled(configResult, options.marketplace);
+  }
+  ensureConfiguredPluginMarketplaces(pluginStorageRoot, configResult);
   if (options.source) {
     try {
       const source = await parseMarketplaceSourceInput(options.source);
@@ -1005,8 +1018,14 @@ export async function validateZCodePlugin(
 export async function describeZCodePlugin(
   options: DescribeZCodePluginOptions,
 ): Promise<DescribeMarketplacePluginResult> {
-  const { pluginStorageRoot } = resolvePluginContext(options);
-  ensureDefaultPluginMarketplaces(pluginStorageRoot);
+  const { configResult, pluginStorageRoot } = resolvePluginContext(options);
+  if (
+    !hasLocalMarketplacePlugin(pluginStorageRoot, options.marketplace, options.pluginName) &&
+    !hasInstalledMarketplacePlugin(pluginStorageRoot, options.marketplace, options.pluginName)
+  ) {
+    assertRemoteMarketplaceEnabled(configResult, options.marketplace);
+  }
+  ensureConfiguredPluginMarketplaces(pluginStorageRoot, configResult);
   return describeMarketplacePlugin({
     marketplace: options.marketplace,
     name: options.pluginName,
@@ -1036,6 +1055,73 @@ function resolvePluginContext(options: ResolveZCodePluginsOptions): {
       options.pluginStorageRoot ?? getPluginStorageRoot(getCliStorageRoot(storageRoot)),
     workingDirectory,
   };
+}
+
+function ensureConfiguredPluginMarketplaces(
+  storageRoot: string,
+  configResult: ConfigResult,
+): KnownMarketplaceRecord[] {
+  const existing = loadKnownMarketplacesSync(storageRoot);
+  const known = ensureDefaultPluginMarketplaces(storageRoot);
+  const configured = resolveDeclaredMarketplaceSources({ configResult }).get(
+    ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
+  );
+  if (!configured) return known;
+  const current = existing.find((record) => record.id === ZCODE_OFFICIAL_PLUGIN_MARKETPLACE);
+  const next = [
+    ...known.filter((record) => record.id !== ZCODE_OFFICIAL_PLUGIN_MARKETPLACE),
+    {
+      id: ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
+      source: configured,
+      name: current?.name ?? ZCODE_OFFICIAL_PLUGIN_MARKETPLACE,
+      description: current?.description,
+      addedAt: current?.addedAt ?? new Date().toISOString(),
+      pluginCount: current?.pluginCount ?? 0,
+    },
+  ];
+  writeKnownMarketplacesSync(storageRoot, next);
+  return next;
+}
+
+function assertRemoteMarketplaceEnabled(configResult: ConfigResult, marketplace?: string): void {
+  if (
+    marketplace &&
+    isOfficialMarketplaceId(marketplace) &&
+    !configResult.config.plugins.extraKnownMarketplaces[marketplace]
+  ) {
+    throw new Error(
+      "远程插件市场默认关闭；请在 plugins.extraKnownMarketplaces 中显式配置市场来源。",
+    );
+  }
+}
+
+function hasLocalMarketplacePlugin(
+  storageRoot: string,
+  marketplace?: string,
+  name?: string,
+): boolean {
+  if (!marketplace || !name) return false;
+  const entry = loadMarketplaceManifestSync(storageRoot, marketplace)?.plugins.find(
+    (plugin) => plugin.name === name,
+  );
+  // manifest 缓存可能仍声明远程 Git/CDN 源；只有随包本地 entry 可以跳过联网开关。
+  return entry?.source === "filesystem" || entry?.source === "sea";
+}
+
+function hasInstalledMarketplacePlugin(
+  storageRoot: string,
+  marketplace: string,
+  name: string,
+): boolean {
+  const record = listInstalledPluginRecords(storageRoot).find(
+    (plugin) => plugin.marketplace === marketplace && plugin.name === name,
+  );
+  if (!record) return false;
+  try {
+    return statSync(resolveInstalledPluginRoot(storageRoot, record)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 function resolveDeclaredMarketplaceSources(input: {

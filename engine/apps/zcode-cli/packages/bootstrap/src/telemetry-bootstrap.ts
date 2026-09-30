@@ -1,4 +1,5 @@
 import { getCapturedZCodeAgentTelemetryEnv } from "@zcode/shared";
+import { normalizeComeCodeEnv, resolveComeCodeDataRoot } from "@zcode/adapters/config";
 import {
   prepareModelTelemetryEnv,
   shutdownPreparedModelTelemetry,
@@ -13,13 +14,17 @@ export async function prepareZCodeTelemetryEnv(
   env: NodeJS.ProcessEnv = process.env,
   options: PrepareModelTelemetryOptions = {},
 ): Promise<NodeJS.ProcessEnv> {
-  const prepared = await prepareModelTelemetryEnv({
-    ...getCapturedZCodeAgentTelemetryEnv(),
-    ...env,
-  }, {
-    ...options,
-    productVersion: options.productVersion ?? env.ZCODE_APP_VERSION,
-  });
+  const prepared = await prepareModelTelemetryEnv(
+    {
+      ...getCapturedZCodeAgentTelemetryEnv(),
+      ...normalizeComeCodeEnv(env),
+      ZCODE_HOME: resolveComeCodeDataRoot(env),
+    },
+    {
+      ...options,
+      productVersion: options.productVersion ?? env.ZCODE_APP_VERSION,
+    },
+  );
   const deviceMid = prepared.ZCODE_TELEMETRY_DEVICE_MID;
   return deviceMid ? { ...env, ZCODE_TELEMETRY_DEVICE_MID: deviceMid } : env;
 }
