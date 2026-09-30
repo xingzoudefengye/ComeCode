@@ -1,3 +1,5 @@
+// Modified by ComeCode：去掉居中的大号 ZCODE 字符画，改为左上角一行小字 "comecode"，保持低调。
+import { CLI_COMMAND } from "@zcode/contracts";
 import React from "react";
 import { palette } from "./app-model.js";
 import { ShimmerText, useShimmerFrame } from "./app-motion.js";
@@ -8,16 +10,9 @@ const h = React.createElement as (
   ...children: React.ReactNode[]
 ) => React.ReactElement;
 
-const ZCODE_LOGO_LINES = [
-  "███████╗ ██████╗ ██████╗ ██████╗ ███████╗",
-  "   ███╔╝██╔════╝██╔═══██╗██╔══██╗██╔════╝",
-  "  ███╔╝ ██║     ██║   ██║██║  ██║█████╗  ",
-  " ███╔╝  ██║     ██║   ██║██║  ██║██╔══╝  ",
-  "███████╗╚██████╗╚██████╔╝██████╔╝███████╗",
-  "╚══════╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝",
-] as const;
+const LOGO_LINES = [CLI_COMMAND] as const;
 
-const EMPTY_TRANSCRIPT_LOGO_MIN_HEIGHT = ZCODE_LOGO_LINES.length;
+const EMPTY_TRANSCRIPT_LOGO_MIN_HEIGHT = LOGO_LINES.length;
 
 export function EmptyTranscriptLogo({
   animated = false,
@@ -40,20 +35,20 @@ function renderLogoContent(input: { animated: boolean; frameMs?: number }): Reac
     "box",
     {
       style: {
-        alignItems: "center",
+        alignItems: "flex-start",
         flexDirection: "column",
         flexGrow: 1,
-        justifyContent: "center",
+        justifyContent: "flex-start",
         minHeight: EMPTY_TRANSCRIPT_LOGO_MIN_HEIGHT,
         width: "100%",
       },
     },
-    ...ZCODE_LOGO_LINES.map((line, index) =>
+    ...LOGO_LINES.map((line, index) =>
       renderLogoText({
         animated: input.animated,
-        baseColor: palette.accent,
+        baseColor: palette.muted,
         frameMs: input.frameMs,
-        key: `zcode-logo-${index}`,
+        key: `comecode-logo-${index}`,
         text: line,
       }),
     ),

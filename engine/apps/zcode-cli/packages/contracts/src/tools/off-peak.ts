@@ -32,7 +32,7 @@ export const OffPeakCreateInputSchema = z
     thoughtLevel: nonEmptyString
       .optional()
       .describe(
-        "Reasoning effort level for the chosen model. Omit to use the default (the highest level). Set only when the user explicitly asks for a lower reasoning effort.",
+        "Reasoning effort level for the chosen model. Omit to use the default (high, or the best available level). Set only when the user explicitly asks for a specific reasoning effort.",
       ),
   })
   .strict();
