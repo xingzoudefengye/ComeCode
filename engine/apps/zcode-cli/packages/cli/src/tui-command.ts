@@ -51,6 +51,10 @@ export const runTuiCommand = async (
       cleanup: async () => {
         await promptHandler.close?.();
       },
+      // Ctrl+C 归 TUI 所有（一次复制、两次确认退出）。若这里也注册 SIGINT，
+      // 第一次信号就会 process.exit，绕过 TUI 的双击确认并直接结束会话。
+      // 退出清理改由 runTui 正常返回后的 finally 分支负责。
+      excludeSignals: ["SIGINT"],
       cleanupTimeoutMs: deps.shutdownCleanupTimeoutMs,
       exitProcess: deps.exitProcess,
       process: deps.shutdownProcess,

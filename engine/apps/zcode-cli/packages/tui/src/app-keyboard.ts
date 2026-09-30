@@ -17,7 +17,6 @@ import {
   isModeSwitchKey,
   resetCtrlCExitGuard,
   resolveCtrlCExitIntent,
-  shouldClearPromptDraftOnCtrlC,
   shouldHandleInputHistoryNavigation,
   workflowExpansionActionFor,
 } from "./app-keyboard-helpers.js";
@@ -168,6 +167,15 @@ export function useTuiKeyboardControls({
 
         const approval = approvalQueue[0];
         if (approval) {
+          // 审批界面允许 Ctrl+C 复制，但不触发退出逻辑
+          if (key.name === "c" && key.ctrl) {
+            consumeKey(key);
+            if (copyCurrentSelection()) {
+              resetCtrlCExitGuard(ctrlCExitGuardRef.current);
+            }
+            // 无论复制成功与否，都不继续走到退出逻辑
+            return;
+          }
           resetCtrlCExitGuard(ctrlCExitGuardRef.current);
           consumeKey(key);
           handleApprovalKey(key, approval, setApprovalQueue, setStatus);
@@ -200,26 +208,16 @@ export function useTuiKeyboardControls({
 
         if (key.name === "c" && key.ctrl) {
           consumeKey(key);
+          // 有可复制内容时 Ctrl+C 只复制；没有选区才进入「再按一次退出」的确认流程。
+          // 复制后必须重置 guard，否则「复制两次」会被误判成两次 Ctrl+C 而退出会话。
           if (copyCurrentSelection()) {
             resetCtrlCExitGuard(ctrlCExitGuardRef.current);
             return;
           }
-
-          if (shouldClearPromptDraftOnCtrlC(draftValue)) {
-            resetCtrlCExitGuard(ctrlCExitGuardRef.current);
-            setDraftValue("");
-            setDraftAttachments([]);
-            setStatus(PROMPT_DRAFT_CLEARED_STATUS);
-            return;
-          }
-
-          // A single Ctrl-C used to exit immediately, which made long sessions easy to lose.
           if (resolveCtrlCExitIntent(ctrlCExitGuardRef.current, Date.now()) === "confirm_exit") {
-            abortControllerRef.current?.abort();
-            onExit(0);
+            onExit(130);
             return;
           }
-
           setStatus(CTRL_C_EXIT_PROMPT);
           return;
         }
