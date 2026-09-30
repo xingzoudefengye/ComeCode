@@ -2,20 +2,20 @@
 
 本文用于把工作委派给其他 Agent。每个任务都是独立可交付的单元，包含：目标、依赖、涉及位置、做法要点、验收标准。
 
-路径约定：`ZCode/` 指本地 fork 的 ZCode 仓库，`CLI/` 指 `ZCode/apps/zcode-cli/packages/`。
+路径约定：`engine/` 指 ComeCode 仓库中通过 git subtree 导入的 ZCode 代码，`CLI/` 指 `engine/apps/zcode-cli/packages/`，`codex/` 指仓库外的 Codex 参考克隆（`E:\Projects\ComeCode\codex`，已被 .gitignore 忽略）。
 
 ---
 
 ## 0. 全局约定（每个任务都要遵守，委派时附上本节）
 
-1. 开发仓库：直接在 `ZCode/` fork 上开发，新建分支 `comecode/main`。添加 `upstream` 指向原 ZCode 仓库，方便以后合并上游更新。`codex/` 只作参考，不改。
+1. 开发仓库：ComeCode 仓库（`origin` = github.com/xingzoudefengye/ComeCode），`main` 为主分支，功能在 `feat/<任务号>` 分支开发后合并。ZCode 代码在 `engine/`，同步上游时另开 `upstream-sync` 分支执行 `git subtree pull --prefix=engine upstream-zcode main`，解决冲突后再合回 `main`。`codex/` 只作参考，不改、不入库。
 2. 改名分层，控制和上游的差异：
    - 必须改：npm 包名、`bin` 命令名、数据目录（`~/.comecode`）、用户可见文案、系统提示词中的产品身份。
    - 不改：内部 `@zcode/*` 包 scope、源码标识符、目录名。避免上万处无意义 diff，导致无法合并上游。
    - 环境变量：新增 `COMECODE_*`，读取时回退到对应的 `ZCODE_*`，旧变量不删。
 3. 改动集中在 `CLI/adapters`、`CLI/bootstrap`、`CLI/cli` 和新增包；`CLI/core` 尽量只加扩展点，不改内部逻辑。
 4. 不动 `packages/desktop`、`packages/web`、`packages/ui`，也不让 ComeCode 的构建依赖它们。
-5. 环境：Node 24.14.0，pnpm 10.33.2（见 `ZCode/mise.toml`）。每个任务完成后至少运行：相关包的 `typecheck`、`lint`、单测，以及 `comecode --help` 冒烟测试。
+5. 环境：Node 24.14.0，pnpm 10.33.2（见 `engine/mise.toml`）。每个任务完成后至少运行：相关包的 `typecheck`、`lint`、单测，以及 `comecode --help` 冒烟测试。
 6. 从 `codex/` 复制的文本或移植的代码：文件头注明来源和 "Modified by ComeCode"，并在 `NOTICE` 中登记。
 7. 每个任务单独提交一个 PR，PR 描述写清：改了什么、如何验证、已知风险。
 
@@ -52,7 +52,7 @@ M0 基线
 
 ### T0.1 本地构建并跑通 ZCode CLI
 - 依赖：无
-- 位置：`ZCode/`、`ZCode/apps/zcode-cli`
+- 位置：`engine/`、`engine/apps/zcode-cli`
 - 做法：
   - 用 mise 或 nvm 安装指定的 Node/pnpm 版本；运行 `pnpm install`，然后 `pnpm --dir apps/zcode-cli build`。
   - 如果构建依赖了 desktop 资源准备步骤，找出最小构建路径（只需要 CLI 和它依赖的 `packages/provider`、`provider-node`、`shared`、`model-option-map`）。
@@ -142,7 +142,7 @@ M0 基线
 
 ### T2.5 内置 Provider 目录本地化
 - 依赖：T1.4
-- 位置：`ZCode/config/provider/zcode-builtin.json`
+- 位置：`engine/config/provider/zcode-builtin.json`
 - 做法：复制为 `comecode-builtin.json`；删除 z.ai 专属的 Coding Plan 和网关条目（或标注为可选）；补充 Gemini、OpenAI 兼容通用模板；核对各家 base_url 与模型名是否是当前可用的。
 - 验收：`comecode config providers` 能列出内置模板；每个模板都有单测校验字段合法。
 
@@ -291,7 +291,7 @@ M0 基线
 - 内容：快速开始、配置参考、Provider 接入示例（NewAPI / DeepSeek / GLM / Qwen / Gemini）、记忆系统说明、Web 后台说明、贡献指南；中英文。
 
 ### T5.4 Docker
-- 内容：参考 `ZCode/harness/remote/Dockerfile`；提供镜像，挂载项目目录运行，Web 端口映射；文档说明容器内的安全边界。
+- 内容：参考 `engine/harness/remote/Dockerfile`；提供镜像，挂载项目目录运行，Web 端口映射；文档说明容器内的安全边界。
 
 ### T5.5 CI 与发布流程
 - 内容：GitHub Actions 三平台构建和测试、tag 触发 npm 发布、CHANGELOG。

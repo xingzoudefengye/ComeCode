@@ -16,7 +16,7 @@ corepack pnpm@10.33.2 --version
 官方源在国内很慢（5~20 KiB/s，偶发 ECONNRESET），建议用 npmmirror。不需要桌面版时跳过 Electron 二进制下载：
 
 ```bash
-cd ZCode
+cd engine
 ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
 COREPACK_NPM_REGISTRY=https://registry.npmmirror.com \
 corepack pnpm@10.33.2 install --registry=https://registry.npmmirror.com

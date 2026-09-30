@@ -1,0 +1,39 @@
+ComeCode
+Copyright 2026 ComeCode Contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+----------------------------------------------------------------------
+Derived work: ZCode
+----------------------------------------------------------------------
+
+The contents of the engine/ directory are derived from ZCode
+(https://github.com/zai-org/ZCode), Copyright 2026 Z.AI Co., Ltd,
+licensed under the Apache License, Version 2.0 (see engine/LICENSE).
+
+ZCode's original notices are retained unmodified in:
+  - engine/NOTICE.md
+  - engine/THIRD-PARTY-NOTICES.md
+  - engine/third-party/
+
+Files under engine/ may have been modified by ComeCode Contributors.
+Modifications are recorded in the git history of this repository;
+files with substantial changes carry a "Modified by ComeCode" note.
+
+"ZCode" and "Z.AI" are trademarks of their respective owners.
+ComeCode is not affiliated with or endorsed by Z.AI Co., Ltd.
+
+----------------------------------------------------------------------
+Referenced work: OpenAI Codex
+----------------------------------------------------------------------
+
+Parts of the design, and any files explicitly marked as such, are
+derived from OpenAI Codex (https://github.com/openai/codex),
+Copyright 2025 OpenAI, licensed under the Apache License, Version 2.0.
+
+Files containing material copied or ported from Codex carry a header
+naming the original file and stating that they were modified.
+No Codex source code is included at this time.
+
+"Codex" and "OpenAI" are trademarks of OpenAI.
+ComeCode is not affiliated with or endorsed by OpenAI.
