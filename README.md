@@ -2,7 +2,7 @@
 
 一个不绑定厂商、CLI 优先、带本地网页管理后台、拥有长期项目记忆的开源 AI Coding Agent。
 
-基于 [ZCode](./ZCode)（Apache-2.0）二次开发，借鉴 [Codex](./codex)（Apache-2.0）的部分设计。
+基于 [ZCode](https://github.com/zai-org/ZCode)（Apache-2.0，代码位于 [engine/](./engine)）二次开发，借鉴 [Codex](https://github.com/openai/codex)（Apache-2.0）的部分设计。许可与署名见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE)。
 
 > 原始构想见 [README.orig.md](./README.orig.md)，实施计划见 [docs/PLAN.md](./docs/PLAN.md)。
 
