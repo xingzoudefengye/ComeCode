@@ -33,14 +33,17 @@ export function createCommandCenter(deps: CommandCenterDeps): TuiSubmitPrompt {
     const command = parseSlashCommand(promptInput.text);
     const hasAttachments = (promptInput.attachments?.length ?? 0) > 0;
 
+    // 没有任何可用模型时，所有操作统一先给出配置引导，避免用户看到
+    // “未选择模型”或空列表后不知道下一步该做什么。
+    if (await isLoginRequired(deps)) {
+      return {
+        loginRequired: false,
+        mode: deps.getMode?.(),
+        response: loginRequiredResponse(deps.getLocale?.()),
+      };
+    }
+
     if (!command) {
-      if (await isLoginRequired(deps)) {
-        return {
-          loginRequired: false,
-          mode: deps.getMode?.(),
-          response: loginRequiredResponse(deps.getLocale?.()),
-        };
-      }
       const app = await deps.getApp();
       return attachCurrentSessionMetadata(await app.submitPrompt(input, options), deps, app);
     }
