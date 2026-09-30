@@ -1,6 +1,7 @@
 // Env Config Adapter - Parse the intentionally small ZCODE_* environment surface.
 
 import type { RuntimeConfigPatch } from "@zcode/contracts";
+import { normalizeComeCodeEnv } from "./comecode-env.js";
 
 interface EnvConfigOptions {
   prefix?: string;
@@ -18,7 +19,7 @@ export function parseEnvConfig(
   const prefix = options.prefix ?? DEFAULT_PREFIX;
   const config: RuntimeConfigPatch = {};
 
-  for (const [key, value] of Object.entries(env)) {
+  for (const [key, value] of Object.entries(options.prefix ? env : normalizeComeCodeEnv(env))) {
     if (!key.startsWith(prefix) || value === undefined) continue;
 
     const configKey = key.slice(prefix.length);
@@ -67,7 +68,7 @@ export function parseEnvConfig(
  */
 export function getToolConcurrencyConfig(): { maxConcurrency: number } {
   return {
-    maxConcurrency: normalizeNumber(process.env.ZCODE_MAX_TOOL_CONCURRENCY ?? "10"),
+    maxConcurrency: normalizeNumber(normalizeComeCodeEnv(process.env).ZCODE_MAX_TOOL_CONCURRENCY ?? "10"),
   };
 }
 

@@ -481,6 +481,7 @@ export {
   type UiLocalePatchResult,
 } from "./file-config.adapter.js";
 export { parseEnvConfig, getToolConcurrencyConfig } from "./env-config.adapter.js";
+export { normalizeComeCodeEnv, resolveComeCodeDataRoot, resolveComeCodeStorageRoot } from "./comecode-env.js";
 export { ZCodeConfigFileSchema, type ZCodeConfigFile } from "./schema.js";
 export { mergeConfigs, createPrioritizedConfig, getScopePriority } from "./config-merger.js";
 export {

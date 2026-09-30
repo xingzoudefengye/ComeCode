@@ -1,10 +1,10 @@
 import { existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { resolveComeCodeStorageRoot } from "../../config/comecode-env.js";
 import { dirname, join } from "node:path";
 import { maybeThrowStorageFsFault } from "../fs-fault-injection.js";
 
 export function getDefaultSessionDbPath(): string {
-  return join(homedir(), ".zcode", "cli", "db", "db.sqlite");
+  return join(resolveComeCodeStorageRoot(), "cli", "db", "db.sqlite");
 }
 
 export function ensureParentDir(filePath: string): void {

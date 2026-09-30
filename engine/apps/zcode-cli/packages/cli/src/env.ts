@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { config as loadDotenv } from "dotenv";
+import { normalizeComeCodeEnv } from "@zcode/adapters/config";
 import {
   ZCODE_RUNTIME_ENV_KEY,
   buildZCodeToolEnvPassthroughEnv,
@@ -30,7 +31,7 @@ export function prepareCliRuntimeEnv(
   argv: readonly string[] = process.argv,
 ): CliEnv {
   const prepared = {
-    ...sanitizeZCodeRuntimeEnv(env),
+    ...sanitizeZCodeRuntimeEnv(normalizeComeCodeEnv(env)),
     ...buildZCodeToolEnvPassthroughEnv(env),
   };
   applyCliRuntimeEnvDefaults(prepared, argv);
@@ -42,6 +43,7 @@ export function applyCliRuntimeEnvSanitization(
   argv: readonly string[] = process.argv,
 ): void {
   const toolEnvPassthrough = buildZCodeToolEnvPassthroughEnv(env);
+  Object.assign(env, normalizeComeCodeEnv(env));
   sanitizeZCodeRuntimeEnvInPlace(env);
   Object.assign(env, toolEnvPassthrough);
   applyCliRuntimeEnvDefaults(env, argv);
@@ -135,5 +137,5 @@ function applyBetaStorageDefault(env: CliEnv, argv: readonly string[]): void {
   const explicitBeta = env.ZCODE_BETA === "1" || env.ZCODE_ENV === "beta";
   const invokedAsBeta = argv.some((arg) => /(^|[/\\])zcode-beta(?:$|\.)/u.test(arg));
   if (!explicitBeta && !invokedAsBeta) return;
-  env.ZCODE_STORAGE_DIR = join(homedir(), ".zcode-beta");
+  env.ZCODE_STORAGE_DIR = join(homedir(), ".comecode-beta");
 }

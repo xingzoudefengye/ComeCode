@@ -49,6 +49,18 @@ async function main(): Promise<void> {
     : undefined;
 
   try {
+    if (
+      !isProtocol &&
+      (isTui || argv.some((arg) => arg === "-p" || arg === "--prompt" || arg === "--target"))
+    ) {
+      const { offerLegacyDataImport } = await import("./legacy-data-import.js");
+      await offerLegacyDataImport({
+        env: process.env,
+        // Windows PowerShell 环境下 TTY 检测可能失败,TUI 模式下直接视为交互式
+        interactive: isTui || Boolean(process.stdin.isTTY && process.stderr.isTTY),
+        stderr,
+      });
+    }
     // Modified by ComeCode：中文 Windows（GBK 代码页）下 TUI 乱码，渲染前切到 UTF-8，退出时恢复。
     if (isTui) await ensureWindowsConsoleUtf8();
     if (!argv.includes("--prepare-storage"))
