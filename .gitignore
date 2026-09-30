@@ -1,0 +1,7 @@
+# 两个 fork 克隆是独立 git 仓库，不入本仓库
+/ZCode/
+/codex/
+
+# 临时产物
+*.log
+tmp/
