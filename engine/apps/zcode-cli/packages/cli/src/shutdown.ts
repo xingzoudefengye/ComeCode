@@ -23,6 +23,12 @@ interface CliShutdownOptions {
   cleanupTimeoutMs?: number;
   exitProcess?: (code: number) => void;
   process?: CliShutdownProcess;
+  /**
+   * 由调用方自行接管、此处不注册的信号。
+   * TUI 用「Ctrl+C 一次复制、两次退出」接管 SIGINT；若仍在此注册，第一次信号就会
+   * 直接 exit，双击确认永远没有机会生效。
+   */
+  excludeSignals?: readonly NodeJS.Signals[];
 }
 
 interface CliExitWatchdogOptions {
@@ -38,7 +44,10 @@ export function registerCliShutdownHandlers(options: CliShutdownOptions): () => 
     0,
     Math.trunc(options.cleanupTimeoutMs ?? DEFAULT_SHUTDOWN_CLEANUP_TIMEOUT_MS),
   );
-  const signals = shutdownSignals(signalTarget.platform);
+  const excludedSignals = new Set(options.excludeSignals ?? []);
+  const signals = shutdownSignals(signalTarget.platform).filter(
+    (signal) => !excludedSignals.has(signal),
+  );
   const listeners: Array<[NodeJS.Signals, SignalListener]> = [];
   let disposed = false;
   let shuttingDown = false;
