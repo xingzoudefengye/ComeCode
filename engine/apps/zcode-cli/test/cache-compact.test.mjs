@@ -15,8 +15,8 @@ const messages = [
   { role: "assistant", content: "answer" },
   { role: "user", content: "second" },
 ];
-test("200K 默认在 120K 压缩，真实小窗口和输出预留优先", () => {
-  assert.equal(getAutoCompactThreshold(), 120_000);
+test("512K 默认在 307.2K 压缩，真实小窗口和输出预留优先", () => {
+  assert.equal(getAutoCompactThreshold(), 307_200);
   assert.equal(getAutoCompactThreshold({ contextWindow: 128_000 }), 76_800);
   assert.equal(getAutoCompactThreshold({ contextWindow: 32_000 }), 0);
   assert.equal(
@@ -24,23 +24,23 @@ test("200K 默认在 120K 压缩，真实小窗口和输出预留优先", () => 
     19_200,
   );
   for (const contextWindow of [undefined, 0, -1, NaN, Infinity]) {
-    assert.equal(getAutoCompactThreshold({ contextWindow }), 120_000);
+    assert.equal(getAutoCompactThreshold({ contextWindow }), 307_200);
   }
-  for (const tokenCount of [119_999, 120_000]) {
+  for (const tokenCount of [307_199, 307_200]) {
     const decision = shouldAutoCompact({
       messages,
       tokenOverride: { source: "provider_usage", tokenCount },
     });
-    assert.equal(decision.shouldCompact, tokenCount >= 120_000);
+    assert.equal(decision.shouldCompact, tokenCount >= 307_200);
     assert.equal(decision.thresholdPercent, 60);
   }
 });
 
 test("显式百分比遵循安全预算，非法百分比回退，熔断与关闭仍有效", () => {
-  assert.equal(getAutoCompactThreshold({ thresholdPercentOverride: 90 }), 166_000);
-  assert.equal(getAutoCompactThreshold({ thresholdPercentOverride: 50 }), 100_000);
+  assert.equal(getAutoCompactThreshold({ thresholdPercentOverride: 90 }), 460_800);
+  assert.equal(getAutoCompactThreshold({ thresholdPercentOverride: 50 }), 256_000);
   for (const thresholdPercentOverride of [0, -1, 101, NaN, Infinity]) {
-    assert.equal(getAutoCompactThreshold({ thresholdPercentOverride }), 120_000);
+    assert.equal(getAutoCompactThreshold({ thresholdPercentOverride }), 307_200);
   }
   assert.equal(shouldAutoCompact({ messages, config: { enabled: false } }).reason, "disabled");
   assert.equal(shouldAutoCompact({ messages, consecutiveFailures: 3 }).reason, "circuit_breaker");
