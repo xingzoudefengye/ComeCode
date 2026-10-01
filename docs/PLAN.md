@@ -30,13 +30,10 @@ M0 基线
           T1.1 对外改名 ─ T1.2 数据目录 ─ T1.3 去掉强制登录 ─ T1.4 关闭默认外连
                └─ M2 Provider
                    T2.1 统一配置 ─┬─ T2.2 标准环境变量
-                                 ├─ T2.3 Gemini
-                                 ├─ T2.4 cc-switch 导入
-                                 └─ T2.5 内置 Provider 本地化
+                                 └─ T2.4 cc-switch 导入
                         └─ M3 记忆与缓存（与 M4 可并行）
                             T3.1 .ai/ 加载 ─ T3.2 记忆写入 ─ T3.3 CLAUDE.md 兼容
                             T3.4 缓存稳定性 ─ T3.5 缓存统计
-                            T3.7 目标模式加固 ─ T3.8 永续会话（依赖 T3.1）
                         └─ M4 Web 后台（与 M3 可并行）
                             T4.1 内嵌 server ─ T4.2 事件总线 ─ T4.3 前端骨架
                             ─ T4.4~T4.8 各页面
@@ -44,7 +41,7 @@ M0 基线
                                      T5.1 npm 包 ─ T5.2 安装脚本 ─ T5.3 文档 ─ T5.4 Docker ─ T5.5 CI
 ```
 
-可并行的组合：T2.2/T2.3/T2.4/T2.5 互不依赖；M3 与 M4 互不依赖；T4.4~T4.8 互不依赖。
+可并行的组合：T2.2/T2.4 互不依赖；M3 与 M4 互不依赖；T4.4~T4.8 互不依赖。
 
 ## 当前实现状态（2026-10-01）
 
@@ -52,8 +49,8 @@ M0 基线
 | --- | --- | --- |
 | M0 基线 | 部分完成 | CLI 可构建、可运行、可执行完整测试；T0.2 上游同步文档仍未完成。 |
 | M1 品牌与去耦 | 已完成 | ComeCode 命令、数据目录、登录去耦、默认外连关闭均已提交并通过回归验证。 |
-| M2 Provider | 核心已完成 | 统一配置、标准环境变量、三种协议、配置导入已完成；Gemini 原生执行已取消；T2.5 内置目录本地化仍待处理。 |
-| M3 记忆与缓存 | 部分完成 | 512K 上下文、缓存统计、压缩后短上下文、压缩干活指南、工作区 `.ai/` 基础加载已完成；显式记忆沉淀、归档检索和滚动摘要仍未完成。 |
+| M2 Provider | 核心已完成 | 统一配置、标准环境变量、三种协议、配置导入已完成；Gemini 原生执行和内置目录本地化不纳入 ComeCode 计划。 |
+| M3 记忆与缓存 | 部分完成 | 512K 上下文、缓存统计、压缩后短上下文、压缩干活指南、工作区 `.ai/` 基础加载和显式保存已完成；不新增压缩原文归档或用户检索入口；`memory.md` 滚动摘要等剩余边界见 T3.2。 |
 | M4 Web 后台 | 部分完成 | 本地管理页、Provider/模型列表、编辑、归类、连接测试已完成；会话、记忆、状态、日志页面仍未完成。 |
 | M5 发布 | 未开始 | npm、安装脚本、Docker、CI 和发布流程尚未进入实现。 |
 
@@ -128,13 +125,10 @@ M0 基线
 ### T2.2 标准环境变量零配置启动（已完成，2026-10-01）
 - 依赖：T2.1
 - 已完成：无统一配置文件时按 OpenAI → Anthropic → Gemini 探测非空凭据；固定默认模型；`COMECODE_PROVIDER` 选择；CLI 覆盖；stderr 启动说明；只读配置命令不写盘。
-- OpenAI 环境 Provider 保持 openai-chat；Anthropic API Key 优先于 Auth Token；Gemini 仅检查不执行，原生支持仍属于 T2.3。
+- OpenAI 环境 Provider 保持 openai-chat；Anthropic API Key 优先于 Auth Token；Gemini 仅检查不执行，原生执行不纳入 ComeCode 计划。
 - 规则与边界见 [T2.2](specs/T2.2.md)。继续复用现有 JSON materialize 路径，不重做 Registry 或持久化机制。
 - 验证：配置组合、旧 JSON/TOML 兼容测试与真实 CLI 子进程 + 本地 HTTP mock 完整对话；检查默认模型、鉴权、JSON stdout 和 stderr 脱敏。
 
-### T2.3 Gemini 原生支持（取消，2026-10-01）
-- 当前执行只支持 Chat Completions / Responses / Anthropic Messages 三种协议。
-- Gemini 原生适配不再作为里程碑/发布前置；旧配置只识别与检查，不执行。
 
 ### T2.4 cc-switch / Codex / Claude Code 配置导入（已完成，2026-10-01）
 - 状态：已完成（2026-10-01）。实现 `comecode import codex|claude` 与 `comecode --import codex|claude`，支持本地配置映射、幂等追加、迁移备份和密钥脱敏；详见 [cc-switch 兼容说明](cc-switch.md)。
@@ -146,11 +140,6 @@ M0 基线
   - 可选：配置 `follow = "codex"` 表示每次启动都实时读取，这样 cc-switch 切换后重开终端即生效。
 - 验收：用样例配置文件做单测；本机装了 cc-switch 的话实测切换生效。
 
-### T2.5 内置 Provider 目录本地化
-- 依赖：T1.4
-- 位置：`engine/config/provider/zcode-builtin.json`
-- 做法：复制为 `comecode-builtin.json`；删除 z.ai 专属的 Coding Plan 和网关条目（或标注为可选）；补充三种协议的通用模板；核对各家 base_url 与模型名是否是当前可用的。
-- 验收：`comecode config providers` 能列出内置模板；每个模板都有单测校验字段合法。
 
 ---
 
@@ -159,7 +148,7 @@ M0 基线
 ### T3.0 调研：现有记忆与压缩机制（已完成，2026-10-01）
 - 依赖：T0.1
 - 位置：`CLI/core/src/memory/`、`CLI/core/src/compact/`、`CLI/core/src/agent/compact-session.ts`、`CLI/core/src/context/builder.ts`、`CLI/adapters/src/context/index.ts`
-- 交付：`docs/memory-internals.md`，说明当前记忆何时提取、存在哪里、压缩触发阈值和输出格式，以及尚未实现的归档/召回边界。T3.1~T3.5 以它为输入。
+- 交付：`docs/memory-internals.md`，说明当前记忆何时提取、存在哪里、压缩触发阈值和输出格式，以及内部记忆边界。T3.1~T3.5 以它为输入。
 
 ### T3.1 加载 `.ai/` 项目记忆（基础能力已完成，2026-10-01）
 - 依赖：T3.0
@@ -174,6 +163,7 @@ M0 基线
 ### T3.2 记忆写入：压缩与会话结束时沉淀到 `.ai/`（部分完成）
 
 > 当前已完成：自动提取 scheduler、显式 `/memory save`、会话关闭时 drain、以及固定 `.ai/` 文件写入提示；尚未完成：压缩前强制沉淀、`memory.md` 滚动摘要和 `memory.scope` 配置。
+> 压缩后的摘要和干活指南由程序内部自动携带；用户不需要执行检索或管理压缩归档。
 - 依赖：T3.1
 - 做法：
   - 复用现有记忆提取 Agent，把输出目标从用户目录改成 `.ai/`：决定追加到 `decisions.md`，任务更新 `tasks.md`，问题更新 `bugs.md`，摘要按日期追加到 `memory.md`。
@@ -204,27 +194,7 @@ M0 基线
 - 做法：从各 Provider 的 usage 中读取缓存 token（Anthropic `cache_read_input_tokens`/`cache_creation_input_tokens`，OpenAI `prompt_tokens_details.cached_tokens`，DeepSeek `prompt_cache_hit_tokens`，Gemini `cachedContentTokenCount`），统一成 `{input, cached, output}`；TUI 状态栏显示本会话命中率；写入会话记录，供 Web 后台展示。
 - 验收：单测覆盖各家字段映射；在至少两家模型上实测数值合理。
 
-### T3.7 目标模式（/goal）加固
-- 依赖：T3.0
-- 位置：`CLI/cli/src/command-center/handlers/goal.ts`、`CLI/core/src/runtime/methods/target.ts`（已有续跑、完成校验器、暂停/恢复、运行计时）
-- 做法：
-  - 先读懂现有实现，补文档到 `docs/memory-internals.md` 的"目标模式"一节。
-  - 补预算：`/goal <目标> --max-turns 50 --max-tokens 2M --max-time 2h`，以及配置文件默认值；触达上限时暂停，而不是停止。
-  - 无进展检测：连续 N 轮没有文件改动，且校验结果不变时暂停并提示。
-  - 目标和当前进度写入永续会话的固定层（T3.8），压缩后不丢失。
-  - 参考 `codex/codex-rs/tui/src/goal_*.rs`、`chatwidget/goal_*.rs` 的交互（状态栏显示预算、暂停原因）。
-- 验收：用一个"让某个失败测试通过"的样例项目实测能自动迭代完成；预算用尽时正确暂停；单测覆盖预算和无进展判断。
 
-### T3.8 永续会话：分层滚动压缩（部分完成）
-- 依赖：T3.0、T3.1
-- 位置：`CLI/core/src/compact/`（policy、rounds、prompt）、`CLI/core/src/agent/compact-session.ts`
-- 做法：
-  - 上下文分四层：固定层（系统提示词、规则、`.ai/` 快照、当前目标与 todo，永不压缩）、近期层（最近 K 轮原文）、摘要层（滚动摘要）、归档层（原文落盘到 `.ai/.local/archive/`）。
-  - 压缩只处理"摘要层 + 最老的近期轮次"，固定层原样保留；摘要超过预算时，把多段摘要再合并一次（分代合并，避免每次都重写全部摘要）。
-  - 压缩前先触发 T3.2 的记忆沉淀，保证决定、任务、问题不会只存在于摘要里。
-  - 新增 `RecallArchive` 工具：按关键词或时间段检索归档原文（可以先用 ripgrep，后续再考虑向量检索）。
-  - 压缩后 cache 前缀只在固定层之后变化，保持命中（和 T3.4 联动）。
-- 验收：写一个压力测试，模拟 20 次以上的连续压缩：固定层内容逐字不变；上下文 token 始终低于阈值；早期一条关键决定能通过 `.ai/decisions.md` 或 `RecallArchive` 找回。
 
 ### T3.6（可选）Codex 风格 apply_patch 工具
 - 依赖：T0.1
@@ -272,7 +242,7 @@ M0 基线
 
 ### T4.7 Agent 状态页
 - 依赖：T4.3
-- 内容：当前目标与预算消耗（T3.7）、上下文各层 token 占比与压缩次数（T3.8）、当前正在执行的工具和参数摘要（正在读取 xxx、正在执行测试、修改 xxx.py）、本会话 token 用量和 cache 命中率曲线、权限确认请求的只读展示（确认仍在终端完成）。
+- 内容：当前目标状态、上下文使用与压缩次数、当前正在执行的工具和参数摘要（正在读取 xxx、正在执行测试、修改 xxx.py）、本会话 token 用量和 cache 命中率曲线、权限确认请求的只读展示（确认仍在终端完成）。
 
 ### T4.8 日志页
 - 依赖：T4.3
