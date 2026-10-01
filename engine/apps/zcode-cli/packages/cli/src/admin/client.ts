@@ -83,12 +83,47 @@ function selectField(parent, id, title, value, options) {
   const label = node('label', title), select = node('select'); select.id = id; select.setAttribute('aria-label', title);
   options.forEach(item => { const option = node('option', item[1]); option.value = item[0]; select.append(option); }); select.value = value || options[0][0]; label.append(select); parent.append(label); return select;
 }
+function modelConnectionProvider() {
+  const selected = draft.providers.find(provider => provider.id === $('model-endpoint').value);
+  const url = normalizeUrl($('model-url').value);
+  return selected && normalizeUrl(selected.baseUrl) === url ? selected : findProvider($('model-url').value);
+}
+function updateModelKeyHint() {
+  if (editing) return;
+  const provider = modelConnectionProvider();
+  // 浏览器只显示已配置状态；真实 Key 和环境变量来源由服务端按 Provider ID 保留。
+  const hasKey = provider && provider.clearApiKey !== true && (provider.apiKey || provider.apiKeyEnv || provider.hasApiKey);
+  $('model-key').placeholder = hasKey ? '已配置，留空复用' : '输入服务商提供的 API Key';
+  $('model-key-hint').hidden = !provider;
+  $('model-key-hint').textContent = provider ? (hasKey ? '将复用“' + (provider.name || provider.id) + '”的 API Key，留空即可。' : '该地址没有配置共享 API Key，请填写。') : '';
+}
+function populateModelEndpoints(entry) {
+  const select = $('model-endpoint'); select.replaceChildren();
+  const manual = node('option', '手动填写新地址'); manual.value = ''; select.append(manual);
+  draft.providers.filter(provider => provider.baseUrl).forEach(provider => {
+    const option = node('option', (provider.name || provider.id) + ' · ' + provider.baseUrl); option.value = provider.id; select.append(option);
+  });
+  select.value = ''; select.hidden = Boolean(entry) || select.options.length === 1;
+  $('model-url').hidden = false;
+  $('model-key-hint').hidden = true;
+}
+function selectModelEndpoint() {
+  const provider = draft.providers.find(item => item.id === $('model-endpoint').value);
+  $('model-url').value = provider ? provider.baseUrl : '';
+  $('model-url').hidden = Boolean(provider);
+  // 换地址时清空新输入的 Key，防止跨供应商误用；存量 Key 不进入表单。
+  $('model-key').value = ''; $('clear-key').checked = false;
+  $('model-type').value = provider && provider.type ? provider.type : 'openai-chat';
+  updateModelKeyHint();
+  if (!provider) $('model-url').focus();
+}
 function openModelDialog(entry) {
   editing = entry || null;
   const provider = entry && entry.provider;
   const model = entry && entry.model;
   $('model-dialog-title').textContent = entry ? '编辑模型' : '添加模型';
-  $('model-dialog-help').textContent = entry ? '修改这一个模型的连接信息；留空 API Key 表示保持原 Key。' : '只需要填写下面四项即可，其他设置可以保持默认。';
+  populateModelEndpoints(entry);
+  $('model-dialog-help').textContent = entry ? '修改这一个模型的连接信息；留空 API Key 表示保持原 Key。' : $('model-endpoint').hidden ? '只需要填写下面四项即可，其他设置可以保持默认。' : '选择已有接口可复用地址和 API Key，只需填写模型名；也可以手动填写新地址。';
   $('model-id').value = model ? (model.id || '') : '';
   $('model-url').value = model && model.baseUrl ? model.baseUrl : (provider && provider.baseUrl ? provider.baseUrl : '');
   $('model-key').value = '';
@@ -144,7 +179,7 @@ function saveModelDialog(event) {
   if (!modelId || !baseUrl || !type) { status('模型名、接口地址和协议不能为空。', true); return; }
   let provider = editing ? editing.provider : null;
   const oldProvider = provider;
-  const target = findProvider(baseUrl, editing ? editing.provider : null);
+  const target = !editing ? modelConnectionProvider() : findProvider(baseUrl, editing.provider);
   if (target) provider = target;
   else if (!provider || (editing && (provider.type !== type || normalizeUrl(provider.baseUrl) !== normalizeUrl(baseUrl)))) provider = { id: nextProviderId(), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
   if (!provider) provider = { id: nextProviderId(), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
@@ -164,7 +199,10 @@ function saveModelDialog(event) {
   const tool = $('model-tool').value; assignOptional(model, 'toolCalling', tool === '' ? undefined : tool === 'true');
   const vision = $('model-vision').value; assignOptional(model, 'vision', vision === '' ? undefined : vision === 'true');
   if ($('clear-key').checked) { provider.clearApiKey = true; delete provider.apiKey; model.clearApiKey = true; delete model.apiKey; }
-  if (key) { provider.apiKey = key; delete provider.clearApiKey; delete model.apiKey; }
+  if (key) {
+    if (!editing && !isNewProvider) { model.apiKey = key; delete model.apiKeyEnv; }
+    else { provider.apiKey = key; delete provider.clearApiKey; delete model.apiKey; }
+  }
   if (editing && oldProvider !== provider) {
     oldProvider.models = (oldProvider.models || []).filter(item => item !== oldModel);
     if (!oldProvider.models.length) draft.providers = draft.providers.filter(item => item !== oldProvider);
@@ -263,6 +301,8 @@ async function test(entry) {
   try { const result = await api('test', 'POST', { provider: entry.provider.id, model: entry.model.id, confirm: true }); status(result.message, !result.ok); }
   catch(error) { status(error.message, true); }
 }
+$('model-endpoint').onchange = selectModelEndpoint;
+$('model-url').oninput = updateModelKeyHint;
 $('model-form').onsubmit = saveModelDialog;
 $('model-cancel').onclick = closeModelDialog;
 $('provider-form').onsubmit = saveProviderDialog;

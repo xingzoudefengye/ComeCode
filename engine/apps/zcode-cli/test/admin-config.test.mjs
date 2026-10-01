@@ -141,3 +141,25 @@ test("三种协议连接测试沿用有效模型与凭据，失败不回显正�
   const failed=await testProviderConnection({provider:'api',model:'model-a',confirm:true},config,async()=>{throw new Error('private-key');});assert.doesNotMatch(JSON.stringify(failed),/private-key/u);
 });
 
+
+test("新模型复用共享 Key/环境变量来源，不回显密钥或改写其他模型凭据", async t => {
+  for (const useEnvironment of [false, true]) {
+    const f = await fixture(t), doc = document();
+    const env = useEnvironment ? { FIXTURE_SHARED_KEY: "private-environment-key" } : {};
+    if (useEnvironment) { delete doc.providers[0].apiKey; doc.providers[0].apiKeyEnv = "FIXTURE_SHARED_KEY"; }
+    await writeFile(join(f.dataRoot, "config.json"), JSON.stringify(doc));
+    const editor = createProviderConfigEditor({ ...f, env }), before = await editor.read();
+    before.config.providers[0].models.push({ id: "reuse-model", type: "openai-responses" });
+    before.config.providers[0].models.push({ id: "own-model", apiKey: "private-new-model-key" });
+    const after = await editor.save({ revision: before.revision, config: before.config });
+    const resolved = await resolveUnifiedConfig({ ...f, env });
+    assert.equal(resolved.providers[0].modelConfigs.find(model => model.id === "reuse-model").apiKey, useEnvironment ? "private-environment-key" : "private-admin-test-key");
+    assert.equal(resolved.providers[0].modelConfigs.find(model => model.id === "own-model").apiKey, "private-new-model-key");
+    assert.equal(resolved.providers[0].modelConfigs.find(model => model.id === "model-b").apiKey, "private-model-key");
+    const saved = JSON.parse(await readFile(join(f.dataRoot, "config.json"), "utf8"));
+    assert.equal(saved.providers[0].models.find(model => model.id === "reuse-model").apiKey, undefined);
+    if (useEnvironment) { assert.equal(saved.providers[0].apiKeyEnv, "FIXTURE_SHARED_KEY"); assert.equal(saved.providers[0].apiKey, undefined); }
+    else assert.equal(saved.providers[0].apiKey, "private-admin-test-key");
+    assert.doesNotMatch(JSON.stringify(after), /private-environment-key|private-admin-test-key|private-new-model-key|private-model-key/);
+  }
+});
