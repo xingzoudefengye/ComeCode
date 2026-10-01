@@ -22,7 +22,7 @@ import type {
 } from "@zcode/contracts";
 import { resolveGitSnapshot } from "./git-snapshot.js";
 
-const DEFAULT_PRIORITY_FILES = ["AGENTS.md"];
+const DEFAULT_PRIORITY_FILES = ["AGENTS.md", "CLAUDE.md", join(".comecode", "AGENTS.md")];
 const DEFAULT_MAX_BYTES = 100 * 1024;
 
 export interface NodeContextSourceAdapterOptions {
@@ -102,18 +102,14 @@ async function resolveUserInstructions(
   const projectRoot = options.projectRoot ?? (await findProjectRoot(options.workingDirectory));
 
   const defaultUserInstructionFile = await findDefaultUserInstructionFile(priorityFiles, env);
-  const workspaceInstructionFile = await findInstructionFile(
+  const workspaceInstructionFiles = await findInstructionFiles(
     options.workingDirectory,
     projectRoot,
     priorityFiles,
   );
   const candidates = dedupeInstructionFileCandidates([
-    defaultUserInstructionFile
-      ? { ...defaultUserInstructionFile, scope: "user" as const }
-      : undefined,
-    workspaceInstructionFile
-      ? { ...workspaceInstructionFile, scope: "workspace" as const }
-      : undefined,
+    ...(defaultUserInstructionFile ?? []).map((file) => ({ ...file, scope: "user" as const })),
+    ...workspaceInstructionFiles.map((file) => ({ ...file, scope: "workspace" as const })),
   ]);
   const sources: ResolvedUserInstructionSource[] = [];
 
@@ -202,20 +198,23 @@ function mergeInstructionSources(
   };
 }
 
-async function findInstructionFile(
+async function findInstructionFiles(
   startDir: string,
   projectRoot: string | null,
   priorityFiles: string[],
-): Promise<{ filePath: string; fileName: string } | undefined> {
+): Promise<Array<{ filePath: string; fileName: string }>> {
   let current = resolve(startDir);
 
   while (true) {
+    const found: Array<{ filePath: string; fileName: string }> = [];
     for (const fileName of priorityFiles) {
       const filePath = join(current, fileName);
       if (await isFile(filePath)) {
-        return { filePath, fileName };
+        found.push({ filePath, fileName });
       }
     }
+    // 只取最近一层，但同一层的 AGENTS/CLAUDE 规则全部合并。
+    if (found.length > 0) return found;
 
     if (current === projectRoot || current === dirname(current)) {
       break;
@@ -224,31 +223,25 @@ async function findInstructionFile(
     current = dirname(current);
   }
 
-  return undefined;
+  return [];
 }
 
 async function findDefaultUserInstructionFile(
   priorityFiles: string[],
   env: NodeJS.ProcessEnv,
-): Promise<{ filePath: string; fileName: string } | undefined> {
-  if (!priorityFiles.includes("AGENTS.md")) {
-    return undefined;
-  }
-
-  const filePath = join(
-    resolveComeCodeDataRoot(
-      env,
-      env.COMECODE_DATA_BASE_DIR?.trim() ||
-        env.ZCODE_DATA_BASE_DIR?.trim() ||
-        resolveUserHomeDir(env),
-    ),
-    "AGENTS.md",
+): Promise<Array<{ filePath: string; fileName: string }>> {
+  const dataRoot = resolveComeCodeDataRoot(
+    env,
+    env.COMECODE_DATA_BASE_DIR?.trim() ||
+      env.ZCODE_DATA_BASE_DIR?.trim() ||
+      resolveUserHomeDir(env),
   );
-  if (await isFile(filePath)) {
-    return { filePath, fileName: "AGENTS.md" };
+  const candidates: Array<{ filePath: string; fileName: string }> = [];
+  for (const fileName of priorityFiles.filter((name) => !name.includes("/") && !name.includes("\\"))) {
+    const filePath = join(dataRoot, fileName);
+    if (await isFile(filePath)) candidates.push({ filePath, fileName });
   }
-
-  return undefined;
+  return candidates;
 }
 
 function resolveUserHomeDir(env: NodeJS.ProcessEnv): string {

@@ -183,10 +183,11 @@ M0 基线
   - 保留原有的用户级记忆作为可选项（配置 `memory.scope = "project" | "user" | "both"`）。
 - 验收：跑一个长会话触发压缩，检查 `.ai/` 文件内容合理且没有重复；单测覆盖追加和滚动压缩逻辑。
 
-### T3.3 兼容 CLAUDE.md 等规则文件（未完成）
+### T3.3 兼容 CLAUDE.md 等规则文件（已完成，2026-10-01）
 - 依赖：T3.0
 - 位置：`CLI/adapters/src/context/index.ts`（AGENTS.md 加载逻辑）
 - 做法：在 AGENTS.md 的查找逻辑中加入 `CLAUDE.md`、`.comecode/AGENTS.md`，同一目录多个文件同时存在时按固定顺序合并并去重；用户级规则文件 `~/.comecode/AGENTS.md`。
+- 验证：规则来源适配器测试覆盖用户级、项目级、同层合并和重复路径去重。
 - 验收：单测覆盖各种文件组合。
 
 ### T3.4 Prompt Cache 前缀稳定性（已完成，2026-10-01）
