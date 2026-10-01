@@ -43,6 +43,12 @@ export type SlashCommand =
     }
   | {
       args: string;
+      name: "memory";
+      rawName: string;
+      type: "known";
+    }
+  | {
+      args: string;
       name: "locale";
       rawName: string;
       type: "known";

@@ -15,7 +15,7 @@ Provider 配置导入已支持：
 
 `project.md` → `decisions.md` → `tasks.md` → `bugs.md` → `memory.md`。
 
-使用 `comecode memory init` 创建模板，`comecode memory path` 查看路径，`comecode memory check` 检查文件状态。`.ai/.local/` 用于未来归档，初始化时自动加入 `.gitignore`。
+使用 `comecode memory init` 创建模板，`comecode memory path` 查看路径，`comecode memory check` 检查文件状态。`.ai/.local/` 用于未来归档，初始化时自动加入 `.gitignore`。 在 TUI 会话中输入 `/memory save` 可等待一次显式提取；它不覆盖已有文件，是否发生实际修改由当前会话内容决定。
 
 ## 加载与缓存
 

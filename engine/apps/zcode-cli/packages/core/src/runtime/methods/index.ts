@@ -192,6 +192,7 @@ import { setCustomSessionTitle } from "./session-title.js";
 import {
   drainMemoryExtractions,
   isProjectMemoryEnabled,
+  saveProjectMemory,
 } from "../helpers/project-memory-extraction.js";
 
 type AgentRuntimeConstructor = { prototype: object };
@@ -387,4 +388,5 @@ export function installAgentRuntimeMethods(ctor: AgentRuntimeConstructor): void 
   proto.generateWorkspaceText = generateWorkspaceText;
   proto.drainMemoryExtractions = drainMemoryExtractions;
   proto.isProjectMemoryEnabled = isProjectMemoryEnabled;
+  proto.saveProjectMemory = saveProjectMemory;
 }

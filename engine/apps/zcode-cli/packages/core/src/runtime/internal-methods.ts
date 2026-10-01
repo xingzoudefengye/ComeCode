@@ -325,6 +325,7 @@ export interface AgentRuntimeCoreMethods {
     events: SessionEvent[],
   ): Promise<void>;
   isProjectMemoryEnabled(): boolean;
+  saveProjectMemory(traceContext?: TraceContext): Promise<"saved" | "skipped" | "disabled">;
   drainMemoryExtractions(timeoutMs?: number | null): Promise<void>;
   toScheduleState(schedule: ToolSchedule): TurnState["scheduledTools"];
   resumeFromStore(options?: ResumeSessionOptions): Promise<ResumeSessionResult>;

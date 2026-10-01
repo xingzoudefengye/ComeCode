@@ -48,6 +48,7 @@ type SessionFacade = Pick<
   | "cancelBackgroundTask"
   | "clearTarget"
   | "close"
+  | "saveProjectMemory"
   | "connectMcpServer"
   | "disconnectMcpServer"
   | "generateWorkspaceText"
@@ -306,6 +307,7 @@ export function createSessionFacade(deps: CreateSessionFacadeDeps): SessionFacad
       })();
       return await closePromise;
     },
+    saveProjectMemory: () => deps.runtime.saveProjectMemory(deps.traceContext),
     getMode: () => deps.runtime.getMode(),
     getModel: () => formatLegacyRuntimeModelValue(deps.runtime.getSessionModelSelection()),
     getLocale: () => currentLocale,
