@@ -46,6 +46,17 @@ M0 基线
 
 可并行的组合：T2.2/T2.3/T2.4/T2.5 互不依赖；M3 与 M4 互不依赖；T4.4~T4.8 互不依赖。
 
+## 当前实现状态（2026-10-01）
+
+| 里程碑 | 当前状态 | 证据 / 说明 |
+| --- | --- | --- |
+| M0 基线 | 部分完成 | CLI 可构建、可运行、可执行完整测试；T0.2 上游同步文档仍未完成。 |
+| M1 品牌与去耦 | 已完成 | ComeCode 命令、数据目录、登录去耦、默认外连关闭均已提交并通过回归验证。 |
+| M2 Provider | 核心已完成 | 统一配置、标准环境变量、三种协议、配置导入已完成；Gemini 原生执行已取消；T2.5 内置目录本地化仍待处理。 |
+| M3 记忆与缓存 | 部分完成 | 512K 上下文、缓存统计、压缩后短上下文、压缩干活指南、工作区 `.ai/` 基础加载已完成；显式记忆沉淀、归档检索和滚动摘要仍未完成。 |
+| M4 Web 后台 | 部分完成 | 本地管理页、Provider/模型列表、编辑、归类、连接测试已完成；会话、记忆、状态、日志页面仍未完成。 |
+| M5 发布 | 未开始 | npm、安装脚本、Docker、CI 和发布流程尚未进入实现。 |
+
 ---
 
 ## M0 基线
@@ -56,7 +67,7 @@ M0 基线
 - 做法：
   - 用 mise 或 nvm 安装指定的 Node/pnpm 版本；运行 `pnpm install`，然后 `pnpm --dir apps/zcode-cli build`。
   - 如果构建依赖了 desktop 资源准备步骤，找出最小构建路径（只需要 CLI 和它依赖的 `packages/provider`、`provider-node`、`shared`、`model-option-map`）。
-  - 配置一个 OpenAI 兼容的个人 Provider（写入 `~/.zcode/v2/provider_config.json`），跑一次 `--prompt` 无头模式和一次 TUI 对话。
+  - 配置一个 OpenAI 兼容的个人 Provider（当前使用 `~/.comecode` 配置目录），跑一次 `--prompt` 无头模式和一次 TUI 对话。
 - 交付：`docs/dev-setup.md`，记录 Windows 下的构建步骤、踩到的坑（原生模块 koffi、node:sqlite、ripgrep、OpenTUI）和解决方法。
 - 验收：在 Windows 上按文档从零构建成功；`node .../dist/zcode.cjs --prompt "列出当前目录文件"` 能返回结果。
 
@@ -69,7 +80,7 @@ M0 基线
 
 ## M1 品牌与去耦（V0.1）
 
-2026-09-30：T1.2 → T1.3 → T1.4 已在工作区实现，18 项源码测试与相关类型检查通过。CLI 单文件打包和 Git 提交受当前沙箱限制，标准 lint 存在历史超长文件错误，完整构建验收仍待复跑。配置与验证记录见 [M1 规则](specs/M1.md) 和 [开发环境](dev-setup.md)。
+2026-10-01：M1 已完成并已提交。T1.1~T1.4 已通过 CLI 回归测试、相关 typecheck、CLI 构建和 `comecode --help` 验证。历史超长文件 lint 规则仍作为遗留项单独处理。
 
 ### T1.1 对外命令与包名改为 comecode
 - 依赖：T0.1
@@ -79,18 +90,18 @@ M0 基线
 
 ### T1.2 数据目录与环境变量前缀
 - 依赖：T1.1
-- 位置：`CLI/cli/src/provider-runtime-env.ts`、`CLI/adapters/src/config/env-config.adapter.ts`、`packages/services/src/paths.ts`（如果 CLI 用到了）、`~/.zcode/cli` 相关路径。
+- 位置：`CLI/cli/src/provider-runtime-env.ts`、`CLI/adapters/src/config/env-config.adapter.ts`、`~/.comecode` 相关路径；保留 `ZCODE_*` 兼容读取。
 - 做法：
   - 默认数据目录改为 `~/.comecode`；`COMECODE_DATA_BASE_DIR` 优先，回退 `ZCODE_DATA_BASE_DIR`。
   - 环境变量读取加一层映射：读 `COMECODE_X`，没有则读 `ZCODE_X`。
-  - 首次启动时如发现 `~/.zcode` 存在而 `~/.comecode` 不存在，提示是否导入（不自动迁移）。
+  - 旧 `~/.zcode` 数据只作为兼容来源，不自动覆盖或迁移；显式导入时提示用户确认。
 - 验收：单测覆盖变量回退逻辑；新环境下启动只创建 `~/.comecode`。
 
 ### T1.3 去掉强制登录
 - 依赖：T1.1
 - 位置：`CLI/adapters/src/auth/cli-oauth.ts`、`login`/`logout` 子命令、启动时的鉴权检查。
-- 做法：只要配置了任意 API Key Provider，就不要求登录；没有配置时引导用户配置 Provider（提示写配置文件，V0.4 后提示打开 Web 后台）。`login` 命令暂时隐藏。
-- 验收：在没有 `~/.zcode` 的全新环境，只设置环境变量或配置文件即可完成一次对话，全程不访问 `zcode.z.ai`。
+- 做法：只要配置了任意可执行 Provider，就不要求登录；没有配置时进入中文 Provider 配置引导。`login` 命令保留内部兼容但不作为公开首选。
+- 验收：在没有历史配置的全新环境，只设置标准环境变量或 ComeCode 配置即可完成一次对话，全程不访问 `zcode.z.ai`。
 
 ### T1.4 默认关闭所有外连
 - 依赖：T1.1
@@ -106,7 +117,7 @@ M0 基线
 
 ## M2 Provider 系统（V0.2）
 
-### T2.1 统一配置文件 config.toml（已完成，2026-10-01）
+### T2.1 统一 Provider 配置系统（JSON/JSONC 主格式，兼容 TOML；已完成，2026-10-01）
 - 依赖：T1.2
 - 实现：`CLI/adapters/src/config/provider-config.ts`，在 CLI 边界转换为兼容的 `provider_config.json`，不改 Provider Registry 和内部协议。
 - 已完成：用户级/项目级配置发现、最小 TOML 子集、标准环境变量归一化、CLI 覆盖、`config path|show|check`、API Key 脱敏、OpenAI/Anthropic type 映射，以及 Gemini 仅检查不执行。
@@ -116,7 +127,7 @@ M0 基线
 
 ### T2.2 标准环境变量零配置启动（已完成，2026-10-01）
 - 依赖：T2.1
-- 已完成：无 TOML 时按 OpenAI → Anthropic → Gemini 探测非空凭据；固定默认模型；`COMECODE_PROVIDER` 选择；CLI 覆盖；stderr 启动说明；只读配置命令不写盘。
+- 已完成：无统一配置文件时按 OpenAI → Anthropic → Gemini 探测非空凭据；固定默认模型；`COMECODE_PROVIDER` 选择；CLI 覆盖；stderr 启动说明；只读配置命令不写盘。
 - OpenAI 环境 Provider 保持 openai-chat；Anthropic API Key 优先于 Auth Token；Gemini 仅检查不执行，原生支持仍属于 T2.3。
 - 规则与边界见 [T2.2](specs/T2.2.md)。继续复用现有 JSON materialize 路径，不重做 Registry 或持久化机制。
 - 验证：配置组合、旧 JSON/TOML 兼容测试与真实 CLI 子进程 + 本地 HTTP mock 完整对话；检查默认模型、鉴权、JSON stdout 和 stderr 脱敏。
@@ -125,7 +136,7 @@ M0 基线
 - 当前执行只支持 Chat Completions / Responses / Anthropic Messages 三种协议。
 - Gemini 原生适配不再作为里程碑/发布前置；旧配置只识别与检查，不执行。
 
-### T2.4 cc-switch / Codex / Claude Code 配置导入
+### T2.4 cc-switch / Codex / Claude Code 配置导入（已完成，2026-10-01）
 - 状态：已完成（2026-10-01）。实现 `comecode import codex|claude` 与 `comecode --import codex|claude`，支持本地配置映射、幂等追加、迁移备份和密钥脱敏；详见 [cc-switch 兼容说明](cc-switch.md)。
 - 依赖：T2.1
 - 做法：
@@ -145,22 +156,24 @@ M0 基线
 
 ## M3 长期记忆与缓存（V0.3）
 
-### T3.0 调研：现有记忆与压缩机制（只读，产出文档）
+### T3.0 调研：现有记忆与压缩机制（已完成，2026-10-01）
 - 依赖：T0.1
 - 位置：`CLI/core/src/memory/`、`CLI/core/src/compact/`、`CLI/core/src/agent/compact-session.ts`、`CLI/core/src/context/builder.ts`、`CLI/adapters/src/context/index.ts`
-- 交付：`docs/memory-internals.md`，说明记忆何时提取、存在哪里、如何召回、压缩的触发阈值和输出格式、系统提示词的分块与 cache breakpoint 位置。T3.1~T3.5 以它为输入。
+- 交付：`docs/memory-internals.md`，说明当前记忆何时提取、存在哪里、压缩触发阈值和输出格式，以及尚未实现的归档/召回边界。T3.1~T3.5 以它为输入。
 
-### T3.1 加载 `.ai/` 项目记忆
+### T3.1 加载 `.ai/` 项目记忆（基础能力已完成，2026-10-01）
 - 依赖：T3.0
 - 做法：
   - 启动时从 git 根目录（没有 git 则用 cwd）找 `.ai/`，按固定顺序加载 `project.md` → `decisions.md` → `tasks.md` → `bugs.md` → `memory.md`，放进系统提示词的稳定区（位于项目规则之后）。
-  - 每个文件和总量都有大小上限（可配置），超出时截断并提示用户运行 `/memory compact`。
-  - 新增 `/init-memory`（或扩展 `/init`）：生成 `.ai/` 模板，并把 `.ai/.local/` 加入 `.gitignore`。
+  - 每个文件和总量都有大小上限，超出时截断并提示用户运行 `comecode memory check`。
+  - 新增 `comecode memory init`：生成 `.ai/` 模板，并把 `.ai/.local/` 加入 `.gitignore`。
   - 会话内加载一次后冻结，不随文件修改刷新（保证 cache 命中），压缩或新会话时刷新。
 - 验收：单测覆盖加载顺序、截断、没有 `.ai/` 的情况；实测问 AI 项目信息时能引用 `.ai/project.md` 的内容。
 
 > 2026-10-01 实现：ComeCode 默认从工作区 `.ai/` 按固定顺序加载五类文件，固定快照进入稳定 system section；新增 `comecode memory init/path/check`，并加入大小限制与 `.ai/.local/` 忽略规则。
-### T3.2 记忆写入：压缩与会话结束时沉淀到 `.ai/`
+### T3.2 记忆写入：压缩与会话结束时沉淀到 `.ai/`（部分完成）
+
+> 当前已完成：已有自动提取 scheduler、会话关闭时 drain、以及固定 `.ai/` 文件写入提示；尚未完成：显式 `/memory save`、压缩前强制沉淀、`memory.md` 滚动摘要和 `memory.scope` 配置。
 - 依赖：T3.1
 - 做法：
   - 复用现有记忆提取 Agent，把输出目标从用户目录改成 `.ai/`：决定追加到 `decisions.md`，任务更新 `tasks.md`，问题更新 `bugs.md`，摘要按日期追加到 `memory.md`。
@@ -170,13 +183,13 @@ M0 基线
   - 保留原有的用户级记忆作为可选项（配置 `memory.scope = "project" | "user" | "both"`）。
 - 验收：跑一个长会话触发压缩，检查 `.ai/` 文件内容合理且没有重复；单测覆盖追加和滚动压缩逻辑。
 
-### T3.3 兼容 CLAUDE.md 等规则文件
+### T3.3 兼容 CLAUDE.md 等规则文件（未完成）
 - 依赖：T3.0
 - 位置：`CLI/adapters/src/context/index.ts`（AGENTS.md 加载逻辑）
 - 做法：在 AGENTS.md 的查找逻辑中加入 `CLAUDE.md`、`.comecode/AGENTS.md`，同一目录多个文件同时存在时按固定顺序合并并去重；用户级规则文件 `~/.comecode/AGENTS.md`。
 - 验收：单测覆盖各种文件组合。
 
-### T3.4 Prompt Cache 前缀稳定性
+### T3.4 Prompt Cache 前缀稳定性（已完成，2026-10-01）
 - 依赖：T3.0
 - 位置：`CLI/core/src/context/builder.ts`、`CLI/core/src/runtime/helpers/provider-request-messages.ts`、`CLI/core/src/tool/registry.ts`
 - 做法：
@@ -185,7 +198,7 @@ M0 基线
   - 对 OpenAI 兼容接口：传 `prompt_cache_key`（取会话 id，参考 `codex/codex-rs/core/src/client.rs` 的做法）。
 - 验收：测试证明 10 轮对话稳定前缀字节完全相同。
 
-### T3.5 缓存命中统计
+### T3.5 缓存命中统计（已完成，2026-10-01）
 - 依赖：T3.4
 - 做法：从各 Provider 的 usage 中读取缓存 token（Anthropic `cache_read_input_tokens`/`cache_creation_input_tokens`，OpenAI `prompt_tokens_details.cached_tokens`，DeepSeek `prompt_cache_hit_tokens`，Gemini `cachedContentTokenCount`），统一成 `{input, cached, output}`；TUI 状态栏显示本会话命中率；写入会话记录，供 Web 后台展示。
 - 验收：单测覆盖各家字段映射；在至少两家模型上实测数值合理。
@@ -201,7 +214,7 @@ M0 基线
   - 参考 `codex/codex-rs/tui/src/goal_*.rs`、`chatwidget/goal_*.rs` 的交互（状态栏显示预算、暂停原因）。
 - 验收：用一个"让某个失败测试通过"的样例项目实测能自动迭代完成；预算用尽时正确暂停；单测覆盖预算和无进展判断。
 
-### T3.8 永续会话：分层滚动压缩
+### T3.8 永续会话：分层滚动压缩（部分完成）
 - 依赖：T3.0、T3.1
 - 位置：`CLI/core/src/compact/`（policy、rounds、prompt）、`CLI/core/src/agent/compact-session.ts`
 - 做法：
@@ -221,9 +234,11 @@ M0 基线
 
 ## M4 Web 管理后台（V0.4）
 
-技术选型建议：新建 `CLI/admin-server`（Hono，复用 ZCode server 的依赖版本）和 `CLI/admin-web`（Vite + React + Tailwind，只做管理，不依赖 `@zcode/ui`）。构建时把 admin-web 的静态文件打包进 CLI 产物。
+2026-10-01：已实现本地管理 server、Provider/模型配置页、同地址供应商归类、模型编辑、连接测试和 API Key 脱敏；会话页、记忆页、状态页、日志页仍属于后续任务。
 
-### T4.1 CLI 内嵌 HTTP server
+> 现有实现使用 CLI 内置轻量 server + 内嵌静态资源；原先 Hono/Vite 的技术选型只是建议，不再作为必须的新建目录约束，后续页面应优先扩展现有 admin 实现。
+
+### T4.1 CLI 内嵌 HTTP server（已完成，2026-10-01）
 - 依赖：T1.1
 - 做法：
   - TUI 启动时在同一进程启动 server，监听 `127.0.0.1`，端口默认 `4545`，被占用时自动 +1；启动时生成随机 token，终端打印 `http://127.0.0.1:4545/?token=...`。
@@ -232,17 +247,17 @@ M0 基线
   - 所有 API 校验 token；拒绝非本机 Origin，防止 CSRF。
 - 验收：启动后浏览器能访问；不带 token 返回 401；集成测试覆盖。
 
-### T4.2 事件总线与状态 API
+### T4.2 事件总线与状态 API（部分完成）
 - 依赖：T4.1、T3.0
 - 做法：订阅 runtime 已有的事件（turn 开始/结束、工具调用开始/结束、用量、压缩、错误），通过 WebSocket `/ws` 推送；定义事件的 zod schema，放到 `CLI/contracts`。REST 接口：`GET /api/status`、`GET /api/sessions`、`GET /api/sessions/:id`、`GET/PUT /api/config`、`GET/PUT /api/memory/:file`、`GET /api/logs`。
 - 验收：接口有单测；事件 schema 有文档。
 
-### T4.3 前端骨架
+### T4.3 前端骨架（基础页面已完成）
 - 依赖：T4.2
 - 做法：路由、布局、token 处理（从 URL 读取后存到 sessionStorage 并清理地址栏）、WebSocket 断线重连、中英文 i18n 框架；构建产物接入 CLI 的打包脚本。
 - 验收：`comecode` 启动后浏览器能打开空的后台页面并显示已连接。
 
-### T4.4 配置页
+### T4.4 配置页（已完成，2026-10-01）
 - 依赖：T4.3、T2.1
 - 内容：Provider 列表与增删改（写回 `config.json`，兼容读取 TOML/JSONC，迁移需确认并备份）、"测试连接"按钮（发一个最小请求）、默认模型选择、API Key 脱敏显示。
 
