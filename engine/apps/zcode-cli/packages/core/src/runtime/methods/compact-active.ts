@@ -22,7 +22,6 @@ import {
   defaultCompactPhaseForTrigger,
   defaultCompactReasonForTrigger,
   buildPostCompactReadStateReminderEntries,
-  countCompactPreservedRuntimeMessages,
   buildPostCompactRuntimeEntries,
   compactFailureReasonFromError,
   estimateRuntimeEntryTokens,
@@ -56,7 +55,7 @@ import {
   buildCompactSummaryRequestMessages,
   createCompactContextExceededFinishError,
   createCompactPromptTooLongError,
-  formatCompactSummaryOrThrow,
+  formatCompactResultOrThrow,
   persistCompactTimelineEvent,
 } from "./compact-active-helpers.js";
 import { runCompactSummaryModelRequest } from "./compact-summary-model-request.js";
@@ -176,7 +175,6 @@ async function compactActiveConversationImpl(
     createRuntimeModel(this, {
       selection: this.getSessionModelSelection(),
     });
-  const executionMaxOutputTokens = compactModel.optionSpecs.maxOutputTokens.max;
   // Active compact 会跨多个 await 保留这份成员浅快照；它依赖 RuntimeMessageEntry
   // 不可变约定。selection、provider render 和最终 replace 会创建各自拥有的副本，
   // 禁止在 compact 期间原地修改 activeEntries 内共享的 entry/message/content。
@@ -481,8 +479,8 @@ async function compactActiveConversationImpl(
         break;
       }
 
-      const summary = formatCompactSummaryOrThrow(this, result);
-      const persistedSummary = summary;
+      const compactResult = formatCompactResultOrThrow(this, result);
+      const persistedSummary = compactResult.summary;
       const planFileReferenceEntry = this.fileSystemPort
         ? await readApprovedPlanFileReferenceEntry({
             abortSignal: options.abortSignal,
@@ -503,7 +501,7 @@ async function compactActiveConversationImpl(
       const modelCompleteEvent = this.createEvent(
         SessionEventType.ModelComplete,
         {
-          content: summary,
+          content: persistedSummary,
           stopReason: result.finishReason,
           usage: result.usage,
           querySource: "compact",
@@ -517,17 +515,20 @@ async function compactActiveConversationImpl(
       const summaryMessageId = createMessageId();
       const summaryMessageContent = buildCompactSummaryMessage(persistedSummary, {
         suppressFollowup: true,
+        workGuide: compactResult.guide,
       });
       // Continue 没有对应 Session message；无 store 的统计也不能把它计入保留记录。
-      const recordablePreservedEntries = filterOutputTokenContinuationEntries(preservedEntries);
+      // 压缩后的 Provider 请求只使用摘要、指南、稳定前缀和必要提醒；
+      // 最近原始对话已经被摘要覆盖，不再作为隐式尾部带回。
+      const postCompactPreservedEntries: readonly RuntimeMessageEntry[] = [];
       const preservation = this.sessionStore
         ? await selectPersistedCompactTail({
             sessionStore: this.sessionStore,
             sessionId: this.sessionId,
-            groupsPreserved: currentSelection.groupsPreserved,
+            groupsPreserved: 0,
             summaryMessageId,
           })
-        : { keptMessageCount: countCompactPreservedRuntimeMessages(recordablePreservedEntries) };
+        : { keptMessageCount: 0 };
       const postCompactEntries = buildPostCompactRuntimeEntries(
         activeEntries,
         {
@@ -539,7 +540,7 @@ async function compactActiveConversationImpl(
         },
         {
           postCompactReminderEntries,
-          preservedEntries,
+          preservedEntries: postCompactPreservedEntries,
         },
       );
       const truePostCompactTokenCount = estimateRuntimeEntryTokens(postCompactEntries, {
@@ -559,7 +560,7 @@ async function compactActiveConversationImpl(
         summaryMessageId,
         traceContext: turnTraceContext,
         trigger,
-        ...(currentSelection.groupsPreserved > 0
+        ...(postCompactPreservedEntries.length > 0
           ? {
               keptMessageCount: preservation.keptMessageCount,
             }

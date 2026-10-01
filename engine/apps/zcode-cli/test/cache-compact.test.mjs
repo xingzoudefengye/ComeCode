@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { ContextBuilder } from "../packages/core/src/context/builder.ts";
 import { buildProviderRequestMessages } from "../packages/core/src/runtime/helpers/provider-request-messages.ts";
 import { getAutoCompactThreshold, shouldAutoCompact } from "../packages/core/src/compact/policy.ts";
+import { buildCompactSummaryMessage, parseCompactResult } from "../packages/core/src/compact/prompt.ts";
+import { buildPostCompactRuntimeEntries } from "../packages/core/src/runtime/helpers/compact.ts";
 import { toAiSdkTools } from "../packages/adapters/src/model/tool-transform.ts";
 import {
   createGenerateTextOptions,
@@ -15,6 +17,80 @@ const messages = [
   { role: "assistant", content: "answer" },
   { role: "user", content: "second" },
 ];
+
+test("压缩结果包含指南和摘要，分析过程不会进入后续上下文", () => {
+  const result = parseCompactResult(`
+<analysis>内部推理不应保留</analysis>
+<work_guide>
+目标 A：completed，不要重复。
+目标 B：in_progress，下一步继续。
+</work_guide>
+<summary>
+只保留继续工作所需的摘要。
+</summary>`);
+  assert.equal(result.guide.includes("目标 A"), true);
+  assert.equal(result.summary.includes("内部推理"), false);
+  assert.equal(result.summary.includes("只保留继续工作"), true);
+});
+
+test("压缩后 Provider 请求只包含新摘要和一次性指南，不带回旧 800K 历史", () => {
+  const oldHistory = "旧历史内容 ".repeat(20_000);
+  const summaryMessage = {
+    message: {
+      role: "user",
+      content: buildCompactSummaryMessage("压缩摘要", {
+        suppressFollowup: true,
+        workGuide: "已完成目标不要重复；继续处理当前目标。",
+      }),
+    },
+    metadata: { source: "legacy_synthetic" },
+  };
+  const compacted = buildPostCompactRuntimeEntries(
+    [
+      { message: { role: "user", content: oldHistory }, metadata: { source: "real_user" } },
+      { message: { role: "assistant", content: "旧模型输出" } },
+    ],
+    summaryMessage,
+    { preservedEntries: [] },
+  );
+  const projected = buildProviderRequestMessages({ entries: compacted }).messages;
+  const wireText = projected.map((message) => String(message.content)).join("\n");
+  assert.equal(wireText.includes(oldHistory), false);
+  assert.equal(wireText.includes("压缩摘要"), true);
+  assert.equal(wireText.includes("已完成目标不要重复"), true);
+  assert.equal(compacted.filter((entry) => entry.message?.content === oldHistory).length, 0);
+});
+
+test("第二次压缩会用新指南替换第一次指南", () => {
+  const first = buildPostCompactRuntimeEntries(
+    [{ message: { role: "user", content: "旧工作" }, metadata: { source: "real_user" } }],
+    {
+      message: {
+        role: "user",
+        content: buildCompactSummaryMessage("第一次摘要", { workGuide: "第一版指南" }),
+      },
+      metadata: { source: "legacy_synthetic" },
+    },
+    { preservedEntries: [] },
+  );
+  const second = buildPostCompactRuntimeEntries(
+    first,
+    {
+      message: {
+        role: "user",
+        content: buildCompactSummaryMessage("第二次摘要", { workGuide: "第二版指南" }),
+      },
+      metadata: { source: "legacy_synthetic" },
+    },
+    { preservedEntries: [] },
+  );
+  const wireText = buildProviderRequestMessages({ entries: second }).messages
+    .map((message) => String(message.content))
+    .join("\n");
+  assert.equal(wireText.includes("第一版指南"), false);
+  assert.equal(wireText.includes("第二版指南"), true);
+});
+
 test("512K 默认在 307.2K 压缩，真实小窗口和输出预留优先", () => {
   assert.equal(getAutoCompactThreshold(), 307_200);
   assert.equal(getAutoCompactThreshold({ contextWindow: 128_000 }), 76_800);

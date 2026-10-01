@@ -2,7 +2,7 @@ import {
   COMPACT_PROMPT_TOO_LONG_USER_MESSAGE,
   CoreErrorType,
   createCoreError,
-  formatCompactSummary,
+  parseCompactResult,
 } from "../deps.js";
 import type {
   CompactTimelinePayload,
@@ -90,10 +90,10 @@ export function buildCompactSummaryRequestMessages(
   }).messages;
 }
 
-export function formatCompactSummaryOrThrow(
+export function formatCompactResultOrThrow(
   runtime: AgentRuntimeInternal,
   result: RuntimeModelTextResult,
-): string {
+): { guide: string; summary: string } {
   const compactToolCalls = runtime.extractToolCallsFromResult(result);
   if (compactToolCalls.length > 0) {
     throw createCoreError(CoreErrorType.ModelError, COMPACT_TOOL_USE_DENIAL_MESSAGE, {
@@ -110,12 +110,12 @@ export function formatCompactSummaryOrThrow(
     });
   }
 
-  const summary = formatCompactSummary(result.text);
-  if (!summary) {
+  const compactResult = parseCompactResult(result.text);
+  if (!compactResult.summary || !compactResult.guide) {
     throw createCoreError(CoreErrorType.ModelError, "Failed to generate compact summary", {
       recoverable: true,
       retryable: true,
     });
   }
-  return summary;
+  return compactResult;
 }

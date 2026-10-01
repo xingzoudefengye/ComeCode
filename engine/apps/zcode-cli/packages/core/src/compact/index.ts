@@ -2,7 +2,10 @@ export {
   buildCompactPrompt,
   buildCompactSummaryMessage,
   formatCompactSummary,
+  formatCompactWorkGuide,
+  parseCompactResult,
 } from "./prompt.js";
+export type { CompactResult } from "./prompt.js";
 export {
   COMPACT_PROMPT_TOO_LONG_RETRY_MARKER,
   COMPACT_PROMPT_TOO_LONG_USER_MESSAGE,

@@ -295,11 +295,13 @@ export {
   createCompactBoundaryId,
   estimateMessageTokens,
   formatCompactSummary,
+  formatCompactWorkGuide,
   getAutoCompactThreshold,
   getMessagesToSummarize,
   getUsageTotalTokens,
   hasEnoughMessagesToCompact,
   maybeLocalMicrocompactMessages,
+  parseCompactResult,
   shouldAutoCompact,
   buildDefaultMicrocompactThreshold,
 } from "../compact/index.js";
