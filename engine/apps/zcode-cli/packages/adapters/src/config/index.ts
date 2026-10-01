@@ -492,6 +492,8 @@ export {
 } from "./config-factory.js";
 export {
   CONFIG_FILE_NAME,
+  CONFIG_FILE_NAMES,
+  parseUnifiedConfigJson,
   extractCliWorkingDirectory,
   extractProviderCliOverrides,
   maskSecret,

@@ -65,6 +65,7 @@ export function serializeRegistryProviderConfig(
     ...(config.builtinModelIds == null ? {} : { builtinModelIds: [...config.builtinModelIds] }),
     ...(config.personalModelIds == null ? {} : { personalModelIds: [...config.personalModelIds] }),
     ...(config.modelOrder == null ? {} : { modelOrder: [...config.modelOrder] }),
+    ...(config.modelOverrides == null ? {} : { modelOverrides: config.modelOverrides }),
     ...(config.visibility === undefined ? {} : { visibility: config.visibility }),
   };
 }
@@ -258,15 +259,15 @@ export class ProviderConfigResolver {
           providerId,
           templateId,
           modelId,
-          apiType: config.api?.type,
-          baseUrl: config.api?.baseUrl,
+          apiType: config.modelOverrides?.[modelId]?.api?.type ?? config.api?.type,
+          baseUrl: config.modelOverrides?.[modelId]?.api?.baseUrl ?? config.api?.baseUrl,
         });
         const effectiveBuiltinConfig = input.zcodeBuiltinModelRules.resolve({
           providerId,
           templateId,
           modelId,
-          apiType: config.api?.type,
-          baseUrl: config.api?.baseUrl,
+          apiType: config.modelOverrides?.[modelId]?.api?.type ?? config.api?.type,
+          baseUrl: config.modelOverrides?.[modelId]?.api?.baseUrl ?? config.api?.baseUrl,
         });
         const registryModelResult = createRegistryModelConfig(modelConfig, [
           ...providerPath,

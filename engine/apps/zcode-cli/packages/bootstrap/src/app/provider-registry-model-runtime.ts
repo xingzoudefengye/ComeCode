@@ -2,6 +2,10 @@ import type { AiSdkModelAdapter } from "@zcode/adapters/model";
 import type { Model } from "@zcode/contracts";
 import type { AgentRuntimeDeps } from "@zcode/core";
 import {
+  ProviderApiConfig,
+  ApiKeyAccessConfig,
+  ProviderConfig,
+  createRegistryProviderConfig,
   type ModelSelection,
   type ModelSelectionValidation,
   type Provider,
@@ -71,10 +75,20 @@ export class ApiProviderModelRuntime {
     // 输出预算属于单次请求，由 Agent 执行链显式决定，不能在 ModelFactory 中静默绑定。
     // Selection 已在上面的 Registry 边界完成校验，Factory 不再承担任何缺省修复。
     const normalReasoningLevel = target.selection.options!.reasoningLevel!;
+    const override = provider.config.modelOverrides?.[registryModel.modelId];
+    // 单模型协议不改变 Registry 身份；执行与内置能力匹配使用同一有效连接。
+    const connection = override?.api || override?.access
+      ? createRegistryProviderConfig(provider.config.overlay(new ProviderConfig({
+          ...(override.api ? { api: new ProviderApiConfig(override.api) } : {}),
+          ...(override.access ? { access: new ApiKeyAccessConfig(override.access) } : {}),
+        })))
+      : { ok: true as const, config: provider.config };
+    if (!connection.ok) throw new Error("模型连接覆盖无效");
     return this.#modelAdapter.createModel({
       providerId: provider.providerId,
       modelId: registryModel.modelId,
-      providerConfig: provider.config,
+      providerConfig: connection.config,
+      ...(override?.name ? { displayName: override.name } : {}),
       modelConfig: config,
       ...(provider.config.access.type === "zhipu-account" &&
       provider.config.access.mode === "off-peak"

@@ -89,6 +89,12 @@ export const providerConfigDataSchema = z
     builtinModelIds: modelIdsDataSchema,
     personalModelIds: modelIdsDataSchema,
     modelOrder: modelIdsDataSchema,
+    // ComeCode：模型连接覆盖仍归同一 Provider 所有，旧配置没有此字段时行为不变。
+    modelOverrides: z.record(z.string(), z.object({
+      name: z.string().min(1).optional(),
+      api: completeProviderApiDataSchema.optional(),
+      access: completeApiKeyAccessDataSchema.optional(),
+    }).strict()).readonly().nullable().optional(),
     visibility: providerVisibilityDataSchema.nullable().optional(),
   })
   .strict();

@@ -1,10 +1,10 @@
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { randomUUID } from "node:crypto";
-import { resolveUnifiedConfigPaths } from "@zcode/adapters/config";
+import { parseUnifiedConfigJson, parseUnifiedConfigToml, resolveUnifiedConfigPaths } from "@zcode/adapters/config";
 import type { RunContext } from "@zcode/shared-types";
 import type { CliEnv } from "./env.js";
 import { providerSetupResponse } from "./provider-setup.js";
@@ -17,12 +17,25 @@ export async function runProviderConfigSetup(
   env: CliEnv,
   cwd: string,
   askOverride?: Ask,
+  startup = false,
 ): Promise<number> {
   if (!ctx.stdin.isTTY || !ctx.stderr.isTTY) {
     ctx.stderr.write(`配置向导需要交互终端，请直接在终端运行 comecode config setup。\n${providerSetupResponse("zh-CN", env, cwd)}\n`);
     return 1;
   }
   const paths = resolveUnifiedConfigPaths({ env, cwd });
+  let existing: string | undefined;
+  try { existing = await readFile(paths.user, "utf8"); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  const targetPath = startup || existing === undefined ? join(dirname(paths.user), "config.json") : paths.user;
+  if (existing !== undefined) {
+    const parsed = paths.user.endsWith(".toml") ? parseUnifiedConfigToml(existing, paths.user) : parseUnifiedConfigJson(existing, paths.user);
+    // 简单向导不整体替换多模型/高级配置，避免保存时丢失用户字段。
+    if (parsed.diagnostics.errors.length || Object.keys(parsed.document.providers).length) {
+      ctx.stderr.write(`已有模型配置，未修改。请编辑 ${paths.user} 添加或调整模型，然后运行 comecode config check。\n`);
+      return 1;
+    }
+  }
   let close = () => {};
   const ask = askOverride ?? (() => {
     let hidden = false;
@@ -55,8 +68,8 @@ export async function runProviderConfigSetup(
   })();
   try {
     ctx.stderr.write("ComeCode 模型配置向导\n需要填写：接口地址、模型名称、API Key。Ctrl+C 可取消。\n");
-    if (paths.project) ctx.stderr.write(`注意：项目配置 ${paths.project} 会优先覆盖用户设置；保存后请检查它。\n`);
-    ctx.stderr.write(`保存位置：${paths.user}\n`);
+    if (!startup && paths.project) ctx.stderr.write(`注意：项目配置 ${paths.project} 会优先覆盖用户设置；保存后请检查它。\n`);
+    if (!startup) ctx.stderr.write(`保存位置：${targetPath}\n`);
     const typeChoice = await ask("1. 服务类型：1=OpenAI Chat Completions 兼容接口（默认），2=OpenAI Responses，3=Anthropic/Claude：");
     const type = ({ "": "openai-chat", "1": "openai-chat", "2": "openai-responses", "3": "anthropic" } as Record<string, string>)[typeChoice];
     if (!type) throw new Error("服务类型无效，请选择 1、2 或 3，再运行向导。");
@@ -76,7 +89,7 @@ export async function runProviderConfigSetup(
     while (!model) model = await ask("3. 模型名称（从服务商模型列表复制，以该平台提供的实际名称为准）：");
     let apiKey = "";
     while (!apiKey) apiKey = await ask("4. API Key（输入不显示，粘贴后按回车）：", true);
-    const content = [
+    const tomlContent = [
       "# ComeCode 模型配置，由配置向导生成。此文件含密钥，请勿分享或提交到 Git。",
       `model = ${JSON.stringify(model)} # 服务商模型列表中的名称`,
       'provider = "my-api"',
@@ -85,25 +98,24 @@ export async function runProviderConfigSetup(
       `base_url = ${JSON.stringify(baseUrl)} # API 接口地址`,
       `api_key = ${JSON.stringify(apiKey)} # 私密凭据`, "",
     ].join("\n");
-    let existing: string | undefined;
-    try { existing = await readFile(paths.user, "utf8"); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    ctx.stderr.write(`将保存模型 ${JSON.stringify(model)}，密钥不会显示。\n`);
-    const confirmation = await ask(existing === undefined
+    const content = targetPath.endsWith(".toml") ? tomlContent : `${targetPath.endsWith(".jsonc") ? "// ComeCode 模型配置：含密钥时请勿分享或提交到 Git。\n" : ""}${JSON.stringify({ model, provider: "my-api", providers: [{ id: "my-api", type, baseUrl, apiKey, models: [{ id: model }] }] }, null, 2)}\n`;
+    if (!startup) ctx.stderr.write(`将保存模型 ${JSON.stringify(model)}，密钥不会显示。\n`);
+    const confirmation = startup ? "y" : await ask(existing === undefined
       ? "保存配置？[y/N] "
       : "配置文件已存在。备份原文件后替换？[y/N] ");
     if (confirmation.toLowerCase() !== "y") {
       ctx.stderr.write("已取消，未修改配置。\n");
       return 0;
     }
-    await mkdir(dirname(paths.user), { recursive: true });
-    if (existing !== undefined) {
-      const backup = `${paths.user}.${randomUUID()}.bak`;
-      await copyFile(paths.user, backup, constants.COPYFILE_EXCL);
-      ctx.stderr.write(`原配置已备份：${backup}\n`);
+    await mkdir(dirname(targetPath), { recursive: true });
+    if (existing !== undefined && targetPath === paths.user) {
+      const backup = `${targetPath}.${randomUUID()}.bak`;
+      await copyFile(targetPath, backup, constants.COPYFILE_EXCL);
+      if (!startup) ctx.stderr.write(`原配置已备份：${backup}\n`);
     }
-    await writeFile(paths.user, content, { encoding: "utf8", mode: 0o600, flag: existing === undefined ? "wx" : "w" });
-    ctx.stderr.write(`配置已保存：${paths.user}\n下一步：运行 comecode config check，检查通过后运行 comecode。\n${paths.project ? "注意：项目配置仍优先，检查不通过时也要检查项目文件。\n" : ""}`);
+    await writeFile(targetPath, content, { encoding: "utf8", mode: 0o600, flag: existing === undefined || targetPath !== paths.user ? "wx" : "w" });
+    if (startup) ctx.stderr.write("模型已配置，正在启动 ComeCode。\n");
+    else ctx.stderr.write(`配置已保存：${targetPath}\n下一步：运行 comecode config check，检查通过后运行 comecode。\n${paths.project ? "注意：项目配置仍优先，检查不通过时也要检查项目文件。\n" : ""}`);
     return 0;
   } catch (error) {
     const message = (error as Error).name === "AbortError" ? "已取消配置向导。" : `配置未保存：${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`;

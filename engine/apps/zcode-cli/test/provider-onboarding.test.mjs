@@ -7,12 +7,14 @@ import { providerSetupResponse } from "../packages/cli/src/provider-setup.ts";
 import { runProviderConfigSetup } from "../packages/cli/src/provider-config-setup.ts";
 import { runConfigCommand } from "../packages/cli/src/config-command.ts";
 import { runTuiCommand } from "../packages/cli/src/tui-command.ts";
-import { materializeUnifiedConfig, parseUnifiedConfigToml, resolveUnifiedConfig } from "../packages/adapters/dist/config/provider-config.js";
+import { materializeUnifiedConfig, parseUnifiedConfigJson, resolveUnifiedConfig } from "../packages/adapters/dist/config/provider-config.js";
 import { decodeProviderConfigFile } from "../../../packages/provider-node/dist/provider-config-file-codec.js";
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), "comecode-onboarding-"));
   t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, "project", ".comecode"), { recursive: true });
+  await writeFile(join(root, "project", ".comecode", "config.json"), "{}");
   let stdout = "";
   let stderr = "";
   return {
@@ -30,7 +32,7 @@ function scriptedAsk(answers, prompts) {
   };
 }
 
-test("向导填写即可生成带注释配置，解析、脱敏、旧 Registry codec 与 check 均通过", async (t) => {
+test("向导填写即可生成 JSON 配置，解析、脱敏、旧 Registry codec 与 check 均通过", async (t) => {
   const f = await fixture(t);
   const prompts = [];
   const answers = ["1", "bad-url", "https://model.example/v1", "test-model", "private-test-key", "y"];
@@ -38,26 +40,26 @@ test("向导填写即可生成带注释配置，解析、脱敏、旧 Registry c
   assert.equal(prompts.find((p) => p.prompt.startsWith("4.")).secret, true);
   assert.doesNotMatch(f.readStderr(), /private-test-key/u);
   assert.match(f.readStderr(), /地址不正确/u);
-  const path = join(f.root, ".comecode", "config.toml");
-  const parsed = parseUnifiedConfigToml(await readFile(path, "utf8"));
+  const path = join(f.root, ".comecode", "config.json");
+  const parsed = parseUnifiedConfigJson(await readFile(path, "utf8"));
   assert.deepEqual(parsed.diagnostics.errors, []);
   assert.equal(parsed.document.model, "test-model");
   const target = join(f.root, ".comecode", "v2", "provider_config.json");
-  await materializeUnifiedConfig({ cwd: f.root, env: f.env, targetProviderFile: target });
+  await materializeUnifiedConfig({ cwd: join(f.root, "project"), env: f.env, targetProviderFile: target });
   const decoded = decodeProviderConfigFile(JSON.parse(await readFile(target, "utf8")));
   assert.equal(decoded.providers.get("my-api").api.baseUrl, "https://model.example/v1");
   assert.equal(decoded.defaultModelSelection.modelId, "test-model");
-  assert.equal(await runConfigCommand(f.ctx, { json: true }, { env: f.env, cwd: () => f.root }, ["check"]), 0);
+  assert.equal(await runConfigCommand(f.ctx, { json: true }, { env: f.env, cwd: () => join(f.root, "project") }, ["check"]), 0);
   assert.equal(JSON.parse(f.readStdout()).ok, true);
 });
 
-test("全注释模板不阻断零配置；空模板 check 明确失败", async (t) => {
+test("无配置引导不阻断零配置；空配置 check 明确失败", async (t) => {
   const f = await fixture(t);
   providerSetupResponse("zh-CN", f.env, f.root);
-  const resolved = await resolveUnifiedConfig({ cwd: f.root, env: { ...f.env, OPENAI_API_KEY: "test-key" } });
+  const resolved = await resolveUnifiedConfig({ cwd: join(f.root, "project"), env: { ...f.env, OPENAI_API_KEY: "test-key" } });
   assert.equal(resolved.provider, "openai");
   assert.equal(resolved.model, "gpt-4.1-mini");
-  assert.equal(await runConfigCommand(f.ctx, { json: true }, { env: f.env, cwd: () => f.root }, ["check"]), 1);
+  assert.equal(await runConfigCommand(f.ctx, { json: true }, { env: f.env, cwd: () => join(f.root, "project") }, ["check"]), 1);
   const output = JSON.parse(f.readStdout());
   assert.equal(output.ok, false);
   assert.match(output.errors.join("\n"), /config setup/u);
@@ -85,7 +87,7 @@ test("无模型 TUI 首屏即给配置卡片，普通 sendInput 也不发起模�
   let sent = 0;
   let startup;
   const status = await runTuiCommand(f.ctx, { noColor: true, locale: "zh-CN" }, {
-    env: f.env, cwd: () => f.root, skipUserConfig: true,
+    env: f.env, cwd: () => join(f.root, "project"), skipUserConfig: true,
     loadDotenv: () => ({ keys: [], loaded: false }),
     listCustomCommands: async () => ({ commands: [] }),
     resolveWorkspaceGitBranch: async () => undefined,
@@ -131,7 +133,7 @@ test("真实终端输入密钥不回显，Ctrl+C 取消不修改配置", async (
   };
   assert.equal(await runProviderConfigSetup(ctx, f.env, f.root), 0);
   assert.doesNotMatch(output, /do-not-echo-this-secret/u);
-  assert.match(await readFile(join(f.root, ".comecode", "config.toml"), "utf8"), /do-not-echo-this-secret/u);
+  assert.match(await readFile(join(f.root, ".comecode", "config.json"), "utf8"), /do-not-echo-this-secret/u);
 
   const cancelled = await fixture(t);
   const cancelInput = new PassThrough();
@@ -142,7 +144,7 @@ test("真实终端输入密钥不回显，Ctrl+C 取消不修改配置", async (
     if (chunk.toString().startsWith("1.")) setImmediate(() => cancelInput.write("\u0003"));
   } } };
   assert.equal(await runProviderConfigSetup(cancelCtx, cancelled.env, cancelled.root), 1);
-  await assert.rejects(readFile(join(cancelled.root, ".comecode", "config.toml")), { code: "ENOENT" });
+  await assert.rejects(readFile(join(cancelled.root, ".comecode", "config.json")), { code: "ENOENT" });
 });
 
 test("真实 TUI 渲染首屏卡片时配置向导命令可见且无 OSC 控制字符", async (t) => {
@@ -178,12 +180,12 @@ test("真实 TUI 渲染首屏卡片时配置向导命令可见且无 OSC 控制�
 
 test("公开引导只保留操作步骤，不包含个人接入方式或解释性旁白", async (t) => {
   const f = await fixture(t);
-  const { providerSetupStartupResponse, PROVIDER_CONFIG_TEMPLATE } = await import("../packages/cli/src/provider-setup.ts");
-  for (const text of [providerSetupStartupResponse(f.env, f.root), providerSetupResponse("zh-CN", f.env, f.root), PROVIDER_CONFIG_TEMPLATE]) {
+  const { providerSetupStartupResponse } = await import("../packages/cli/src/provider-setup.ts");
+  for (const text of [providerSetupStartupResponse(f.env, f.root), providerSetupResponse("zh-CN", f.env, f.root)]) {
     assert.doesNotMatch(text, /NewAPI|你的newapi|购买\/使用|网关|模型客户端|不提供模型|不是你的输入/u);
   }
   const startup = providerSetupStartupResponse(f.env, f.root);
-  assert.match(startup, /需要填写：接口地址、模型名称、API Key/u);
+  assert.match(startup, /接口地址、模型名称和 API Key/u);
   assert.match(startup, /comecode config setup/u);
   await runProviderConfigSetup(f.ctx, f.env, f.root, scriptedAsk(["1", "", "my-model", "test-key", "n"], []));
   assert.doesNotMatch(f.readStderr(), /NewAPI|DeepSeek|不需要自建网关|不提供模型/u);
