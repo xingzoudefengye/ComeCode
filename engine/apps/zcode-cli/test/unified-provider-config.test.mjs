@@ -104,7 +104,8 @@ api_key_env = "MISSING_KEY"
   assert.equal(resolved.providers.find((provider) => provider.id === "local")?.executable, false);
   const document = JSON.parse(await readFile(target, "utf8"));
   const update = decodeProviderConfigFile(document);
-  assert.equal(update.providers.get("local"), undefined);
+  assert.equal(update.providers.get("local")?.access?.apiKey, "old-secret");
+  assert.ok(resolved.diagnostics.errors.length);
 });
 
 test("materialize 生成旧 Provider Config 兼容格式且不强行写入 contextWindow", async () => {

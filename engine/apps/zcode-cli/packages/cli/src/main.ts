@@ -78,6 +78,11 @@ async function main(): Promise<void> {
       process.exitCode = await runPluginHostCommand(context, argv.slice(1));
       return;
     }
+    if (isTui && !argv.includes("--prepare-storage")) {
+      const { ensureFirstProviderSetup } = await import("./first-provider-setup.js");
+      const status = await ensureFirstProviderSetup(context, process.env);
+      if (status !== 0) { process.exitCode = status; return; }
+    }
     if (!argv.includes("--prepare-storage")) {
       const { prepareCliProviderRuntimeEnv } = await import("./provider-runtime-env.js");
       Object.assign(

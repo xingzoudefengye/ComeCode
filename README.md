@@ -67,29 +67,53 @@ ZCode 已经具备 Coding Agent 的大部分能力，ComeCode 的主要工作是
 
 目标：解除模型绑定，任何兼容接口都能接入。
 
-**第一次使用：运行 `comecode config setup`，按中文提示填写即可。**
+**第一次使用：直接运行 `comecode`。** 没有可用模型时会直接提问，填写 API 接口地址、模型名称、API Key；接口类型默认 OpenAI Chat Completions。其他参数使用默认值，密钥输入不回显，完成后自动保存 JSON 并继续启动。首次使用不需要找配置文件或退出编辑，也不会为检查配置发起付费模型请求。
 
-准备你使用的模型平台提供的 API 接口地址、模型名称、API Key。向导支持 OpenAI Chat Completions 兼容接口、Responses 和 Anthropic，密钥输入不回显；保存已有配置前需要确认，并保留备份。向导不发起付费模型请求。
+已有模型不会重复提问或覆盖配置。也可使用 `comecode config setup` 单独配置；已有多模型配置不由简单向导整体替换。后续 Web 模型管理尚未实现。
 
-保存后运行 `comecode config check`，检查通过再运行 `comecode`。如果项目内存在 `.comecode/config.toml`，它会覆盖用户设置，也需要检查。无模型启动时会直接显示中文操作说明，首次创建带注释的用户模板；已有配置不会自动覆盖。
+### 多模型精细配置（高级使用）
 
-配置文件 `~/.comecode/config.toml`（项目内可用 `.comecode/config.toml` 覆盖）：
+推荐 `~/.comecode/config.json`；项目 `.comecode/config.json` 可覆盖用户配置。支持带注释的 `config.jsonc`，保留 `config.toml` 和旧 `v2/provider_config.json` 兼容。
 
-```toml
-model = "填写平台支持的模型名称"
-provider = "my-api"
-
-[providers.my-api]
-type = "openai-chat"        # openai-chat | openai-responses | anthropic | gemini
-base_url = "https://你的API接口地址/v1"
-api_key_env = "MY_MODEL_API_KEY"   # 推荐引用环境变量，也可直接写 api_key
+```json
+{
+  "provider": "my-api",
+  "model": "model-a",
+  "providers": [
+    {
+      "id": "my-api",
+      "name": "我的模型服务",
+      "type": "openai-chat",
+      "baseUrl": "https://example.com/v1",
+      "apiKeyEnv": "MY_MODEL_API_KEY",
+      "contextWindow": 512000,
+      "maxOutputTokens": 64000,
+      "toolCalling": true,
+      "vision": false,
+      "models": [
+        { "id": "model-a", "name": "模型 A" },
+        { "id": "model-b", "name": "模型 B", "vision": true },
+        {
+          "id": "vendor/model-c",
+          "type": "anthropic",
+          "baseUrl": "https://example.com/anthropic",
+          "contextWindow": 128000
+        }
+      ]
+    }
+  ]
+}
 ```
 
-配置优先级：命令行参数 > 环境变量 > 项目配置 > 用户配置 > 内置默认。
+供应商填写公共默认值，模型只填写不同的字段。`models` 也可以直接写模型名称字符串。`id` 是服务商实际模型名（含 `/` 原样保留），`name` 只用于界面展示；`contextWindow` 为上下文总窗口，`maxOutputTokens` 为输出上限，不代表每次请求固定输出这么多。没有显式窗口时沿用模型专属规则或通用 512000 默认，不覆盖已有明确窗口。
 
-配置命令：`comecode config setup` 打开中文向导；`comecode config path` 查看配置路径，`comecode config show` 查看合并后的脱敏配置，`comecode config check` 校验配置。运行时还可用 `--model <model>` 和 `--provider <id>` 临时覆盖默认选择。
+连接类型支持 `openai-chat`、`openai-responses`、`anthropic`；`gemini` 暂时只识别/检查，不能执行。密钥可用 `apiKeyEnv` 引用环境变量，或直接填写 `apiKey`，二者不要同时填写；`config show` 对供应商和模型凭据均脱敏。包含密钥的文件不要分享或提交到 Git。
 
-没有 TOML 时可直接通过环境变量启动。仅设置凭据也可使用固定默认模型：OpenAI `gpt-4.1-mini`、Anthropic `claude-sonnet-4-5`；Gemini `gemini-2.5-flash` 暂时仅检查、不执行。多种凭据同时存在时按 OpenAI → Anthropic → Gemini 选择；可用 `COMECODE_PROVIDER` 指定（`--provider` 更优先）。有 TOML 时不自动覆盖其中的 Provider 选择。
+配置优先级：命令行参数 > 标准环境变量 > 项目配置 > 用户配置 > 旧 Provider 配置/内置默认。同目录多个格式按 JSON > JSONC > TOML 选择一个，`config check` 会提示其他文件被忽略；项目向上查找最近的配置目录。用户/项目同供应商和同模型按字段合并，项目显式 `models` 数组决定该供应商成员集合。
+
+`comecode config path` 查看实际路径；`comecode config show` 查看脱敏有效配置；`comecode config check` 做本地结构校验，不验证密钥远端是否有效。`--model <model>`、`--provider <id>` 临时覆盖默认选择。
+
+没有有效配置文件时可通过环境变量启动。仅设置凭据也可使用固定默认模型：OpenAI `gpt-4.1-mini`、Anthropic `claude-sonnet-4-5`；Gemini `gemini-2.5-flash` 暂时仅检查、不执行。多种凭据同时存在时按 OpenAI → Anthropic → Gemini 选择；可用 `COMECODE_PROVIDER` 指定（`--provider` 更优先）。有有效配置文件时不自动覆盖其中的 Provider 选择。
 
 PowerShell 示例（Key 使用自己的凭据，不要提交到 Git）：
 

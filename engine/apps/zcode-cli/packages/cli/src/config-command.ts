@@ -33,6 +33,7 @@ export async function runConfigCommand(
         exists: paths.project !== undefined,
         candidates: [...paths.projectCandidates],
       },
+      alternatives: { user: [...paths.userCandidates], project: [...paths.projectCandidates] },
       legacyProvider: { path: paths.legacyProviderFile, exists: existsSync(paths.legacyProviderFile) },
     };
     if (options.json) ctx.stdout.write(formatJson(payload));
@@ -60,12 +61,13 @@ export async function runConfigCommand(
         hasSource: publicConfig.hasSource,
         providers: publicConfig.providers.map((provider) => ({
           id: provider.id,
+          ...(provider.name ? { name: provider.name } : {}),
           ...(provider.type ? { type: provider.type } : {}),
           ...(provider.apiType ? { apiType: provider.apiType } : {}),
           ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
           ...(provider.apiKey ? { apiKey: provider.apiKey } : {}),
           ...(provider.apiKeySource ? { apiKeySource: provider.apiKeySource } : {}),
-          models: [...provider.models],
+          models: provider.models.map((model) => Object.fromEntries(Object.entries(model).filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined))),
           executable: provider.executable,
         })),
         diagnostics: {
@@ -78,7 +80,7 @@ export async function runConfigCommand(
   }
 
   const hasSelectedProvider = resolved.provider
-    ? resolved.providers.some((provider) => provider.id === resolved.provider && provider.executable)
+    ? resolved.providers.some((provider) => provider.id === resolved.provider && provider.modelConfigs.some((model) => model.id === resolved.model && model.executable))
     : false;
   const payload = {
     ok: resolved.diagnostics.errors.length === 0 &&

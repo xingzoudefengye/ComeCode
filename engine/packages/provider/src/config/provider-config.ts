@@ -179,6 +179,7 @@ export class ProviderConfig extends ConfigOverlay<ProviderConfig> {
   readonly personalModelIds?: ProviderConfigObject["personalModelIds"];
   readonly modelOrder?: ProviderConfigObject["modelOrder"];
   readonly visibility?: ProviderConfigObject["visibility"];
+  readonly modelOverrides?: ProviderConfigObject["modelOverrides"];
 
   constructor(input: ProviderConfigInput = {}) {
     super();
@@ -190,6 +191,13 @@ export class ProviderConfig extends ConfigOverlay<ProviderConfig> {
     this.personalModelIds = freezeModelIds(input.personalModelIds);
     this.modelOrder = freezeModelIds(input.modelOrder);
     this.visibility = input.visibility;
+    this.modelOverrides = input.modelOverrides == null ? input.modelOverrides : Object.freeze(
+      Object.fromEntries(Object.entries(input.modelOverrides).map(([id, override]) => [id, Object.freeze({
+        ...override,
+        ...(override.api ? { api: Object.freeze({ ...override.api, ...(override.api.headers ? { headers: Object.freeze({ ...override.api.headers }) } : {}) }) } : {}),
+        ...(override.access ? { access: Object.freeze({ ...override.access }) } : {}),
+      })])),
+    );
     Object.freeze(this);
   }
 
@@ -203,6 +211,7 @@ export class ProviderConfig extends ConfigOverlay<ProviderConfig> {
       personalModelIds: this.overlayValue(this.personalModelIds, next.personalModelIds),
       modelOrder: this.overlayValue(this.modelOrder, next.modelOrder),
       visibility: this.overlayValue(this.visibility, next.visibility),
+      modelOverrides: this.overlayValue(this.modelOverrides, next.modelOverrides),
     });
   }
 
@@ -227,6 +236,7 @@ export class ProviderConfig extends ConfigOverlay<ProviderConfig> {
       personalModelIds: this.personalModelIds,
       modelOrder: this.modelOrder,
       visibility: this.visibility,
+      modelOverrides: this.modelOverrides,
     });
   }
 
@@ -241,6 +251,7 @@ export class ProviderConfig extends ConfigOverlay<ProviderConfig> {
       personalModelIds: source?.personalModelIds,
       modelOrder: source?.modelOrder,
       visibility: this.visibility,
+      modelOverrides: this.modelOverrides,
     });
   }
 
@@ -259,6 +270,7 @@ export class ProviderConfig extends ConfigOverlay<ProviderConfig> {
       personalModelIds: this.personalModelIds,
       modelOrder: this.modelOrder,
       visibility: this.visibility,
+      modelOverrides: this.modelOverrides,
     });
   }
 }

@@ -65,7 +65,7 @@ export async function prepareCliProviderRuntimeEnv(
   const dataBaseDir = resolveComeCodeDataRoot(env, options.dataBaseDir);
   const personalFilePath =
     explicitPersonal ?? join(dataBaseDir, "v2", PERSONAL_PROVIDER_CONFIG_FILE_NAME);
-  // 统一 config.toml 只在 CLI 边界 materialize，旧 Provider Registry 继续读取 JSON。
+  // 统一配置只在 CLI 边界 materialize，旧 Provider Registry 继续读取 JSON。
   const config = await materializeUnifiedConfig({
     cwd: extractCliWorkingDirectory(options.argv),
     dataRoot: dataBaseDir,
@@ -74,11 +74,13 @@ export async function prepareCliProviderRuntimeEnv(
     legacyProviderFile: personalFilePath,
     cliOverrides: extractProviderCliOverrides(options.argv),
   });
+  if (config.hasSource && config.diagnostics.errors.length) throw new Error(config.diagnostics.errors.join("；"));
   const selected = config.providers.find((provider) => provider.id === config.provider);
   const explicitSelection = extractProviderCliOverrides(options.argv).provider?.trim() || env.COMECODE_PROVIDER?.trim();
-  if (selected?.type === "gemini" || (explicitSelection && !selected?.executable)) {
+  const selectedModel = selected?.modelConfigs.find((model) => model.id === config.model);
+  if (selectedModel?.type === "gemini" || (config.provider && config.model && !selectedModel?.executable) || (explicitSelection && !selected?.executable)) {
     // 显式选择失败时不能让 Registry 静默回退到其他可用模型。
-    throw new Error(selected?.type === "gemini"
+    throw new Error(selectedModel?.type === "gemini"
       ? "Gemini 仅支持识别和检查，当前版本暂不执行"
       : config.diagnostics.errors.join("；") || "所选 Provider 不可执行，请检查模型和密钥配置");
   }

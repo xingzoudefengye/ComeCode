@@ -1,5 +1,5 @@
 import type { ConfigResult } from "@zcode/adapters/config";
-import { resolveInitialModelSelection, type ModelSelectionOptions } from "@zcode/provider";
+import { completeNewModelSelection, resolveInitialModelSelection, type ModelSelectionOptions } from "@zcode/provider";
 import { resolveBashTimeoutPolicy, type AgentProfile, type AgentRuntimeConfig } from "@zcode/core";
 import { type BuiltInSubagentModelSelectionOverrides } from "@zcode/shared";
 import {
@@ -229,7 +229,10 @@ function resolveInitialRegistrySelection(
 
   if (options.resume) return undefined;
   const initial = resolveInitialModelSelection({
-    configuredDefault: options.configuredDefaultModelSelection,
+    // 仅新会话配置默认缺档位时补齐；不能因此回退到列表第一个模型。
+    configuredDefault: options.configuredDefaultModelSelection?.options?.reasoningLevel === undefined && options.configuredDefaultModelSelection
+      ? completeNewModelSelection(registry.getView(), options.configuredDefaultModelSelection)
+      : options.configuredDefaultModelSelection,
     registry: registry.getView(),
   });
   if (initial.source === "none") return undefined;
