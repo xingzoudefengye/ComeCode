@@ -657,6 +657,7 @@ export interface AgentRuntime {
     options?: { abortSignal?: AbortSignal; traceContext?: TraceContext },
   ): Promise<void>;
   isProjectMemoryEnabled(): boolean;
+  saveProjectMemory(traceContext?: TraceContext): Promise<"saved" | "skipped" | "disabled">;
   /** 缺省等待最多 60 秒；null 等待全部已调度提取结束，不设置 drain deadline。 */
   drainMemoryExtractions(timeoutMs?: number | null): Promise<void>;
 }

@@ -15,6 +15,7 @@ import {
   type ProjectMemoryAgentContext,
 } from "./project-memory-agent.js";
 import { resolveEnabledProjectMemoryRoot } from "./project-memory.js";
+import { createRuntimeModel } from "../methods/runtime-model.js";
 
 const EXTRACTION_MAX_TURNS = 5;
 const EXTRACTION_DRAIN_TIMEOUT_MS = 60_000;
@@ -31,16 +32,20 @@ export function isProjectMemoryEnabled(this: AgentRuntimeInternal): boolean {
 
 export function scheduleProjectMemoryExtraction(
   runtime: AgentRuntimeInternal,
-  input: { model: ProjectMemoryAgentContext["model"]; traceContext: TraceContext },
-): void {
-  if (runtime.shuttingDown) return;
-  // 原因：headless 只关闭自动 Extraction，必须在读取快照或访问文件前返回，避免后台副作用。
-  if (runtime.config.memory?.extractionEnabled === false) return;
+  input: {
+    model: ProjectMemoryAgentContext["model"];
+    traceContext: TraceContext;
+    force?: boolean;
+  },
+): boolean {
+  if (runtime.shuttingDown) return false;
+  // 自动提取可以关闭；显式 /memory save 仍允许用户主动保存。
+  if (runtime.config.memory?.extractionEnabled === false && input.force !== true) return false;
   // Bash cd 只改变执行 cwd，project Memory 身份必须继续使用会话 workspace root。
   const memoryRoot = resolveEnabledProjectMemoryRoot(runtime.config, runtime.workspaceRoot);
-  if (!memoryRoot) return;
-  if (runtime.isRemoteWorkspace()) return;
-  if (!runtime.sessionStore || !runtime.fileSystemPort) return;
+  if (!memoryRoot) return false;
+  if (runtime.isRemoteWorkspace()) return false;
+  if (!runtime.sessionStore || !runtime.fileSystemPort) return false;
 
   const snapshotBase = captureProjectMemoryAgentContext(runtime, {
     memoryRoot,
@@ -49,7 +54,7 @@ export function scheduleProjectMemoryExtraction(
     traceContext: input.traceContext,
   });
   const snapshotBoundaryMessageId = runtime.latestConversationMessageId;
-  if (!snapshotBoundaryMessageId) return;
+  if (!snapshotBoundaryMessageId) return false;
   const durableMessages = runtime.sessionStore.messages({ sessionID: runtime.sessionId });
   const session = runtime.sessionStore.getSession(runtime.sessionId);
   const snapshot = Promise.all([durableMessages, session]).then(
@@ -78,6 +83,25 @@ export function scheduleProjectMemoryExtraction(
     executeProjectMemoryExtraction(runtime, extraction),
   );
   runtime.memoryExtractionScheduler.schedule(snapshot);
+  return true;
+}
+
+export async function saveProjectMemory(
+  this: AgentRuntimeInternal,
+  traceContext: TraceContext = this.rootTraceContext,
+): Promise<"saved" | "skipped" | "disabled"> {
+  if (!isProjectMemoryEnabled.call(this)) return "disabled";
+  const selection = this.getSessionModelSelection();
+  if (!selection) return "disabled";
+  const model = createRuntimeModel(this, { selection });
+  const scheduled = scheduleProjectMemoryExtraction(this, {
+    force: true,
+    model,
+    traceContext,
+  });
+  if (!scheduled) return "skipped";
+  await drainMemoryExtractions.call(this, null);
+  return "saved";
 }
 
 export async function drainMemoryExtractions(

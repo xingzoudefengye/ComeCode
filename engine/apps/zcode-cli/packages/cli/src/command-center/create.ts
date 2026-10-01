@@ -108,6 +108,30 @@ export function createCommandCenter(deps: CommandCenterDeps): TuiSubmitPrompt {
         };
       }
 
+      if (command.name === "memory") {
+        if (command.args.trim() !== "save") {
+          return {
+            mode: deps.getMode?.(),
+            response: "用法：/memory save（将当前会话中值得长期保留的信息写入项目 .ai/）",
+          };
+        }
+        const app = await deps.getApp();
+        if (!app.saveProjectMemory) {
+          return {
+            mode: deps.getMode?.(),
+            response: "当前会话不支持项目记忆保存。",
+          };
+        }
+        const result = await app.saveProjectMemory();
+        const response =
+          result === "saved"
+            ? "已执行项目记忆保存。若当前会话没有新的长期信息，.ai 文件可能不会发生变化。"
+            : result === "skipped"
+              ? "没有可保存的新会话内容，项目记忆未改变。"
+              : "项目记忆未启用或当前没有可执行模型。";
+        return { mode: deps.getMode?.(), response };
+      }
+
       if (command.name === "compact") {
         const app = await deps.getApp();
         const prompt = command.args ? `/compact ${command.args}` : "/compact";

@@ -193,6 +193,7 @@ export type CommandCenterApp = {
   getLocale?(): TuiSubmitPromptResult["locale"];
   getTheme?(): TuiSubmitPromptResult["theme"];
   getThoughtLevel?(): string | undefined;
+  saveProjectMemory?(): Promise<"saved" | "skipped" | "disabled">;
   loadSessionTranscript?(): Promise<NonNullable<TuiSubmitPromptResult["restoredMessages"]>>;
   readSubagents?: import("@zcode/tui").TuiReadSubagents;
   readSubagentTranscript?: import("@zcode/tui").TuiReadSubagentTranscript;

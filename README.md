@@ -164,6 +164,8 @@ comecode memory path
 comecode memory check
 ```
 
+在 TUI 会话中输入 `/memory save`，可以立即让当前会话的长期信息沉淀到 `.ai/`；自动提取仍会在成功回合后后台运行。
+
 运行 `memory init` 只补齐缺失的 `.ai/` 模板文件，不覆盖已有内容，并把 `.ai/.local/` 加入项目 `.gitignore`。
 分层策略：
 

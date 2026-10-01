@@ -10,7 +10,7 @@ import { SLASH_COMMAND_HELP_ENTRIES, type SlashCommandHelpEntry } from "./slash-
 import type { SlashCommand } from "./slash-command-types.js";
 import { splitArgs } from "./utils.js";
 
-export const AVAILABLE_COMMANDS = SLASH_COMMAND_HELP_ENTRIES.map((entry) => `/${entry.name}`);
+export const AVAILABLE_COMMANDS = [...SLASH_COMMAND_HELP_ENTRIES.map((entry) => `/${entry.name}`), "/memory"];
 
 const SKILL_COMMAND_USAGE = "Usage: /skill [<skill-name> [task]]";
 
@@ -111,6 +111,15 @@ export function parseSlashCommand(input: string): SlashCommand | null {
     return {
       args,
       name: "logout",
+      rawName,
+      type: "known",
+    };
+  }
+
+  if (rawName === "memory") {
+    return {
+      args,
+      name: "memory",
       rawName,
       type: "known",
     };
@@ -250,6 +259,7 @@ export function listSlashCommandSuggestions(
   customCommands?: CommandCenterCustomCommandListOutcome,
 ): TuiSlashCommandSuggestion[] {
   return [
+    { name: "memory", summary: "保存当前会话的项目记忆", usage: "/memory save" },
     ...SLASH_COMMAND_HELP_ENTRIES.map((entry) => ({
       ...(entry.aliases ? { aliases: entry.aliases } : {}),
       name: entry.name,
@@ -266,6 +276,13 @@ export function formatSlashCommandHelp(
 ): string {
   const target = normalizeHelpTarget(args);
   if (target) {
+    if (target === "memory") {
+      return [
+        "/memory save",
+        "将当前会话中值得长期保留的信息写入项目 .ai/。",
+        "只允许保存项目事实、决策、任务和已知问题；不会保存密钥或临时聊天内容。",
+      ].join("\n");
+    }
     const entry = findSlashCommandHelpEntry(target);
     if (entry) return formatSlashCommandHelpEntry(entry);
 
@@ -278,6 +295,7 @@ export function formatSlashCommandHelp(
   const lines = [
     "Slash commands:",
     ...SLASH_COMMAND_HELP_ENTRIES.map((entry) => `- ${entry.usage}: ${entry.summary}`),
+    "- /memory save: 保存当前会话的项目记忆",
   ];
   if (customCommands && customCommands.commands.length > 0) {
     lines.push(

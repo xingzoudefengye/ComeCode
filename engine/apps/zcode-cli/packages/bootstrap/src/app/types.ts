@@ -314,6 +314,7 @@ export interface ZCodeApp {
    */
   reloadWorkspaceHookTrust(): Promise<void>;
   close?(): Promise<void>;
+  saveProjectMemory(): Promise<"saved" | "skipped" | "disabled">;
   getMode(): CollaborationMode;
   getModel(): string;
   /** current-only 协议快照精确读取当前 Registry 模型，避免枚举整个目录。 */

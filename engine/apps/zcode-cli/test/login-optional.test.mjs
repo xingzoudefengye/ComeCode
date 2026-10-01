@@ -48,6 +48,24 @@ test("没有可用模型时所有操作统一进入 Provider 配置引导", asyn
   }
 });
 
+test("/memory save 调用当前会话的项目记忆保存入口", async () => {
+  let calls = 0;
+  const handler = createCommandCenter({
+    hasSelectableModels: async () => true,
+    getApp: async () => ({
+      sessionId: "memory-test",
+      saveProjectMemory: async () => {
+        calls += 1;
+        return "saved";
+      },
+    }),
+  });
+  const result = await handler("/memory save", {});
+  assert.equal(calls, 1);
+  assert.match(result.response, /已执行项目记忆保存/u);
+  assert.match((await handler("/memory", {})).response, /用法/u);
+});
+
 test("已配置模型直接提交，无需厂商登录", async () => {
   let submissions = 0;
   const app = {
