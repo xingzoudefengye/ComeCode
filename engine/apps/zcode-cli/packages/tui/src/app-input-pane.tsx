@@ -49,6 +49,7 @@ type DraftTextarea = Pick<PromptInputEditor, "gotoBufferEnd" | "plainText" | "se
 
 export function InputPane({
   busy,
+  imagePasteAvailable,
   contentWidth,
   copy = DEFAULT_TUI_COPY,
   focused,
@@ -59,6 +60,7 @@ export function InputPane({
   value,
 }: {
   busy: boolean;
+  imagePasteAvailable?: boolean;
   contentWidth?: number;
   copy?: TuiCopy;
   editorRef?: React.MutableRefObject<PromptInputEditor | null>;
@@ -137,7 +139,7 @@ export function InputPane({
       keyBindings: PROMPT_TEXTAREA_KEY_BINDINGS,
       onContentChange: handleContentChange,
       onSubmit: handleSubmit,
-      placeholder: inputPanePlaceholder(copy, busy),
+      placeholder: imagePasteAvailable && !busy ? `${inputPanePlaceholder(copy, busy)} · Ctrl+V 粘贴图片 /paste` : inputPanePlaceholder(copy, busy),
       ref: setTextareaRef,
       style: inputPaneTextareaStyle(editorRows),
     }),

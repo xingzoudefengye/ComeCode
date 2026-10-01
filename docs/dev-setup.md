@@ -129,3 +129,63 @@ CLI 不要求厂商登录。请在 `COMECODE_PERSONAL_PROVIDER_CONFIG_FILE` 指�
 ```
 
 未设置 `OTEL_EXPORTER_OTLP_ENDPOINT`（或 traces/metrics 专用 endpoint）时不会创建遥测上报 Owner；设置这些标准 OTEL 变量表示用户主动启用。模型请求访问 Provider 配置的 `baseURL`；用户显式配置的 MCP、插件、模型工具也可访问其指定地址。
+
+## 6. 改完源码，本地 comecode 为什么"不生效"（打包/重启要点）
+
+改 TUI/CLI 源码后运行 comecode 没反应，几乎都是同一个原因：**只改了源码、没重建对应包的 dist 产物，而运行中的进程还在用旧代码**。先看本机 comecode 到底跑的是什么：
+
+```bash
+cat /c/Users/ruogu/AppData/Roaming/npm/comecode
+# #!/bin/sh
+# exec node "/e/Projects/ComeCode/engine/apps/zcode-cli/packages/cli/dist/zcode.cjs" "$@"
+```
+
+即全局 `comecode` 只是 dev shim，真正执行的是 `packages/cli/dist/zcode.cjs`（打包产物），不是源码。
+
+### 构建链与包间关系
+
+- CLI bundle 把 `@zcode/tui`、`playwright-core`、`koffi` 设成 **external**（`cli/scripts/build.mjs` 的 `resolveBuildExternal`），所以 TUI 没有打进 `zcode.cjs`。
+- `zcode.cjs` 运行时通过 `import("@zcode/tui")` 动态加载 TUI；该包在 `packages/cli/node_modules/@zcode/tui` 是指向 `packages/tui` 的**软链**，实际读取的是 `packages/tui/dist/index.js`。
+- 因此：**改 TUI 源码只重建 tui 包即可生效，不用重建 cli bundle**；改 CLI 源码才需要重建 cli。
+
+### 重建命令
+
+```bash
+cd engine
+# 重建 tui（tsc 声明 + esbuild 产出 dist/index.js）
+corepack pnpm@10.33.2 --filter "@zcode/tui" build
+
+# 重建 cli（连带重建 contracts/core 等直接运行时依赖）
+corepack pnpm@10.33.2 --filter "@zcode/cli" build
+```
+
+改的是 `shared / core / contracts / adapters` 等被 CLI 内联或声明的包时，用带 `...` 的聚合构建一次性搞定依赖方：
+
+```bash
+corepack pnpm@10.33.2 --filter "@zcode/cli..." build
+```
+
+### 验证产物确实包含改动
+
+```bash
+# 用源码里的独有字符串反查 dist，0 表示旧产物没打进去
+grep -c "usePaste" packages/tui/dist/index.js        # 例：TUI 改动
+grep -c "bytes.length === 0" packages/tui/dist/index.js
+# 对比产物与源码 mtime，确认 dist 不早于 src
+ls -la --time-style=+%H:%M:%S packages/tui/dist/index.js packages/tui/src/app.tsx
+```
+
+### 必须重启 comecode
+
+TUI 是运行时按需加载的，已开的会话进程不会自动换新代码。**重建 dist 后要重启 comecode 才生效**；验证方法是启动后触发改动对应的行为，看状态栏是否出现新提示（例如图片粘贴会出现"图片：正在读取剪贴板…"）。
+
+### 测试与 lint 已知坑
+
+- 测试不能直接 `node --test`（`.tsx` 需要转译），要带专用 loader 串行跑：
+  ```bash
+  cd engine/apps/zcode-cli
+  node --test --test-isolation=none --test-concurrency=1 \
+    --import ./test/typescript-loader.mjs ./test/clipboard-image.test.mjs
+  ```
+  全量用 `./test/*.test.mjs`。
+- `app.tsx` 等大文件受 oxlint `max-lines`（400，`skipBlankLines`/`skipComments`）约束；增行容易顶破上限，先 `git show HEAD:... | wc -l` 对比现状，别把已是"超限未提交"的文件再往上限推。

@@ -1,4 +1,5 @@
 import type { ModelUsageSummary, TodoItem, TurnId } from "@zcode/contracts";
+import { usePaste } from "@mbears/opentui-react";
 import { getZCodeCopy } from "@zcode/i18n";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { AppView, type TuiAppProps } from "./app-view.js";
@@ -109,7 +110,12 @@ export function TuiApp({
   const modifiedFileToolCallIdsRef = useRef(new Set<string>());
   const toolNamesByIdRef = useRef(new Map<string, string>());
 
-  const slashCommands = options.slashCommands ?? [];
+  const slashCommands = useMemo(
+    () => options.readClipboardImage
+      ? [{ name: "paste", usage: "/paste", summary: "粘贴剪贴板图片" }, ...(options.slashCommands ?? []).filter((command) => command.name !== "paste")]
+      : options.slashCommands ?? [],
+    [options.readClipboardImage, options.slashCommands],
+  );
   const [effortOptions, setEffortOptions] = useState<NonNullable<TuiOptions["effortOptions"]>>(
     () => initialResult?.effortOptions ?? options.effortOptions ?? [],
   );
@@ -239,7 +245,29 @@ export function TuiApp({
     [effortCommand, filteredSlashCommands, modeCommand, modelCommand, slashSelection],
   );
 
+  const pasteClipboardImage = useClipboardImagePaste({
+    abortControllerRef,
+    busy,
+    getDraftValue: () => draftRef.current,
+    inputEditorRef,
+    nextAttachmentIdRef,
+    options,
+    setDraftAttachments,
+    setDraftValue,
+    setStatus,
+    setStatusDetails,
+  });
+
+  // 部分终端只转发粘贴事件而不转发 Ctrl+V；收到空粘贴时尝试读取图片。
+  // 不自动检查普通文本粘贴，审批/只读面板也不能意外向输入框添加附件。
+  usePaste((event) => {
+    if (!subagents.selected && !approvalQueue.length && !selection && event.bytes.length === 0) {
+      void pasteClipboardImage();
+    }
+  });
+
   const submitValue = useSubmitValue({
+    pasteClipboardImage,
     activeTurnId,
     applyResult,
     applySessionEvent,
@@ -263,19 +291,6 @@ export function TuiApp({
     setStatus,
     setStatusDetails,
     turnRef: abortControllerRef,
-  });
-
-  const pasteClipboardImage = useClipboardImagePaste({
-    abortControllerRef,
-    busy,
-    getDraftValue: () => draftRef.current,
-    inputEditorRef,
-    nextAttachmentIdRef,
-    options,
-    setDraftAttachments,
-    setDraftValue,
-    setStatus,
-    setStatusDetails,
   });
 
   const { recallNextInput, recallPreviousInput } = useInputHistory({

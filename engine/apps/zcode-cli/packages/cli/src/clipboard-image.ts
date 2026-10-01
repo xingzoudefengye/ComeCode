@@ -157,6 +157,7 @@ async function readWindowsClipboardImage(options: {
   const directory = await mkdtemp(join(options.tempDirectory, "zcode-clipboard-"));
   const imagePath = join(directory, "clipboard.png");
   const script = [
+    "$ErrorActionPreference = 'Stop';",
     "Add-Type -AssemblyName System.Windows.Forms;",
     "$img = Get-Clipboard -Format Image;",
     "if ($null -eq $img) { exit 2 }",
@@ -166,10 +167,12 @@ async function readWindowsClipboardImage(options: {
   try {
     const result = await options.runCommand(
       "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", script],
+      ["-NoProfile", "-NonInteractive", "-STA", "-Command", script],
       { maxBytes: options.maxBytes, signal: options.signal },
     );
-    if (result.exitCode !== 0) return null;
+    // exit 2 表示没有图片；执行失败不能再伪装成空剪贴板。
+    if (result.exitCode === 2) return null;
+    if (result.exitCode !== 0) throw new Error("Windows 剪贴板读取失败，请重新复制图片后重试");
     return await readImageFile(imagePath, "image/png", options.maxBytes);
   } finally {
     await rm(directory, { force: true, recursive: true });

@@ -19,6 +19,7 @@ export function useSubmitValue(input: {
   busy: boolean;
   draftAttachmentsRef: React.MutableRefObject<DraftAttachment[]>;
   emptyPromptStatus: string;
+  pasteClipboardImage?: () => Promise<void>;
   messageInsertIndex: number;
   options: TuiOptions;
   requestPermission: TuiRequestPermission;
@@ -40,6 +41,11 @@ export function useSubmitValue(input: {
   return React.useCallback(
     async (submittedValue: string, options: SubmitValueOptions = {}) => {
       const text = input.resolveSubmittedText(submittedValue).trim();
+      // 剪贴板属于本地 UI，不把 /paste 发到模型或写入会话历史。
+      if (text === "/paste" && input.pasteClipboardImage) {
+        await input.pasteClipboardImage();
+        return;
+      }
       const modelSelection = input.resolveSubmittedModel?.(submittedValue);
       if (!text) {
         input.setStatus(input.emptyPromptStatus);
