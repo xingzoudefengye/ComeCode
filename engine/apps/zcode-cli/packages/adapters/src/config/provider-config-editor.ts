@@ -34,6 +34,19 @@ export function createProviderConfigEditor(options: UnifiedConfigLoadOptions) {
       restartRequired: true,
     };
   };
+  const preview = async (input: unknown) => {
+    const parsed = saveSchema.safeParse(input);
+    if (!parsed.success) throw new ConfigEditError(400, "保存数据格式不正确");
+    const snapshot = await readSnapshot(options);
+    if (parsed.data.revision !== snapshot.revision) throw new ConfigEditError(409, "配置已被修改，请重新加载再保存");
+    if (snapshot.errors.length) throw new ConfigEditError(422, "原配置有错误，请先修复；未覆盖原文件");
+    // 预览阶段只恢复密钥并解析候选配置，不写入磁盘，供保存前连接测试使用。
+    const effective = await resolveUnifiedConfig(options);
+    const document = restoreSecrets(parsed.data.config, snapshot.document, effective);
+    const resolved = await resolveUnifiedConfig({ ...options, userDocument: document });
+    if (resolved.diagnostics.errors.length) throw new ConfigEditError(422, resolved.diagnostics.errors.join("；"));
+    return { document, resolved, revision: snapshot.revision };
+  };
   const save = (input: unknown) => {
     const operation = queue.then(async () => {
       const parsed = saveSchema.safeParse(input);
@@ -79,7 +92,7 @@ export function createProviderConfigEditor(options: UnifiedConfigLoadOptions) {
     queue = operation.then(() => {}, () => {});
     return operation;
   };
-  return { read, save };
+  return { read, preview, save };
 }
 
 async function readSnapshot(options: UnifiedConfigLoadOptions) {

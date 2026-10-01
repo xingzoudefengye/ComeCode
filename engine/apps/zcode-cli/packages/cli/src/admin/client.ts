@@ -1,10 +1,11 @@
+/* eslint-disable max-lines -- 管理页面脚本与 DOM 模板需保持同一资源边界。 */
 // 页面只持有编辑草稿；原始凭据与有效配置均由服务端拥有。
 export const ADMIN_SCRIPT = String.raw`
 'use strict';
 const fragment = new URLSearchParams(location.hash.slice(1));
 let token = fragment.get('token') || sessionStorage.getItem('comecode-admin-token');
 if (fragment.has('token')) { sessionStorage.setItem('comecode-admin-token', token); history.replaceState(null, '', location.pathname); }
-let snapshot, draft, busy = false, dirty = false, editing = null;
+let snapshot, draft, busy = false, editing = null, modelTestCandidate = null, modelTestFingerprint = "";
 const $ = id => document.getElementById(id);
 const status = (text, error = false) => { $('status').textContent = text; $('status').className = error ? 'error' : ''; };
 const node = (tag, text, className) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (className) element.className = className; return element; };
@@ -27,7 +28,6 @@ async function confirmAction(title, message) {
   const dialog = $('confirm'); dialog.returnValue = 'cancel'; dialog.showModal();
   return new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'), {once:true}));
 }
-function markDirty() { dirty = true; status('有未保存的修改。保存后重启 ComeCode 生效。'); }
 function button(text, action, className) { const item = node('button', text, className); item.type = 'button'; item.onclick = action; return item; }
 function allModels() { return draft.providers.flatMap(provider => (provider.models || []).map(model => ({ provider, model }))); }
 function modelName(entry) { return entry.model.name || entry.model.id || '未命名模型'; }
@@ -63,12 +63,12 @@ function editableDraftFromEffective() {
   };
 }
 function displayName(entry, counts) { return counts.get(modelName(entry)) > 1 ? (entry.provider.name || entry.provider.id || '供应商') + ' / ' + modelName(entry) : modelName(entry); }
-function findProvider(baseUrl, except) {
+function findProvider(targetDraft, baseUrl, except) {
   // 相同请求地址自动归入同一 Provider；协议差异由模型级覆盖保存。
-  return draft.providers.find(provider => provider !== except && normalizeUrl(provider.baseUrl) === normalizeUrl(baseUrl));
+  return targetDraft.providers.find(provider => provider !== except && normalizeUrl(provider.baseUrl) === normalizeUrl(baseUrl));
 }
-function nextProviderId() {
-  const ids = new Set(draft.providers.map(provider => provider.id)); let id = 'provider'; let number = 2;
+function nextProviderId(targetDraft) {
+  const ids = new Set(targetDraft.providers.map(provider => provider.id)); let id = 'provider'; let number = 2;
   while (ids.has(id)) id = 'provider-' + number++;
   return id;
 }
@@ -83,14 +83,14 @@ function selectField(parent, id, title, value, options) {
   const label = node('label', title), select = node('select'); select.id = id; select.setAttribute('aria-label', title);
   options.forEach(item => { const option = node('option', item[1]); option.value = item[0]; select.append(option); }); select.value = value || options[0][0]; label.append(select); parent.append(label); return select;
 }
-function modelConnectionProvider() {
-  const selected = draft.providers.find(provider => provider.id === $('model-endpoint').value);
+function modelConnectionProvider(targetDraft) {
+  const selected = targetDraft.providers.find(provider => provider.id === $('model-endpoint').value);
   const url = normalizeUrl($('model-url').value);
-  return selected && normalizeUrl(selected.baseUrl) === url ? selected : findProvider($('model-url').value);
+  return selected && normalizeUrl(selected.baseUrl) === url ? selected : findProvider(targetDraft, $('model-url').value);
 }
 function updateModelKeyHint() {
   if (editing) return;
-  const provider = modelConnectionProvider();
+  const provider = modelConnectionProvider(draft);
   // 浏览器只显示已配置状态；真实 Key 和环境变量来源由服务端按 Provider ID 保留。
   const hasKey = provider && provider.clearApiKey !== true && (provider.apiKey || provider.apiKeyEnv || provider.hasApiKey);
   $('model-key').placeholder = hasKey ? '已配置，留空复用' : '输入服务商提供的 API Key';
@@ -142,7 +142,7 @@ function renderModelTypeMenu() {
   const select = $('model-type'), menu = $('model-type-menu');
   menu.replaceChildren();
   modelTypeOptions().forEach(option => {
-    const item = button(option.textContent, () => { $('model-type').value = option.value; syncModelTypeDisplay(); closeModelTypeMenu(); renderModelTypeMenu(); }, 'protocol-picker-option');
+    const item = button(option.textContent, () => { $('model-type').value = option.value; syncModelTypeDisplay(); invalidateModelTest(); closeModelTypeMenu(); renderModelTypeMenu(); }, 'protocol-picker-option');
     item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.value === select.value));
     menu.append(item);
   });
@@ -167,7 +167,7 @@ function selectModelEndpoint() {
   // 换地址时清空新输入的 Key，防止跨供应商误用；存量 Key 不进入表单。
   $('model-key').value = ''; $('clear-key').checked = false;
   $('model-type').value = provider && provider.type ? provider.type : 'openai-chat';
-  syncModelTypeDisplay(); closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
+  syncModelTypeDisplay(); invalidateModelTest(); closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
   if (!provider) $('model-url').focus();
 }
 function openModelDialog(entry) {
@@ -190,9 +190,10 @@ function openModelDialog(entry) {
   $('model-vision').value = model && model.vision !== undefined ? String(model.vision) : '';
   $('clear-key').checked = false;
   $('model-more').open = false;
+  invalidateModelTest();
   $('model-dialog').showModal();
 }
-function closeModelDialog() { editing = null; $('model-dialog').close(); }
+function closeModelDialog() { editing = null; invalidateModelTest(); $('model-dialog').close(); }
 function openProviderDialog(provider) {
   editing = { provider };
   $('provider-dialog-title').textContent = '编辑供应商';
@@ -208,9 +209,10 @@ function openProviderDialog(provider) {
   $('provider-dialog').showModal();
 }
 function closeProviderDialog() { editing = null; $('provider-dialog').close(); }
-function saveProviderDialog(event) {
+async function saveProviderDialog(event) {
   event.preventDefault();
-  const provider = editing && editing.provider;
+  if (busy) return;
+  const before = structuredClone(draft), provider = editing && editing.provider;
   const id = $('provider-edit-id').value.trim(), name = $('provider-edit-name').value.trim();
   const url = $('provider-edit-url').value.trim(), type = $('provider-edit-type').value;
   if (!provider || !id || !url || !type) { status('供应商 ID、接口地址和协议不能为空。', true); return; }
@@ -223,25 +225,46 @@ function saveProviderDialog(event) {
   const key = $('provider-edit-key').value;
   if (key) { provider.apiKey = key; delete provider.clearApiKey; }
   if (draft.provider === oldId) draft.provider = id;
-  markDirty(); closeProviderDialog(); render();
+  const candidate = (provider.models || []).find(model => model.enabled !== false) || (provider.models || [])[0];
+  const saved = await save();
+  if (saved) closeProviderDialog();
+  else { draft = before; render(); }
 }
 function readOptionalNumber(id) { const value = $(id).value.trim(); return value ? Number(value) : undefined; }
 function assignOptional(object, key, value) { if (value === undefined || value === '') delete object[key]; else object[key] = value; }
-function saveModelDialog(event) {
-  event.preventDefault();
+function modelDialogFingerprint() {
+  return JSON.stringify([
+    $('model-id').value.trim(), $('model-url').value.trim(), $('model-key').value,
+    $('model-type').value, $('model-name').value.trim(), $('model-context').value.trim(),
+    $('model-output').value.trim(), $('model-tool').value, $('model-vision').value,
+    $('clear-key').checked,
+  ]);
+}
+function invalidateModelTest() {
+  modelTestCandidate = null;
+  modelTestFingerprint = '';
+  const submit = $('model-submit');
+  if (submit) submit.disabled = true;
+}
+function applyModelDialogDraft(candidateDraft) {
   const modelId = $('model-id').value.trim(), baseUrl = $('model-url').value.trim(), type = $('model-type').value, key = $('model-key').value;
-  if (!modelId || !baseUrl || !type) { status('模型名、接口地址和协议不能为空。', true); return; }
-  let provider = editing ? editing.provider : null;
+  if (!modelId || !baseUrl || !type) {
+    const message = '模型名、接口地址和协议不能为空。';
+    $('model-dialog-help').textContent = message; status(message, true); return null;
+  }
+  const editingProviderId = editing && editing.provider && editing.provider.id;
+  const editingModelId = editing && editing.model && editing.model.id;
+  let provider = editingProviderId ? candidateDraft.providers.find(item => item.id === editingProviderId) : null;
   const oldProvider = provider;
-  const target = !editing ? modelConnectionProvider() : findProvider(baseUrl, editing.provider);
+  const oldModel = provider && editingModelId ? (provider.models || []).find(item => item.id === editingModelId) : null;
+  const target = !editing ? modelConnectionProvider(candidateDraft) : findProvider(candidateDraft, baseUrl, oldProvider);
   if (target) provider = target;
-  else if (!provider || (editing && (provider.type !== type || normalizeUrl(provider.baseUrl) !== normalizeUrl(baseUrl)))) provider = { id: nextProviderId(), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
-  if (!provider) provider = { id: nextProviderId(), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
-  const isNewProvider = !draft.providers.includes(provider);
+  else if (!provider || (editing && (provider.type !== type || normalizeUrl(provider.baseUrl) !== normalizeUrl(baseUrl)))) provider = { id: nextProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
+  if (!provider) provider = { id: nextProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
+  const isNewProvider = !candidateDraft.providers.includes(provider);
   // 复用已有 Provider 时保留它的默认协议；不同协议只记录在当前模型上。
   if (isNewProvider) { provider.type = type; provider.baseUrl = baseUrl; }
   provider.models ||= [];
-  const oldModel = editing ? editing.model : null;
   const model = oldModel || { id: modelId };
   model.id = modelId;
   if ($('model-name').value.trim()) model.name = $('model-name').value.trim(); else delete model.name;
@@ -257,16 +280,66 @@ function saveModelDialog(event) {
     if (!editing && !isNewProvider) { model.apiKey = key; delete model.apiKeyEnv; }
     else { provider.apiKey = key; delete provider.clearApiKey; delete model.apiKey; }
   }
-  if (editing && oldProvider !== provider) {
+  const wasDefault = Boolean(oldProvider && oldModel && candidateDraft.provider === oldProvider.id && candidateDraft.model === oldModel.id);
+  if (editing && oldProvider && oldProvider !== provider && oldModel) {
     oldProvider.models = (oldProvider.models || []).filter(item => item !== oldModel);
-    if (!oldProvider.models.length) draft.providers = draft.providers.filter(item => item !== oldProvider);
-    if (draft.provider === oldProvider.id && draft.model === oldModel.id) { draft.provider = provider.id; draft.model = model.id; }
+    if (!oldProvider.models.length) candidateDraft.providers = candidateDraft.providers.filter(item => item !== oldProvider);
+    if (wasDefault) { candidateDraft.provider = provider.id; candidateDraft.model = model.id; }
   }
-  if (!draft.providers.includes(provider)) draft.providers.push(provider);
+  if (!candidateDraft.providers.includes(provider)) candidateDraft.providers.push(provider);
   provider.models ||= [];
   if (!provider.models.includes(model)) provider.models.push(model);
-  if (model.enabled !== false && (!draft.provider || (editing && draft.provider === oldProvider.id && draft.model === oldModel.id))) { draft.provider = provider.id; draft.model = model.id; }
-  markDirty(); closeModelDialog(); render();
+  if (model.enabled !== false && (!candidateDraft.provider || wasDefault)) { candidateDraft.provider = provider.id; candidateDraft.model = model.id; }
+  return { provider, model };
+}
+async function testModelDialog() {
+  if (busy) return;
+  invalidateModelTest();
+  const candidate = structuredClone(draft), result = applyModelDialogDraft(candidate);
+  if (!result) return;
+  const fingerprint = modelDialogFingerprint();
+  busy = true;
+  $('model-test').disabled = true;
+  $('model-dialog-help').textContent = '正在测试连接，请稍候…';
+  status('正在测试连接…');
+  try {
+    const response = await api('test-draft', 'POST', {
+      revision: snapshot.revision,
+      config: candidate,
+      test: { provider: result.provider.id, model: result.model.id, confirm: true },
+    });
+    if (!response.ok) {
+      const message = response.message || '连接失败，请检查接口地址、模型和 API Key。';
+      $('model-dialog-help').textContent = '测试失败：' + message + ' 模型不会保存。';
+      status(message, true);
+      return;
+    }
+    modelTestCandidate = candidate;
+    modelTestFingerprint = fingerprint;
+    $('model-submit').disabled = false;
+    $('model-dialog-help').textContent = '测试连接成功，现在可以保存此模型。';
+    status(response.message || '连接测试成功。');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '连接测试失败，请检查配置。';
+    $('model-dialog-help').textContent = '测试失败：' + message + ' 模型不会保存。';
+    status(message, true);
+  } finally {
+    busy = false;
+    $('model-test').disabled = false;
+  }
+}
+async function saveModelDialog(event) {
+  event.preventDefault();
+  if (busy) return;
+  if (!modelTestCandidate || modelTestFingerprint !== modelDialogFingerprint()) {
+    const message = '请先点击“测试连接”，测试通过后才能保存模型。';
+    $('model-dialog-help').textContent = message; status(message, true); return;
+  }
+  const before = structuredClone(draft);
+  draft = structuredClone(modelTestCandidate);
+  const saved = await save();
+  if (saved) closeModelDialog();
+  else { draft = before; invalidateModelTest(); render(); }
 }
 function defaults() {
   const modelSelect = $('default-model'); modelSelect.replaceChildren();
@@ -276,9 +349,10 @@ function defaults() {
   entries.forEach(entry => { const option = node('option', displayName(entry, counts)); option.value = JSON.stringify([entry.provider.id, entry.model.id]); modelSelect.append(option); });
   const current = draft.provider && draft.model ? JSON.stringify([draft.provider, draft.model]) : '';
   modelSelect.value = entries.some(entry => JSON.stringify([entry.provider.id, entry.model.id]) === current) ? current : '';
-  modelSelect.onchange = () => { if (!modelSelect.value) { delete draft.provider; delete draft.model; } else { const selected = JSON.parse(modelSelect.value); draft.provider = selected[0]; draft.model = selected[1]; } markDirty(); };
+  modelSelect.onchange = async () => { const before = structuredClone(draft); if (!modelSelect.value) { delete draft.provider; delete draft.model; } else { const selected = JSON.parse(modelSelect.value); draft.provider = selected[0]; draft.model = selected[1]; } render(); if (!await save()) { draft = before; render(); } };
 }
-function toggleModel(entry, enabled) {
+async function toggleModel(entry, enabled) {
+  const before = structuredClone(draft);
   if (enabled) delete entry.model.enabled;
   else entry.model.enabled = false;
   if (!enabled && draft.provider === entry.provider.id && draft.model === entry.model.id) {
@@ -287,13 +361,14 @@ function toggleModel(entry, enabled) {
     if (fallback) { draft.provider = fallback.provider.id; draft.model = fallback.model.id; }
     else { delete draft.provider; delete draft.model; }
   }
-  markDirty(); render();
-  status('“' + modelName(entry) + '”已' + (enabled ? '启用' : '停用') + '。点击“保存配置”，重启 ComeCode 后生效。');
+  render();
+  if (!await save()) { draft = before; render(); return; }
+  status('“' + modelName(entry) + '”已' + (enabled ? '启用' : '停用') + '，已保存。');
 }
 function modelSwitch(entry) {
   const label = node('label', undefined, 'model-toggle'), input = node('input'), track = node('span', undefined, 'switch-track'), text = node('span', entry.model.enabled === false ? '已停用' : '已启用', 'model-toggle-label');
   input.type = 'checkbox'; input.id = 'model-toggle-' + encodeURIComponent(JSON.stringify([entry.provider.id, entry.model.id])); input.setAttribute('role', 'switch'); input.checked = entry.model.enabled !== false; input.setAttribute('aria-label', '启用模型 ' + modelName(entry)); input.disabled = busy;
-  input.onchange = () => { toggleModel(entry, input.checked); $(input.id).focus(); };
+  input.onchange = async () => { await toggleModel(entry, input.checked); $(input.id).focus(); };
   label.append(input, track, text); return label;
 }
 function render() {
@@ -334,30 +409,36 @@ function render() {
   if (snapshot.effective.paths.project) sources.append(node('p', '项目覆盖：' + snapshot.effective.paths.project + '（只读，可能覆盖此页设置）'));
   sources.append(node('p', '优先级：CLI 参数 > 环境变量 > 项目配置 > 用户配置 > 旧配置 / 内置默认'));
   sources.append(node('pre', JSON.stringify(snapshot.effective, null, 2)));
-  $('save').disabled = Boolean(snapshot.errors.length) || busy;
 }
 
 async function deleteModel(entry) {
-  if (!await confirmAction('删除模型', '删除“' + modelName(entry) + '”？保存后才会真正生效。')) return;
+  if (!await confirmAction('删除模型', '删除“' + modelName(entry) + '”？此操作会立即保存。')) return;
+  const before = structuredClone(draft);
   entry.provider.models = (entry.provider.models || []).filter(model => model !== entry.model);
   if (!entry.provider.models.length) draft.providers = draft.providers.filter(provider => provider !== entry.provider);
   if (draft.provider === entry.provider.id && draft.model === entry.model.id) { delete draft.provider; delete draft.model; }
-  markDirty(); render();
+  render();
+  if (!await save()) { draft = before; render(); }
 }
 async function load() {
-  try { snapshot = await api('config'); draft = editableDraftFromEffective(); dirty = false; render(); status(snapshot.errors.length ? '配置有错误，未允许覆盖：' + snapshot.errors.join('；') : '配置已加载。修改后保存，重启 ComeCode 生效。', Boolean(snapshot.errors.length)); }
+  try { snapshot = await api('config'); draft = editableDraftFromEffective(); render(); status(snapshot.errors.length ? '配置有错误，未允许覆盖：' + snapshot.errors.join('；') : '配置已加载。', Boolean(snapshot.errors.length)); }
   catch(error) { status(error.message, true); }
 }
 async function save() {
-  if (busy) return;
-  let migrate = false; if (snapshot.requiresMigration) { migrate = await confirmAction('迁移为 JSON', '将保存为 JSON，原配置文件会保留并备份。注释不会迁入新文件。是否继续？'); if (!migrate) return; }
-  busy = true; $('save').disabled = true; document.querySelectorAll('.model-toggle input').forEach(input => { input.disabled = true; });
-  try { snapshot = await api('config', 'PUT', { revision: snapshot.revision, migrate, config: draft }); draft = structuredClone(snapshot.config); dirty = false; render(); status('已保存。请重启 ComeCode 使用新设置。' + (snapshot.backup ? '\\n原配置已备份。' : '')); }
-  catch(error) { status(error.message, true); }
-  finally { busy = false; $('save').disabled = Boolean(snapshot.errors && snapshot.errors.length); document.querySelectorAll('.model-toggle input').forEach(input => { input.disabled = false; }); }
+  if (busy) return false;
+  let migrate = false;
+  if (snapshot.requiresMigration) { migrate = await confirmAction('迁移为 JSON', '将保存为 JSON，原配置文件会保留并备份。注释不会迁入新文件。是否继续？'); if (!migrate) return false; }
+  busy = true; document.querySelectorAll('.model-toggle input').forEach(input => { input.disabled = true; });
+  try {
+    const body = { revision: snapshot.revision, migrate, config: draft };
+    snapshot = await api('config', 'PUT', body); draft = structuredClone(snapshot.config); render();
+    status('已保存。' + (snapshot.backup ? '原配置已备份。' : ''));
+    return true;
+  } catch(error) { status('保存失败：' + error.message, true); return false; }
+  finally { busy = false; document.querySelectorAll('.model-toggle input').forEach(input => { input.disabled = false; }); }
 }
+
 async function test(entry) {
-  if (dirty) { status('请先保存修改，再测试已保存的模型。', true); return; }
   if (!await confirmAction('测试模型连接', '将向 ' + modelName(entry) + ' 发起一次最小请求，服务商可能收费。是否继续？')) return;
   status('正在测试连接…');
   try { const result = await api('test', 'POST', { provider: entry.provider.id, model: entry.model.id, confirm: true }); status(result.message, !result.ok); }
@@ -376,12 +457,13 @@ window.addEventListener('click', event => {
 window.addEventListener('keydown', event => { if (event.key === 'Escape') { closeModelEndpointMenu(); closeModelTypeMenu(); } });
 renderModelTypeMenu(); syncModelTypeDisplay();
 $('model-form').onsubmit = saveModelDialog;
+$('model-test').onclick = testModelDialog;
+$('model-form').addEventListener('input', invalidateModelTest);
+$('model-form').addEventListener('change', invalidateModelTest);
 $('model-cancel').onclick = closeModelDialog;
 $('provider-form').onsubmit = saveProviderDialog;
 $('provider-cancel').onclick = closeProviderDialog;
 $('add-model').onclick = () => openModelDialog(null);
-$('save').onclick = save;
-$('reload').onclick = async () => { if (dirty && !await confirmAction('放弃修改', '重新加载会丢弃未保存修改。是否继续？')) return; await load(); };
-window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
-if (!token) { status('请从终端运行 comecode admin 打开授权页面。', true); $('save').disabled = true; $('add-model').disabled = true; } else load();
+$('reload').onclick = load;
+if (!token) { status('请从终端运行 comecode admin 打开授权页面。', true); $('add-model').disabled = true; } else load();
 `;

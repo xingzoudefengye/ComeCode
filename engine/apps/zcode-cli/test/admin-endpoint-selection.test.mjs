@@ -5,21 +5,22 @@ import { ADMIN_SCRIPT } from "../packages/cli/src/admin/client.ts";
 import { ADMIN_STYLE } from "../packages/cli/src/admin/assets.ts";
 
 // 最小 DOM 覆盖表单事件与草稿，不向模型服务发起请求。
-function form(config, renderPage = false) {
+function form(config, renderPage = false, fetchImpl) {
   const elements = new Map(), windowHandlers = new Map();
   const element = tag => ({ tag, attributes: {}, value: "", hidden: false, checked: false, options: [],
     append(...items) { this.options.push(...items); }, replaceChildren() { this.options = []; },
-    setAttribute(name, value) { this.attributes[name] = value; }, showModal() { this.open = true; }, close() {}, focus() {},
+    setAttribute(name, value) { this.attributes[name] = value; }, addEventListener() {}, showModal() { this.open = true; }, close() {}, focus() {},
   });
   const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const context = vm.createContext({ URL, URLSearchParams, structuredClone,
     location: { hash: "", pathname: "/" }, sessionStorage: { getItem: () => null },
-    document: { getElementById: get, createElement: element, createElementNS: (_namespace, tag) => element(tag) }, window: { addEventListener(type, handler) { windowHandlers.set(type, handler); } },
+    document: { getElementById: get, createElement: element, createElementNS: (_namespace, tag) => element(tag), querySelectorAll: () => [] }, window: { addEventListener(type, handler) { windowHandlers.set(type, handler); } }, fetch: fetchImpl || (async (url, options) => { const body = JSON.parse(options.body); return { ok: true, async json() { return url.endsWith('/api/test-draft') ? { ok: true, message: '连接成功' } : { revision: "saved", source: "fixture", target: "fixture", requiresMigration: false, config: body.config, effective: { paths: {} }, errors: [] }; } }; }),
   });
   new vm.Script(ADMIN_SCRIPT).runInContext(context);
   const run = code => new vm.Script(code).runInContext(context);
   run('draft = ' + JSON.stringify(config) + ';');
-  if (renderPage) run('snapshot = { source: "fixture", target: "fixture", effective: { paths: {} }, errors: [] }; render();');
+  run('snapshot = { source: "fixture", target: "fixture", revision: "fixture", requiresMigration: false, effective: { paths: {} }, errors: [] };');
+  if (renderPage) run('render();');
   else run('render = () => {}; openModelDialog(null);');
   return { get, run, dispatch(type, event) { windowHandlers.get(type)?.(event); }, draft: () => JSON.parse(run('JSON.stringify(draft)')) };
 }
@@ -28,9 +29,39 @@ const providers = () => ({ providers: [
   { id: "second", name: "接口 B", type: "openai-responses", baseUrl: "https://b.example/v1", apiKeyEnv: "FIXTURE_API_KEY", models: [{ id: "old-b" }] },
 ] });
 function select(f, id) { f.get("model-endpoint").value = id; f.get("model-endpoint").onchange(); }
-function add(f, id) { f.get("model-id").value = id; f.run("saveModelDialog({ preventDefault() {} });"); }
+async function add(f, id) { f.get("model-id").value = id; await f.run("testModelDialog();"); await f.run("saveModelDialog({ preventDefault() {} });"); }
 
-test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型追加到所选供应商", () => {
+test("测试连接失败时保存按钮保持置灰，模型不会加入列表", async () => {
+  const f = form(providers(), false, async (_url, options) => ({ ok: true, async json() {
+    assert.match(options.body, /failed-model/u);
+    return { ok: false, message: "连接失败（HTTP 401），请检查地址、模型和密钥" };
+  } }));
+  assert.equal(f.get("model-submit").disabled, true);
+  f.get("model-id").value = "failed-model";
+  f.get("model-url").value = "https://failed.example/v1";
+  await f.run("testModelDialog();");
+  assert.equal(f.get("model-submit").disabled, true);
+  assert.equal(f.draft().providers[0].models.some(model => model.id === "failed-model"), false);
+  assert.match(f.get("model-dialog-help").textContent, /测试失败.*HTTP 401.*不会保存/u);
+  await f.run("saveModelDialog({ preventDefault() {} });");
+  assert.equal(f.draft().providers[0].models.some(model => model.id === "failed-model"), false);
+  assert.equal(f.get("model-dialog").open, true);
+});
+
+test("测试成功后才能保存，修改表单会重新置灰保存按钮", async () => {
+  const f = form(providers());
+  f.get("model-id").value = "tested-model";
+  f.get("model-url").value = "https://tested.example/v1";
+  await f.run("testModelDialog();");
+  assert.equal(f.get("model-submit").disabled, false);
+  f.get("model-id").value = "changed-model";
+  f.run("invalidateModelTest();");
+  assert.equal(f.get("model-submit").disabled, true);
+  await f.run("saveModelDialog({ preventDefault() {} });");
+  assert.equal(f.draft().providers[0].models.some(model => model.id === "changed-model"), false);
+});
+
+test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型追加到所选供应商", async () => {
   const f = form(providers());
   assert.equal(f.get("model-endpoint").hidden, true);
   assert.equal(f.get("model-endpoint-toggle").hidden, false);
@@ -45,13 +76,13 @@ test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型�
   assert.equal(f.get("model-type").value, "anthropic");
   assert.equal(f.get("model-key").value, "");
   assert.match(f.get("model-key-hint").textContent, /复用.*接口 A/);
-  add(f, "new-model");
+  await add(f, "new-model");
   assert.equal(f.draft().providers.length, 2);
   assert.equal(f.draft().providers[0].models[1].id, "new-model");
   assert.equal(f.draft().providers[0].models[1].apiKey, undefined);
 });
 
-test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", () => {
+test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", async () => {
   const f = form(providers());
   select(f, "first"); f.get("model-key").value = "unsaved-key";
   select(f, "second");
@@ -59,7 +90,7 @@ test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", (
   assert.equal(f.get("model-type").value, "openai-responses");
   f.get("model-type").value = "openai-chat"; f.get("model-type").onchange();
   assert.equal(f.get("model-type-display").value, "Chat Completions（兼容）");
-  add(f, "compatible-model");
+  await add(f, "compatible-model");
   assert.equal(f.draft().providers[1].models[1].type, "openai-chat");
   f.run("openModelDialog(null)"); select(f, "second"); f.get("model-key").value = "other-unsaved-key";
   select(f, "");
@@ -70,12 +101,12 @@ test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", (
   f.get("model-url").value = "https://new.example/v1"; f.get("model-url").oninput();
   assert.equal(f.get("model-endpoint").value, "");
   f.get("model-key").value = "new-service-key";
-  add(f, "manual-model");
+  await add(f, "manual-model");
   assert.equal(f.draft().providers[2].baseUrl, "https://new.example/v1");
   assert.equal(f.draft().providers[2].apiKey, "new-service-key");
 });
 
-test("没有地址时保持手填；仅有模型专用 Key 时不误报可复用，手填已有 URL 仍能复用", () => {
+test("没有地址时保持手填；仅有模型专用 Key 时不误报可复用，手填已有 URL 仍能复用", async () => {
   const empty = form({ providers: [] });
   assert.equal(empty.get("model-endpoint").hidden, true);
   assert.equal(empty.get("model-endpoint-toggle").hidden, true);
@@ -88,17 +119,17 @@ test("没有地址时保持手填；仅有模型专用 Key 时不误报可复用
   assert.match(f.get("model-key-hint").textContent, /复用.*接口 B/);
 });
 
-test("复用已有地址时新 Key 仅覆盖新增模型，不修改供应商共享 Key", () => {
+test("复用已有地址时新 Key 仅覆盖新增模型，不修改供应商共享 Key", async () => {
   const config = providers(); config.providers[0].apiKey = "shared-key";
   const f = form(config); select(f, "first"); f.get("model-key").value = "new-model-key";
-  add(f, "own-key-model");
+  await add(f, "own-key-model");
   assert.equal(f.draft().providers[0].apiKey, "shared-key");
   assert.equal(f.draft().providers[0].models[1].apiKey, "new-model-key");
 });
 
-test("同地址不同供应商按下拉 ID 选择，取消/重开不保留上次选择", () => {
+test("同地址不同供应商按下拉 ID 选择，取消/重开不保留上次选择", async () => {
   const config = providers(); config.providers[1].baseUrl = config.providers[0].baseUrl;
-  const f = form(config); select(f, "second"); add(f, "from-second");
+  const f = form(config); select(f, "second"); await add(f, "from-second");
   assert.equal(f.draft().providers[0].models.length, 1);
   assert.equal(f.draft().providers[1].models[1].id, "from-second");
   select(f, "first"); f.run("closeModelDialog(); openModelDialog(null);");

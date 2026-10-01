@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import vm from "node:vm";
-import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:http";
 import { createProviderConfigEditor, ConfigEditError } from "../packages/adapters/dist/config/provider-config-editor.js";
 import { materializeUnifiedConfig, resolveUnifiedConfig } from "../packages/adapters/dist/config/provider-config.js";
 import { startAdminServer } from "../packages/cli/src/admin/server.ts";
@@ -124,12 +125,33 @@ test("HTTP 鉴权、同源、Host、CSP、脱敏、体积限制和保存",async 
   const wrongHost = await new Promise(resolve => { const req=request(server.origin+'/api/config',{headers:{...headers,Host:'evil.test'}},res=>{res.resume();resolve(res.statusCode);});req.end(); });
   assert.equal(wrongHost,403);
   const response=await fetch(server.origin+'/api/config',{headers});const before=await response.json();assert.equal(response.status,200);assert.doesNotMatch(JSON.stringify(before),/private-admin-test-key|private-model-key/u);
-  const html=await fetch(server.origin);const htmlText=await html.text();assert.match(html.headers.get('content-security-policy'),/frame-ancestors 'none'/u);assert.equal(html.headers.get('cache-control'),'no-store');assert.match(htmlText,/模型列表/u);assert.match(htmlText,/编辑供应商/u);
+  const html=await fetch(server.origin);const htmlText=await html.text();assert.match(html.headers.get('content-security-policy'),/frame-ancestors 'none'/u);assert.equal(html.headers.get('cache-control'),'no-store');assert.match(htmlText,/模型列表/u);assert.match(htmlText,/编辑供应商/u);assert.equal(htmlText.includes('id="save"'), false);assert.match(htmlText,/测试连接/u);assert.doesNotMatch(htmlText,/保存后重启 ComeCode 生效/u);
   assert.equal((await fetch(server.origin+'/api/config',{method:'PUT',headers,body:'{}'})).status,415);
   assert.equal((await fetch(server.origin+'/api/config',{method:'PUT',headers:{...headers,'Content-Type':'application/json'},body:'x'.repeat(270000)})).status,413);
   const config=before.config;config.providers[0].models.push({id:'model-c',contextWindow:128000});
   assert.equal((await fetch(server.origin+'/api/config',{method:'PUT',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({revision:before.revision,config})})).status,200);
   assert.equal((await fetch(server.origin+'/api/missing',{headers})).status,404);
+});
+test("模型保存前连接测试失败不会写入配置文件", async t => {
+  const f = await fixture(t);
+  const remote = createServer((_request, response) => { response.writeHead(401); response.end("private-remote-response"); });
+  await new Promise((resolve, reject) => { remote.once("error", reject); remote.listen(0, "127.0.0.1", resolve); });
+  t.after(() => remote.close());
+  const remoteUrl = `http://127.0.0.1:${remote.address().port}/v1`;
+  const editor = createProviderConfigEditor(f), before = await editor.read();
+  const config = structuredClone(before.config);
+  config.providers[0].baseUrl = remoteUrl;
+  config.providers[0].models.push({ id: "failed-save-model" });
+  const admin = await startAdminServer(f); t.after(() => admin.close());
+  const token = new URLSearchParams(new URL(admin.url).hash.slice(1)).get("token");
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const response = await fetch(admin.origin + "/api/test-draft", { method: "POST", headers, body: JSON.stringify({ revision: before.revision, config, test: { provider: "api", model: "failed-save-model", confirm: true } }) });
+  assert.equal(response.status, 200);
+  const result = await response.json();
+  assert.equal(result.ok, false);
+  assert.match(result.message, /HTTP 401/u);
+  const saved = JSON.parse(await readFile(join(f.dataRoot, "config.json"), "utf8"));
+  assert.equal(saved.providers[0].models.some(model => model.id === "failed-save-model"), false);
 });
 test("三种协议连接测试沿用有效模型与凭据，失败不回显正文且必须确认",async t=>{
   const f=await fixture(t),doc=document();doc.providers[0].models.push({id:'responses',type:'openai-responses'});await writeFile(join(f.dataRoot,'config.json'),JSON.stringify(doc));const config=await resolveUnifiedConfig(f);

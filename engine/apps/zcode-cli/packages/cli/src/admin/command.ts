@@ -18,7 +18,7 @@ async function open(ctx: RunContext, env: CliEnv, cwd: string, autoOpen: boolean
   const dotenv = loadCliDotenv({ cwd, env });
   if (dotenv.error) throw new Error("无法读取环境配置，请检查 .env");
   const server = await startAdminServer({ cwd, env, port: flags.port });
-  ctx.stderr.write(`ComeCode 模型管理：${server.url}\n保存后重启 ComeCode 生效。\n`);
+  ctx.stderr.write(`ComeCode 模型管理：${server.url}\n`);
   if (autoOpen && !flags["no-browser"]) {
     const result = await openUrlInBrowser(server.url);
     if (!result.opened) ctx.stderr.write("无法自动打开浏览器，请复制上方链接。\n");

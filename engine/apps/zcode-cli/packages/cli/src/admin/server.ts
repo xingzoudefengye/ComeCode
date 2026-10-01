@@ -25,6 +25,15 @@ export async function startAdminServer(options: AdminServerOptions = {}) {
         if (incoming.length !== expected.length || !timingSafeEqual(incoming, expected)) throw new ConfigEditError(401, "管理页面授权已失效，请从终端重新打开链接");
         if (request.method === "GET" && url.pathname === "/api/config") return json(response, 200, await editor.read());
         if (request.method === "PUT" && url.pathname === "/api/config") return json(response, 200, await editor.save(await readBody(request)));
+        if (request.method === "POST" && url.pathname === "/api/test-draft") {
+          const body = await readBody(request);
+          if (!body || typeof body !== "object" || Array.isArray(body)) throw new ConfigEditError(400, "测试数据格式不正确");
+          const input = body as Record<string, unknown>;
+          const test = input.test;
+          delete input.test;
+          const preview = await editor.preview(input);
+          return json(response, 200, await testProviderConnection(test, preview.resolved));
+        }
         if (request.method === "POST" && url.pathname === "/api/test") return json(response, 200, await testProviderConnection(await readBody(request), await resolveUnifiedConfig(options)));
         throw new ConfigEditError(404, "接口不存在");
       }
