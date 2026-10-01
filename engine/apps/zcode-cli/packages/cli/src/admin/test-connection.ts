@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ConfigEditError, type ResolvedUnifiedConfig } from "@zcode/adapters/config";
 const inputSchema = z.object({ provider: z.string().min(1), model: z.string().min(1), confirm: z.literal(true) }).strict();
 
-/** 只测试已保存的有效连接；不给网页任意 URL 代理能力，不回传服务商响应正文。 */
+/** 只测试统一解析后的有效连接；不给网页任意 URL 代理能力，不回传服务商响应正文。 */
 export async function testProviderConnection(input: unknown, config: ResolvedUnifiedConfig, request: typeof fetch = fetch, timeoutMs = 15000) {
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) throw new ConfigEditError(400, "测试连接需明确确认，并选择已保存模型");
