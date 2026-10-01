@@ -38,3 +38,10 @@
 - CLI 全量 106/106 测试通过；TUI typecheck、改动源码 oxlint（0 warning / 0 error）、TUI 与 CLI 构建、comecode --help 通过。
 - engine 根 typecheck 通过，根 lint 0 error / 70 个既有 warning；architecture changed 0 violation；git diff --check 通过。
 - 验收使用原生测试 renderer；用户实际终端视觉效果仍需重启 ComeCode 后确认。
+
+## Markdown 正文稳定渲染（2026-10-02）
+
+- 同一主题下复用同一个原生 `SyntaxStyle` 实例；无关状态刷新不重新启动历史 Markdown 正文的异步高亮，避免文字短暂消失后重建。
+- 流式正文内容变化仍正常触发必要的高亮更新；切换深色/浅色主题时重新创建对应主题样式。
+- 工具调用卡片继续沿用现有渲染路径，不改变工具状态、布局和交互。
+- 验收覆盖父级重复渲染后样式身份稳定，并确认正文仍可见。

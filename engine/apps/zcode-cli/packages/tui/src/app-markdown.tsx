@@ -36,11 +36,11 @@ export function MarkdownText({
 }: MarkdownTextProps): React.ReactElement {
   const theme = activeTuiTheme();
   const textColor = foregroundColor ?? theme.markdownText;
+  // 保持同一主题下的原生高亮样式身份稳定，避免无关状态刷新重新触发异步高亮。
+  const syntaxStyle = React.useMemo(() => createMarkdownSyntaxStyle(theme), [theme]);
   if (!content) {
     return h("text", { style: { fg: textColor } }, "");
   }
-
-  const syntaxStyle = createMarkdownSyntaxStyle(theme);
   if (mode === "markdown") {
     if (syntaxStyle) {
       return h("markdown", {

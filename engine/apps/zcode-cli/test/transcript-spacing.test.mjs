@@ -100,6 +100,24 @@ test("Markdown 段落保留块间距，不修改原文并保留代码、列表�
   assert.ok(row(lines, "table-row") > row(lines, "item-two"));
 });
 
+test("无关父级刷新不重新创建 Markdown 高亮样式", async (t) => {
+  setActiveTuiThemeMode("dark");
+  const view = await render(
+    t,
+    React.createElement(MarkdownText, { content: "稳定正文", streaming: false }),
+  );
+  const firstNode = view.renderer.root.getChildren()[0];
+  const firstSyntaxStyle = firstNode.syntaxStyle;
+  assert.ok(firstSyntaxStyle);
+
+  await view.update(
+    React.createElement(MarkdownText, { content: "稳定正文", streaming: false }),
+  );
+  const secondNode = view.renderer.root.getChildren()[0];
+  assert.equal(secondNode.syntaxStyle, firstSyntaxStyle);
+  assert.ok(view.captureCharFrame().includes("稳定正文"));
+});
+
 test("流式文本更新不重复增加消息分隔，完成时与流式布局一致", async (t) => {
   const messages = [
     { role: "user", content: "stream-user" },
