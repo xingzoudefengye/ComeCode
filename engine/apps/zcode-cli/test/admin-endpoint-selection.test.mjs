@@ -32,8 +32,11 @@ function add(f, id) { f.get("model-id").value = id; f.run("saveModelDialog({ pre
 
 test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型追加到所选供应商", () => {
   const f = form(providers());
-  assert.equal(f.get("model-endpoint").hidden, false);
+  assert.equal(f.get("model-endpoint").hidden, true);
+  assert.equal(f.get("model-endpoint-toggle").hidden, false);
+  assert.equal(f.get("model-endpoint-toggle").textContent, undefined);
   assert.deepEqual(f.get("model-endpoint").options.map(option => option.value), ["", "first", "second"]);
+  assert.deepEqual(f.get("model-endpoint-menu").options.map(option => option.textContent), ["手动填写", "接口 A · https://a.example/v1", "接口 B · https://b.example/v1"]);
   select(f, "first");
   assert.equal(f.get("model-url").value, "https://a.example/v1");
   assert.equal(f.get("model-url").hidden, false);
@@ -71,6 +74,7 @@ test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", (
 test("没有地址时保持手填；仅有模型专用 Key 时不误报可复用，手填已有 URL 仍能复用", () => {
   const empty = form({ providers: [] });
   assert.equal(empty.get("model-endpoint").hidden, true);
+  assert.equal(empty.get("model-endpoint-toggle").hidden, true);
   assert.equal(empty.get("model-url").hidden, false);
   const config = providers(); delete config.providers[0].hasApiKey;
   config.providers[0].models[0].hasApiKey = true;
@@ -105,8 +109,9 @@ test("供应商名称框与齿轮保持同高并垂直居中", () => {
   assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*height:28px/);
   assert.match(ADMIN_STYLE, /\.provider-edit\{[^}]*height:28px/);
   assert.match(ADMIN_STYLE, /\.endpoint-picker\{position:relative\}/);
-  assert.match(ADMIN_STYLE, /\.endpoint-picker select\{[^}]*position:absolute/);
-  assert.match(ADMIN_STYLE, /\.endpoint-picker select\{[^}]*width:25%/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle\{[^}]*width:38px/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle:hover\{background:transparent/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker-menu\{[^}]*left:0[^}]*right:0/);
 });
 
 test("供应商名称同行紧随可访问齿轮图标，点击沿用编辑弹框", () => {
