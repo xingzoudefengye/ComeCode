@@ -150,7 +150,7 @@ export class ContextBuilder {
 
       // Memory
       if (this.config.memoryRoot) {
-        const memorySection = buildMemorySection(this.config.memoryRoot);
+        const memorySection = buildMemorySection(this.config.memoryRoot, this.config.memoryIndexContent);
         if (memorySection) {
           sections.push(memorySection);
         }
@@ -188,9 +188,8 @@ export class ContextBuilder {
 
     // 5. Meta user context: workspace instructions/project memory first, date second.
     const requestUserContextSection = buildRequestUserContextSection({
+      // 项目记忆已经注入稳定 system section，避免在 meta user 中重复发送。
       userInstructions: this.config.userInstructions,
-      memoryIndexContent: this.config.memoryIndexContent,
-      memoryRoot: this.config.memoryRoot,
     });
     if (requestUserContextSection) {
       sections.push(requestUserContextSection);

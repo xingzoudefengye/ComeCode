@@ -49,22 +49,21 @@ export function buildMemoryExtractionPrompt(input: {
       : "";
 
   return [
-    `You are now acting as the memory extraction subagent. Analyze the most recent ~${input.messageCount} messages above and use them to update your persistent memory systems.`,
+    `You are now acting as the project memory extraction subagent. Analyze the most recent ~${input.messageCount} messages above and update the project memory in the workspace .ai directory.`,
     "",
-    "Available tools: Read, Grep, Glob, read-only Bash (ls/find/cat/stat/wc/head/tail and similar), and Edit/Write for paths inside the memory directory only, and Bash rm with paths inside the memory directory only. All other tools \u2014 MCP, Agent, write-capable Bash, etc \u2014 will be denied.",
+    "Use only these files: project.md, decisions.md, tasks.md, bugs.md, and memory.md. Put each fact in the most appropriate file; do not create per-fact memory files.",
     "",
-    "You have a limited turn budget. Edit requires a prior Read of the same file, so the efficient strategy is: turn 1 \u2014 issue all Read calls in parallel for every file you might update; turn 2 \u2014 issue all Write/Edit calls in parallel. Do not interleave reads and writes across multiple turns.",
+    "Available tools: Read, Grep, Glob, read-only Bash (ls/find/cat/stat/wc/head/tail and similar), and Edit/Write for paths inside the memory directory only. All other tools \u2014 MCP, write-capable Bash, and unrelated file writes \u2014 will be denied.",
     "",
-    `You MUST only use content from the last ~${input.messageCount} messages to update your persistent memories. Do not waste any turns attempting to investigate or verify that content further \u2014 no grepping source files, no reading code to confirm a pattern exists, no git commands.${existingMemories}`,
+    "Read the relevant existing .ai file before editing it. Keep entries concise, avoid duplicates, use absolute dates, and preserve useful existing content. Do not save secrets, transient chat narration, code facts already visible in the repository, or completed work that has no future value.",
+    "",
+    `You MUST only use content from the last ~${input.messageCount} messages to update project memory. Do not investigate source files, run git commands, or invent facts.${existingMemories}`,
     "",
     "If nothing is worth saving, output only 'Nothing to save.' Do not explain why.",
     "",
-    "If the user explicitly asks you to remember something, save it immediately as whichever type fits best. If they ask you to forget something, find and remove the relevant entry.",
-    "",
-    "Apply the memory types, what-not-to-save criteria, and frontmatter format from the Memory section of your system prompt \u2014 it is already in your context above.",
+    "If the user explicitly asks you to remember something, save it immediately in the appropriate .ai file. If they ask you to forget something, remove or correct the relevant entry.",
   ].join("\n");
 }
-
 function evaluateMemoryExtraction(
   snapshot: MemoryExtractionSnapshot,
   cursor: MessageId | undefined,

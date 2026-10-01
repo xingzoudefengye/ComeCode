@@ -1,5 +1,3 @@
-import { join } from "node:path";
-
 import {
   traceContextToLogContext,
   createContextBuilder,
@@ -16,7 +14,7 @@ import type {
 } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { ensureMemoryDirectoryExists } from "../../memory/directory.js";
-import { formatProjectMemoryIndexContent } from "../../memory/index-content.js";
+import { formatProjectMemorySnapshot, projectMemoryFilePath, PROJECT_MEMORY_FILES, type ProjectMemoryFileName } from "../../memory/project-files.js";
 import {
   createReadFileStateKey,
   normalizeReadFileStateMtimeMs,
@@ -171,27 +169,28 @@ async function loadProjectMemoryIndexContent(
 ): Promise<string | undefined> {
   const fileSystemPort = runtime.fileSystemPort;
   if (!fileSystemPort || !memoryRoot) return undefined;
-  const indexPath = join(memoryRoot, "MEMORY.md");
-  try {
-    const read = await fileSystemPort.readTextFile({ path: indexPath });
-    const formattedContent = formatProjectMemoryIndexContent(read.content);
-    if (!formattedContent) return undefined;
-    runtime.readFileState.set(createReadFileStateKey(indexPath, undefined, undefined), {
-      content: read.content,
-      isPartialView: formattedContent !== read.content,
-      limit: undefined,
-      mtimeMs: normalizeReadFileStateMtimeMs(read.revision?.mtimeMs),
-      offset: undefined,
-      path: indexPath,
-      readAt: runtime.now(),
-      revisionId: read.revision?.id,
-      sizeBytes: read.sizeBytes,
-    });
-    return read.content;
-  } catch {
-    // 默认 Memory 分支将缺失或不可读的 index 视为没有该 context source。
-    return undefined;
+  const files: Partial<Record<ProjectMemoryFileName, string>> = {};
+  for (const fileName of PROJECT_MEMORY_FILES) {
+    const filePath = projectMemoryFilePath(memoryRoot, fileName);
+    try {
+      const read = await fileSystemPort.readTextFile({ path: filePath });
+      files[fileName] = read.content;
+      runtime.readFileState.set(createReadFileStateKey(filePath, undefined, undefined), {
+        content: read.content,
+        isPartialView: false,
+        limit: undefined,
+        mtimeMs: normalizeReadFileStateMtimeMs(read.revision?.mtimeMs),
+        offset: undefined,
+        path: filePath,
+        readAt: runtime.now(),
+        revisionId: read.revision?.id,
+        sizeBytes: read.sizeBytes,
+      });
+    } catch {
+      // 缺失的项目记忆文件不阻断启动，初始化命令或后续提取会补齐。
+    }
   }
+  return formatProjectMemorySnapshot(files)?.content;
 }
 
 export function logMemorySkipped(
