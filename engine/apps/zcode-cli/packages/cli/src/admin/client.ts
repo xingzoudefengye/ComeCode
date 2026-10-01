@@ -102,25 +102,46 @@ function handleModelUrlInput() {
   if (selected && normalizeUrl(selected.baseUrl) !== normalizeUrl($('model-url').value)) $('model-endpoint').value = '';
   updateModelKeyHint();
 }
+function closeModelEndpointMenu() {
+  $('model-endpoint-menu').hidden = true;
+  $('model-endpoint-toggle').setAttribute('aria-expanded', 'false');
+}
+function toggleModelEndpointMenu() {
+  const menu = $('model-endpoint-menu');
+  if ($('model-endpoint-toggle').hidden) return;
+  menu.hidden = !menu.hidden;
+  $('model-endpoint-toggle').setAttribute('aria-expanded', String(!menu.hidden));
+}
+function renderModelEndpointMenu() {
+  const select = $('model-endpoint'), menu = $('model-endpoint-menu');
+  menu.replaceChildren();
+  Array.from(select.options).forEach(option => {
+    const item = button(option.textContent, () => { $('model-endpoint').value = option.value; selectModelEndpoint(); }, 'endpoint-picker-option');
+    item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.value === select.value));
+    menu.append(item);
+  });
+}
 function populateModelEndpoints(entry) {
   const select = $('model-endpoint'); select.replaceChildren();
   const manual = node('option', '手动填写'); manual.value = ''; select.append(manual);
   draft.providers.filter(provider => provider.baseUrl).forEach(provider => {
     const option = node('option', (provider.name || provider.id) + ' · ' + provider.baseUrl); option.value = provider.id; select.append(option);
   });
-  select.value = ''; select.hidden = Boolean(entry) || select.options.length === 1;
+  select.value = ''; select.hidden = true;
+  $('model-endpoint-toggle').hidden = Boolean(entry) || select.options.length === 1;
+  closeModelEndpointMenu(); renderModelEndpointMenu();
   $('model-url').hidden = false;
   $('model-key-hint').hidden = true;
 }
 function selectModelEndpoint() {
   const provider = draft.providers.find(item => item.id === $('model-endpoint').value);
   $('model-url').value = provider ? provider.baseUrl : '';
-  // 输入框始终保留，右侧下拉只负责选择已有地址或切回手动填写。
+  // 输入框始终保留，右侧箭头只负责打开可编辑下拉选项。
   $('model-url').hidden = false;
   // 换地址时清空新输入的 Key，防止跨供应商误用；存量 Key 不进入表单。
   $('model-key').value = ''; $('clear-key').checked = false;
   $('model-type').value = provider && provider.type ? provider.type : 'openai-chat';
-  updateModelKeyHint();
+  closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
   if (!provider) $('model-url').focus();
 }
 function openModelDialog(entry) {
@@ -316,6 +337,7 @@ async function test(entry) {
   catch(error) { status(error.message, true); }
 }
 $('model-endpoint').onchange = selectModelEndpoint;
+$('model-endpoint-toggle').onclick = toggleModelEndpointMenu;
 $('model-url').oninput = handleModelUrlInput;
 $('model-form').onsubmit = saveModelDialog;
 $('model-cancel').onclick = closeModelDialog;
