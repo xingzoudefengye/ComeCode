@@ -97,9 +97,14 @@ function updateModelKeyHint() {
   $('model-key-hint').hidden = !provider;
   $('model-key-hint').textContent = provider ? (hasKey ? '将复用“' + (provider.name || provider.id) + '”的 API Key，留空即可。' : '该地址没有配置共享 API Key，请填写。') : '';
 }
+function handleModelUrlInput() {
+  const selected = draft.providers.find(provider => provider.id === $('model-endpoint').value);
+  if (selected && normalizeUrl(selected.baseUrl) !== normalizeUrl($('model-url').value)) $('model-endpoint').value = '';
+  updateModelKeyHint();
+}
 function populateModelEndpoints(entry) {
   const select = $('model-endpoint'); select.replaceChildren();
-  const manual = node('option', '手动填写新地址'); manual.value = ''; select.append(manual);
+  const manual = node('option', '手动填写'); manual.value = ''; select.append(manual);
   draft.providers.filter(provider => provider.baseUrl).forEach(provider => {
     const option = node('option', (provider.name || provider.id) + ' · ' + provider.baseUrl); option.value = provider.id; select.append(option);
   });
@@ -110,7 +115,8 @@ function populateModelEndpoints(entry) {
 function selectModelEndpoint() {
   const provider = draft.providers.find(item => item.id === $('model-endpoint').value);
   $('model-url').value = provider ? provider.baseUrl : '';
-  $('model-url').hidden = Boolean(provider);
+  // 输入框始终保留，右侧下拉只负责选择已有地址或切回手动填写。
+  $('model-url').hidden = false;
   // 换地址时清空新输入的 Key，防止跨供应商误用；存量 Key 不进入表单。
   $('model-key').value = ''; $('clear-key').checked = false;
   $('model-type').value = provider && provider.type ? provider.type : 'openai-chat';
@@ -123,7 +129,7 @@ function openModelDialog(entry) {
   const model = entry && entry.model;
   $('model-dialog-title').textContent = entry ? '编辑模型' : '添加模型';
   populateModelEndpoints(entry);
-  $('model-dialog-help').textContent = entry ? '修改这一个模型的连接信息；留空 API Key 表示保持原 Key。' : $('model-endpoint').hidden ? '只需要填写下面四项即可，其他设置可以保持默认。' : '选择已有接口可复用地址和 API Key，只需填写模型名；也可以手动填写新地址。';
+  $('model-dialog-help').textContent = entry ? '修改这一个模型的连接信息；留空 API Key 表示保持原 Key。' : $('model-endpoint').hidden ? '只需要填写下面四项即可，其他设置可以保持默认。' : '直接填写接口地址，或点击右侧下拉选择已有接口以复用地址和 API Key。';
   $('model-id').value = model ? (model.id || '') : '';
   $('model-url').value = model && model.baseUrl ? model.baseUrl : (provider && provider.baseUrl ? provider.baseUrl : '');
   $('model-key').value = '';
@@ -310,7 +316,7 @@ async function test(entry) {
   catch(error) { status(error.message, true); }
 }
 $('model-endpoint').onchange = selectModelEndpoint;
-$('model-url').oninput = updateModelKeyHint;
+$('model-url').oninput = handleModelUrlInput;
 $('model-form').onsubmit = saveModelDialog;
 $('model-cancel').onclick = closeModelDialog;
 $('provider-form').onsubmit = saveProviderDialog;
