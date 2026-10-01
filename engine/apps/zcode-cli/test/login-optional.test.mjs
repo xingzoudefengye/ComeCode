@@ -96,7 +96,7 @@ test("中文配置步骤没有终端控制字符或内部 JSON 字段", async (t
   const root = await mkdtemp(join(tmpdir(), "comecode-guide-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const output = providerSetupResponse("en-US", { COMECODE_DATA_BASE_DIR: root }, root);
-  assert.match(output, /还没有可用模型/u);
+  assert.match(output, /尚未配置模型/u);
   assert.match(output, /comecode config setup/u);
   assert.match(output, /base_url.*接口地址/u);
   assert.match(output, /api_key.*API Key/u);

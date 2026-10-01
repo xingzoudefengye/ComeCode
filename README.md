@@ -57,7 +57,7 @@ ZCode 已经具备 Coding Agent 的大部分能力，ComeCode 的主要工作是
   Context/Cache     Provider Layer     Memory (.ai/)
        └────────────────┼────────────────┘
                         │
-        OpenAI 兼容 (NewAPI 等) / Anthropic / Gemini
+        OpenAI 兼容接口 / Anthropic / Gemini
         / DeepSeek / GLM / Qwen / ...
 ```
 
@@ -69,20 +69,20 @@ ZCode 已经具备 Coding Agent 的大部分能力，ComeCode 的主要工作是
 
 **第一次使用：运行 `comecode config setup`，按中文提示填写即可。**
 
-准备服务商提供的三项信息：API 接口地址、模型名称、API Key。向导支持 OpenAI 兼容/NewAPI、Responses 和 Anthropic，密钥输入不回显；保存已有配置前需要确认，并保留备份。向导不发起付费模型请求。
+准备你使用的模型平台提供的 API 接口地址、模型名称、API Key。向导支持 OpenAI Chat Completions 兼容接口、Responses 和 Anthropic，密钥输入不回显；保存已有配置前需要确认，并保留备份。向导不发起付费模型请求。
 
 保存后运行 `comecode config check`，检查通过再运行 `comecode`。如果项目内存在 `.comecode/config.toml`，它会覆盖用户设置，也需要检查。无模型启动时会直接显示中文操作说明，首次创建带注释的用户模板；已有配置不会自动覆盖。
 
 配置文件 `~/.comecode/config.toml`（项目内可用 `.comecode/config.toml` 覆盖）：
 
 ```toml
-model = "deepseek-v4.1"
-provider = "newapi"
+model = "填写平台支持的模型名称"
+provider = "my-api"
 
-[providers.newapi]
+[providers.my-api]
 type = "openai-chat"        # openai-chat | openai-responses | anthropic | gemini
-base_url = "https://你的newapi地址/v1"
-api_key_env = "NEWAPI_API_KEY"   # 推荐引用环境变量，也可直接写 api_key
+base_url = "https://你的API接口地址/v1"
+api_key_env = "MY_MODEL_API_KEY"   # 推荐引用环境变量，也可直接写 api_key
 ```
 
 配置优先级：命令行参数 > 环境变量 > 项目配置 > 用户配置 > 内置默认。
@@ -113,7 +113,7 @@ cc-switch 通过改写各工具的配置文件来切换 Provider，而不是只�
 目标链路：
 
 ```
-cc-switch ──> Codex / Claude Code 配置 ──(导入或读取)──> ComeCode ──> NewAPI ──> 各家模型
+cc-switch ──> Codex / Claude Code 配置 ──(导入或读取)──> ComeCode ──> 模型平台官方 API / 兼容服务（网关可选）
 ```
 
 ## 6. 长期项目记忆（核心差异化）
