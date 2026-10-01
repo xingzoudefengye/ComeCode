@@ -1,3 +1,4 @@
+import { runProviderConfigSetup } from "./provider-config-setup.js";
 import { existsSync } from "node:fs";
 import { formatJson } from "@zcode/core";
 import {
@@ -16,12 +17,13 @@ export async function runConfigCommand(
   cliOverrides: { readonly model?: string; readonly provider?: string } = {},
 ): Promise<number> {
   const subcommand = args[0] ?? "show";
-  if (args.length > 1 || !["path", "show", "check"].includes(subcommand)) {
-    ctx.stderr.write("用法: comecode config <path|show|check>\n");
+  if (args.length > 1 || !["path", "show", "check", "setup"].includes(subcommand)) {
+    ctx.stderr.write("用法: comecode config <setup|path|show|check>\n");
     return 1;
   }
   const cwd = (deps.cwd ?? process.cwd)();
   const env = deps.env ?? process.env;
+  if (subcommand === "setup") return runProviderConfigSetup(ctx, env, cwd);
   if (subcommand === "path") {
     const paths = resolveUnifiedConfigPaths({ cwd, env });
     const payload = {
@@ -79,8 +81,11 @@ export async function runConfigCommand(
     ? resolved.providers.some((provider) => provider.id === resolved.provider && provider.executable)
     : false;
   const payload = {
-    ok: resolved.diagnostics.errors.length === 0 && (!resolved.provider || hasSelectedProvider),
-    errors: [...resolved.diagnostics.errors],
+    ok: resolved.diagnostics.errors.length === 0 &&
+      (resolved.provider ? hasSelectedProvider : resolved.providers.some((provider) => provider.executable)),
+    errors: [...resolved.diagnostics.errors,
+      ...(!resolved.providers.some((provider) => provider.executable) ? ["没有可用模型。运行 comecode config setup 完成配置。"] : []),
+    ],
     warnings: [...resolved.diagnostics.warnings],
     ...(resolved.provider && resolved.model
       ? { selected: { provider: resolved.provider, model: resolved.model } }

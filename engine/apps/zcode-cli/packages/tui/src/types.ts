@@ -156,6 +156,8 @@ export type TuiSubmitPromptResult = {
   theme?: UiThemePreference;
   projection?: Partial<TuiContextUsage>;
   response: string;
+  /** 配置/系统指引用纯文本，避免 Markdown 语法高亮隐藏操作步骤。 */
+  responseFormat?: "plain";
   resetSessionProjection?: boolean;
   restoredMessages?: Array<{
     id?: string;
@@ -340,6 +342,7 @@ export type TuiOptions = {
 
 export type TuiStartupOptions = Pick<
   TuiOptions,
+  | "initialResult"
   | "initialMode"
   | "initialModel"
   | "initialThoughtLevel"

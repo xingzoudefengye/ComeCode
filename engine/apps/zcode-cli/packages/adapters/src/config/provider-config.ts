@@ -216,8 +216,11 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
   let hasFileSource = false;
   for (const filePath of [paths.user, paths.project].filter((path): path is string => Boolean(path))) {
     if (!existsSync(filePath)) continue;
-    hasFileSource = true;
-    document = mergeDocuments(document, await readTomlFile(filePath, diagnostics));
+    const fileDocument = await readTomlFile(filePath, diagnostics);
+    // 全注释的新手模板不阻断标准环境变量的零配置选择。
+    hasFileSource ||= fileDocument.model !== undefined || fileDocument.provider !== undefined ||
+      Object.keys(fileDocument.providers).length > 0 || diagnostics.errors.length > 0;
+    document = mergeDocuments(document, fileDocument);
   }
   document = mergeDocuments(document, standardEnvironmentDocument(env, !hasFileSource));
   document = mergeDocuments(document, {

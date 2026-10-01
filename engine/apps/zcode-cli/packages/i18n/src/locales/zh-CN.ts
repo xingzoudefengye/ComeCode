@@ -19,7 +19,7 @@ export const zhCN: ZCodeCopy = {
 命令:
   app-server 运行 ZCode Protocol stdio app server
   commands   列出自定义 slash commands（\`commands list\`）
-  config     管理统一 Provider 配置（\`config path|show|check\`）
+  config     管理统一 Provider 配置（\`config setup|path|show|check\`）
   doctor     检查运行时和打包假设
   login [zai|bigmodel]  通过浏览器授权登录
   logout     删除共享的 Z.AI 登录凭据

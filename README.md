@@ -67,6 +67,12 @@ ZCode 已经具备 Coding Agent 的大部分能力，ComeCode 的主要工作是
 
 目标：解除模型绑定，任何兼容接口都能接入。
 
+**第一次使用：运行 `comecode config setup`，按中文提示填写即可。**
+
+准备服务商提供的三项信息：API 接口地址、模型名称、API Key。向导支持 OpenAI 兼容/NewAPI、Responses 和 Anthropic，密钥输入不回显；保存已有配置前需要确认，并保留备份。向导不发起付费模型请求。
+
+保存后运行 `comecode config check`，检查通过再运行 `comecode`。如果项目内存在 `.comecode/config.toml`，它会覆盖用户设置，也需要检查。无模型启动时会直接显示中文操作说明，首次创建带注释的用户模板；已有配置不会自动覆盖。
+
 配置文件 `~/.comecode/config.toml`（项目内可用 `.comecode/config.toml` 覆盖）：
 
 ```toml
@@ -81,7 +87,7 @@ api_key_env = "NEWAPI_API_KEY"   # 推荐引用环境变量，也可直接写 ap
 
 配置优先级：命令行参数 > 环境变量 > 项目配置 > 用户配置 > 内置默认。
 
-配置诊断命令：`comecode config path` 查看配置路径，`comecode config show` 查看合并后的脱敏配置，`comecode config check` 校验配置。运行时还可用 `--model <model>` 和 `--provider <id>` 临时覆盖默认选择。
+配置命令：`comecode config setup` 打开中文向导；`comecode config path` 查看配置路径，`comecode config show` 查看合并后的脱敏配置，`comecode config check` 校验配置。运行时还可用 `--model <model>` 和 `--provider <id>` 临时覆盖默认选择。
 
 没有 TOML 时可直接通过环境变量启动。仅设置凭据也可使用固定默认模型：OpenAI `gpt-4.1-mini`、Anthropic `claude-sonnet-4-5`；Gemini `gemini-2.5-flash` 暂时仅检查、不执行。多种凭据同时存在时按 OpenAI → Anthropic → Gemini 选择；可用 `COMECODE_PROVIDER` 指定（`--provider` 更优先）。有 TOML 时不自动覆盖其中的 Provider 选择。
 

@@ -284,7 +284,7 @@ test("全新无 Provider 的无头启动返回配置引导，不启动账号或�
       "test",
     );
     assert.equal(status, 1);
-    assert.match(stderr, /provider_config\.json/u);
+    assert.match(stderr, /comecode config setup/u);
     assert.doesNotMatch(stderr, /\/login/u);
     assert.equal(requests, 0);
   } finally {
