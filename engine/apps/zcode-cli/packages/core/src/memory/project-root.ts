@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { basename, join, resolve } from "node:path";
 
+export { resolveWorkspaceProjectMemoryRoot } from "./project-files.js";
+
 interface ProjectMemoryRootInput {
   cliStorageRoot: string;
   workspaceIdentity?: string;

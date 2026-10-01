@@ -13,6 +13,12 @@ export * from "./compact/index.js";
 
 // Memory paths
 export { resolveProjectMemoryRoot } from "./memory/project-root.js";
+export {
+  PROJECT_MEMORY_FILES,
+  PROJECT_MEMORY_TEMPLATE,
+  resolveWorkspaceProjectMemoryRoot,
+} from "./memory/project-files.js";
+export type { ProjectMemoryFileName } from "./memory/project-files.js";
 
 // Tool components
 export { ToolScheduler, defaultToolScheduler, READ_ONLY_TOOLS } from "./tool/scheduler.js";

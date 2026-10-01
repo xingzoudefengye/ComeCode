@@ -1,19 +1,15 @@
 import type { AgentRuntimeConfig } from "../types.js";
-import { resolveProjectMemoryRoot } from "../../memory/project-root.js";
+import { resolveWorkspaceProjectMemoryRoot } from "../../memory/project-files.js";
 
 export function resolveEnabledProjectMemoryRoot(
   config: AgentRuntimeConfig,
   workspacePath: string,
 ): string | undefined {
   const memory = config.memory;
-  if (!memory?.enabled || memory.use === false || !memory.cliStorageRoot) return undefined;
+  if (!memory?.enabled || memory.use === false) return undefined;
   if (!isMainMemoryTaskType(config.taskType)) return undefined;
 
-  return resolveProjectMemoryRoot({
-    cliStorageRoot: memory.cliStorageRoot,
-    workspaceIdentity: memory.workspaceIdentity,
-    workspacePath,
-  });
+  return resolveWorkspaceProjectMemoryRoot(workspacePath);
 }
 
 function isMainMemoryTaskType(taskType: AgentRuntimeConfig["taskType"]): boolean {

@@ -156,6 +156,15 @@ cc-switch ──> Codex / Claude Code 配置 ──(导入或读取)──> Come
 
 同时兼容读取 `AGENTS.md`、`CLAUDE.md`，作为项目规则。
 
+初始化项目记忆：
+
+```powershell
+comecode memory init
+comecode memory path
+comecode memory check
+```
+
+运行 `memory init` 只补齐缺失的 `.ai/` 模板文件，不覆盖已有内容，并把 `.ai/.local/` 加入项目 `.gitignore`。
 分层策略：
 
 - 短期记忆：最近若干轮对话原文直接进入上下文。

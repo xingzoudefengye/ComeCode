@@ -19,6 +19,7 @@ import { runEmbeddedSearchCli } from "./internal-search/embedded-search-cli.js";
 import { runCommandsCommand } from "./commands-command.js";
 import { runConfigCommand } from "./config-command.js";
 import { runImportCommand } from "./import-command.js";
+import { runMemoryCommand } from "./memory-command.js";
 import { resolveCliCwd } from "./cwd.js";
 import { runLoginCommand, runLogoutCommand } from "./login-command.js";
 import { CLI_COMMAND_NAME, CLI_PROCESS_NAME } from "./process-name.js";
@@ -569,6 +570,8 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       });
     case "import":
       return await runImportCommand(ctx, options, commandDeps, parsed.positionals[1], parsed.positionals.slice(2));
+    case "memory":
+      return await runMemoryCommand(ctx, options, commandDeps, parsed.positionals.slice(1));
     case "login":
       return await runLoginCommand(
         ctx,
