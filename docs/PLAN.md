@@ -112,15 +112,12 @@ M0 基线
 - 已完成：用户级/项目级配置发现、最小 TOML 子集、标准环境变量归一化、CLI 覆盖、`config path|show|check`、API Key 脱敏、OpenAI/Anthropic type 映射，以及 Gemini 仅检查不执行。
 - 验证：统一配置单测覆盖解析、合并优先级、环境变量、脱敏、兼容 materialize；未实现 Gemini 原生适配、配置导入和 Web 后台，分别留给 T2.3、T2.4、M4。
 
-### T2.2 标准环境变量零配置启动
+### T2.2 标准环境变量零配置启动（已完成，2026-10-01）
 - 依赖：T2.1
-- 做法：没有配置文件时按顺序探测，生成一个临时 Provider：
-  - `OPENAI_API_KEY` + 可选 `OPENAI_BASE_URL` → openai-chat（base_url 不是官方地址时用 chat；官方地址可以用 responses）
-  - `ANTHROPIC_API_KEY` 或 `ANTHROPIC_AUTH_TOKEN` + 可选 `ANTHROPIC_BASE_URL` → anthropic
-  - `GEMINI_API_KEY` → gemini
-  - 模型：`COMECODE_MODEL` > `MODEL` > 该 Provider 的默认模型
-  - 同时存在多个时，用 `COMECODE_PROVIDER` 指定，否则按上述顺序取第一个，并在启动时打印一行说明。
-- 验收：单测覆盖各种组合；只设置 `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`MODEL` 三个变量即可对话。
+- 已完成：无 TOML 时按 OpenAI → Anthropic → Gemini 探测非空凭据；固定默认模型；`COMECODE_PROVIDER` 选择；CLI 覆盖；stderr 启动说明；只读配置命令不写盘。
+- OpenAI 环境 Provider 保持 openai-chat；Anthropic API Key 优先于 Auth Token；Gemini 仅检查不执行，原生支持仍属于 T2.3。
+- 规则与边界见 [T2.2](specs/T2.2.md)。继续复用现有 JSON materialize 路径，不重做 Registry 或持久化机制。
+- 验证：配置组合、旧 JSON/TOML 兼容测试与真实 CLI 子进程 + 本地 HTTP mock 完整对话；检查默认模型、鉴权、JSON stdout 和 stderr 脱敏。
 
 ### T2.3 Gemini 原生支持
 - 依赖：T2.1

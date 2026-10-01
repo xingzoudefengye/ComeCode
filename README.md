@@ -83,6 +83,20 @@ api_key_env = "NEWAPI_API_KEY"   # 推荐引用环境变量，也可直接写 ap
 
 配置诊断命令：`comecode config path` 查看配置路径，`comecode config show` 查看合并后的脱敏配置，`comecode config check` 校验配置。运行时还可用 `--model <model>` 和 `--provider <id>` 临时覆盖默认选择。
 
+没有 TOML 时可直接通过环境变量启动。仅设置凭据也可使用固定默认模型：OpenAI `gpt-4.1-mini`、Anthropic `claude-sonnet-4-5`；Gemini `gemini-2.5-flash` 暂时仅检查、不执行。多种凭据同时存在时按 OpenAI → Anthropic → Gemini 选择；可用 `COMECODE_PROVIDER` 指定（`--provider` 更优先）。有 TOML 时不自动覆盖其中的 Provider 选择。
+
+PowerShell 示例（Key 使用自己的凭据，不要提交到 Git）：
+
+```powershell
+$env:OPENAI_API_KEY = "你的 API Key"
+# 自定义 OpenAI 兼容网关可选：
+$env:OPENAI_BASE_URL = "https://example.test/v1"
+$env:COMECODE_MODEL = "网关支持的模型名"
+comecode --prompt "介绍一下当前项目"
+```
+
+`COMECODE_MODEL` 优先于 `MODEL`，`--model` 优先于两者。自定义网关不一定支持固定默认模型，建议显式指定模型。启动说明只输出到 stderr，不影响 JSON/协议 stdout。详细规则见 [零配置启动](docs/specs/T2.2.md)。
+
 ## 5. 与 cc-switch / 现有生态兼容
 
 cc-switch 通过改写各工具的配置文件来切换 Provider，而不是只设置环境变量。兼容分两层：
