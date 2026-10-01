@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { test } from "node:test";
 import { ADMIN_SCRIPT } from "../packages/cli/src/admin/client.ts";
+import { ADMIN_STYLE } from "../packages/cli/src/admin/assets.ts";
 
 // 最小 DOM 覆盖表单事件与草稿，不向模型服务发起请求。
 function form(config, renderPage = false) {
@@ -94,6 +95,13 @@ test("同地址不同供应商按下拉 ID 选择，取消/重开不保留上次
   assert.equal(f.get("model-endpoint").value, "");
   assert.equal(f.get("model-url").value, "");
   assert.equal(f.get("model-key").value, "");
+});
+
+test("供应商名称框与齿轮保持同高并垂直居中", () => {
+  assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*display:inline-flex/);
+  assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*align-items:center/);
+  assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*height:28px/);
+  assert.match(ADMIN_STYLE, /\.provider-edit\{[^}]*height:28px/);
 });
 
 test("供应商名称同行紧随可访问齿轮图标，点击沿用编辑弹框", () => {
