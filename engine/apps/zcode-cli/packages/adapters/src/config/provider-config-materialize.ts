@@ -48,7 +48,7 @@ export async function materializeUnifiedConfig(
         personalModelIds: provider.modelConfigs
           .filter((model) => model.executable)
           .map((model) => model.id),
-        modelOrder: provider.models,
+        modelOrder: provider.modelConfigs.filter((model) => model.executable).map((model) => model.id),
         modelOverrides: Object.fromEntries(
           provider.modelConfigs
             .filter((model) => model.executable)
@@ -71,23 +71,22 @@ export async function materializeUnifiedConfig(
   const keepRule = (rule: unknown) =>
     !isRecord(rule) ||
     !managedIds.has(String(rule.providerId)) ||
-    generated.some(
+    resolved.providers.some(
       (provider) =>
         provider.id === rule.providerId && provider.models.includes(String(rule.modelId)),
     );
-  const generatedModelRules = generated.flatMap((provider) =>
+  const generatedModelRules = resolved.providers.filter((provider) => managedIds.has(provider.id)).flatMap((provider) =>
     provider.modelConfigs
       .filter(
         (model) =>
-          model.executable &&
-          [model.contextWindow, model.maxOutputTokens, model.toolCalling, model.vision].some(
-            (value) => value !== undefined,
-          ),
+          model.executable || model.enabled === false,
       )
       .map((model) => ({
         providerId: provider.id,
         modelId: model.id,
         config: {
+          // 显式模型开关覆盖内置目录规则，停用时保留能力叶子供重新启用恢复。
+          enabled: model.enabled,
           properties: {
             ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
             ...(model.toolCalling !== undefined ? { supportsToolCall: model.toolCalling } : {}),
@@ -132,7 +131,7 @@ export async function materializeUnifiedConfig(
       ? { defaultModelSelection: { providerId: resolved.provider, modelId: resolved.model } }
       : {}),
   };
-  if (resolved.hasSource && !resolved.provider) delete (nextConfig as Record<string, unknown>).defaultModelSelection;
+  if (resolved.hasSource && (!resolved.provider || !resolved.model)) delete (nextConfig as Record<string, unknown>).defaultModelSelection;
   await mkdir(dirname(options.targetProviderFile), { recursive: true });
   await writeFile(
     options.targetProviderFile,

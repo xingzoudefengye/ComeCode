@@ -26,9 +26,11 @@ export interface UnifiedModelDefinition {
   readonly maxOutputTokens?: number;
   readonly toolCalling?: boolean;
   readonly vision?: boolean;
+  /** false 表示保留配置但不参与默认选择和 Registry 候选。 */
+  readonly enabled?: boolean;
 }
 
-export interface UnifiedProviderDefinition extends Omit<UnifiedModelDefinition, "id"> {
+export interface UnifiedProviderDefinition extends Omit<UnifiedModelDefinition, "id" | "enabled"> {
   readonly models?: readonly (string | UnifiedModelDefinition)[];
 }
 
@@ -54,6 +56,7 @@ export interface UnifiedConfigDiagnostics {
 }
 
 export interface ResolvedUnifiedModel extends UnifiedModelDefinition {
+  readonly enabled: boolean;
   readonly apiType?: UnifiedProviderApiType;
   readonly apiKeySource?: string;
   readonly executable: boolean;
@@ -193,11 +196,22 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
   }
   if (selectedProvider && !entries.has(selectedProvider)) diagnostics.errors.push(`Provider 不存在: ${selectedProvider}`);
   const providers = [...entries.entries()].map(([id, definition]) => resolveProvider(id, definition, selectedProvider, selectedModel, env, diagnostics));
+  let activeProvider = selectedProvider;
+  let activeModel = selectedModel;
+  const selected = providers.find((provider) => provider.id === selectedProvider)?.modelConfigs.find((model) => model.id === selectedModel);
+  const explicitModel = options.cliOverrides?.model?.trim() || env.COMECODE_MODEL?.trim() || env.MODEL?.trim();
+  // 只替换停用的默认项；显式选择需报错，Gemini/缺失凭据仍沿用原检查语义。
+  if (selected?.enabled === false && !explicitModel) {
+    const fallback = providers.find((provider) => provider.id === selectedProvider)?.modelConfigs.find((model) => model.executable);
+    const other = fallback ? undefined : providers.find((provider) => provider.executable);
+    activeProvider = fallback ? selectedProvider : other?.id;
+    activeModel = fallback?.id ?? other?.modelConfigs.find((model) => model.executable)?.id;
+  }
   const managedProviderIds = Object.freeze([...Object.keys(document.providers), ...retiredIds, ...(hasSource && selectedProvider ? [selectedProvider] : [])]);
   return Object.freeze({
     paths,
-    ...(selectedModel ? { model: selectedModel } : {}),
-    ...(selectedProvider ? { provider: selectedProvider } : {}),
+    ...(activeModel ? { model: activeModel } : {}),
+    ...(activeProvider ? { provider: activeProvider } : {}),
     providers: Object.freeze(providers),
     managedProviderIds,
     diagnostics: Object.freeze({ errors: Object.freeze(diagnostics.errors), warnings: Object.freeze(diagnostics.warnings) }),
@@ -342,23 +356,28 @@ function mergeDocuments(base: UnifiedConfigDocument, next: UnifiedConfigDocument
 function resolveProvider(id: string, definition: UnifiedProviderDefinition, selectedProvider: string | undefined, selectedModel: string | undefined, env: Readonly<Record<string, string | undefined>>, diagnostics: { errors: string[]; warnings: string[] }): ResolvedUnifiedProvider {
   const definitions = [...(definition.models ?? [])];
   if (id === selectedProvider && selectedModel && !definitions.some((model) => (typeof model === "string" ? model : model.id) === selectedModel)) definitions.push(selectedModel);
-  const resolveConnection = (input: UnifiedProviderDefinition, label: string) => {
+  const resolveConnection = (input: UnifiedProviderDefinition, label: string, enabled = true) => {
     const previousErrorCount = diagnostics.errors.length;
     const type = input.type;
     const apiType = type ? TYPE_TO_API[type] : undefined;
     const apiKey = input.apiKey?.trim() || (input.apiKeyEnv ? env[input.apiKeyEnv]?.trim() : undefined);
     const baseUrl = input.baseUrl?.trim() || (type ? DEFAULT_BASE_URL[type] : undefined);
-    if (!type || !(type in TYPE_TO_API)) diagnostics.errors.push(`${label}: 缺少或未知 type`);
-    if (!baseUrl) diagnostics.errors.push(`${label}: 缺少 base_url / baseUrl`);
-    else { try { const url = new URL(baseUrl); if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error(); } catch { diagnostics.errors.push(`${label}: base_url 不是有效 URL / baseUrl 必须是 HTTP URL（禁止内嵌凭据）`); } }
-    if (!apiKey) diagnostics.errors.push(`${label}: 缺少 api_key / apiKey 或 api_key_env / apiKeyEnv 对应的环境变量`);
-    if (type === "gemini") diagnostics.warnings.push(`${label}: Gemini 仅支持识别和检查，当前版本暂不执行`);
+    // 停用模型可以保留尚未就绪的凭据，不阻断其他启用模型的启动与保存。
+    if (enabled) {
+      if (!type || !(type in TYPE_TO_API)) diagnostics.errors.push(`${label}: 缺少或未知 type`);
+      if (!baseUrl) diagnostics.errors.push(`${label}: 缺少 base_url / baseUrl`);
+      else { try { const url = new URL(baseUrl); if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error(); } catch { diagnostics.errors.push(`${label}: base_url 不是有效 URL / baseUrl 必须是 HTTP URL（禁止内嵌凭据）`); } }
+      if (!apiKey) diagnostics.errors.push(`${label}: 缺少 api_key / apiKey 或 api_key_env / apiKeyEnv 对应的环境变量`);
+      if (type === "gemini") diagnostics.warnings.push(`${label}: Gemini 仅支持识别和检查，当前版本暂不执行`);
+    }
     return { type, apiType, baseUrl, apiKey, apiKeySource: input.apiKey ? "config.api_key" : input.apiKeyEnv ? `env:${input.apiKeyEnv}` : undefined, executable: Boolean(apiType && baseUrl && apiKey && diagnostics.errors.length === previousErrorCount) };
   };
   const modelConfigs = definitions.map((item): ResolvedUnifiedModel => {
     const model = typeof item === "string" ? { id: item } : item;
     const effective = mergeProviderDefinition(definition, model);
-    return Object.freeze({ id: model.id, name: model.name, contextWindow: effective.contextWindow, maxOutputTokens: effective.maxOutputTokens, toolCalling: effective.toolCalling, vision: effective.vision, ...resolveConnection(effective, `Provider ${id} 模型 ${model.id}`) });
+    const enabled = model.enabled !== false;
+    const connection = resolveConnection(effective, `Provider ${id} 模型 ${model.id}`, enabled);
+    return Object.freeze({ id: model.id, name: model.name, enabled, contextWindow: effective.contextWindow, maxOutputTokens: effective.maxOutputTokens, toolCalling: effective.toolCalling, vision: effective.vision, ...connection, executable: enabled && connection.executable });
   });
   const connection = modelConfigs.length ? { type: definition.type, apiType: definition.type ? TYPE_TO_API[definition.type] : undefined, baseUrl: definition.baseUrl ?? (definition.type ? DEFAULT_BASE_URL[definition.type] : undefined), apiKey: definition.apiKey || (definition.apiKeyEnv ? env[definition.apiKeyEnv]?.trim() : undefined), apiKeySource: definition.apiKey ? "config.api_key" : definition.apiKeyEnv ? `env:${definition.apiKeyEnv}` : undefined } : resolveConnection(definition, `Provider ${id}`);
   if (!modelConfigs.length) diagnostics.warnings.push(`Provider ${id}: 没有模型，需设置 model 或 models`);
