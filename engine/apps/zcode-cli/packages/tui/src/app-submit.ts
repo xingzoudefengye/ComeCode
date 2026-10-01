@@ -175,10 +175,12 @@ export async function submitDuringActiveTurn(input: {
     if (result.kind !== "queued") {
       input.setDraftValue(input.text);
     } else {
-      // 排队输入还没有被 runtime 注入模型上下文，直接追加到 transcript
-      // 会和正在流式输出的回复混在一起；先放到输入框上方的队列区。
+      const delivery = result.delivery ?? "queue";
+      // guide 也暂存 pending 事实，后续若 runtime 因边界限制改投 queue，
+      // TurnSteerDeliveryChanged 可以用同一个 id 把它重新显示到 Queue 面板。
       input.setQueuedInputs((current) =>
         upsertQueuedInput(current, {
+          delivery,
           id: result.pendingInputId,
           text: localUserMessage.content,
         }),
@@ -186,9 +188,9 @@ export async function submitDuringActiveTurn(input: {
     }
     input.setStatus(
       result.kind === "queued"
-        ? result.queueLength > 1
-          ? `Input guided (${result.queueLength} pending).`
-          : "Input guided."
+        ? (result.delivery ?? "queue") === "guide"
+          ? "Input guided."
+          : "Input queued."
         : `Input not queued: ${result.reason}.`,
     );
   } catch (error) {

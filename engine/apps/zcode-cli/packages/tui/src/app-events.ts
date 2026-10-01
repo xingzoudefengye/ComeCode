@@ -94,6 +94,9 @@ export function applySessionEventToState(
     case SessionEventType.TurnSteerQueued:
       applyTurnSteerQueuedEvent(payload, handlers.setQueuedInputs);
       break;
+    case SessionEventType.TurnSteerDeliveryChanged:
+      applyTurnSteerDeliveryChangedEvent(payload, handlers.setQueuedInputs);
+      break;
     case SessionEventType.TurnSteerDrained:
     case SessionEventType.TurnSteerDiscarded:
       applyTurnSteerFinishedEvent(payload, handlers.setQueuedInputs);
@@ -232,8 +235,33 @@ function applyTurnSteerQueuedEvent(
   if (!id || !text) return;
 
   setQueuedInputs((current) =>
-    upsertQueuedInput(current, { id, text }, { preserveExistingText: true }),
+    upsertQueuedInput(
+      current,
+      { delivery: deliveryFromPayload(payload), id, text },
+      { preserveExistingText: true },
+    ),
   );
+}
+
+function applyTurnSteerDeliveryChangedEvent(
+  payload: Record<string, unknown>,
+  setQueuedInputs?: React.Dispatch<React.SetStateAction<QueuedInput[]>>,
+): void {
+  if (!setQueuedInputs) return;
+  const id = stringField(payload, "pendingInputId");
+  const delivery = stringField(payload, "admittedDelivery");
+  if (!id || delivery !== "queue") return;
+  setQueuedInputs((current) =>
+    current.map((input) => (input.id === id ? { ...input, delivery: "queue" } : input)),
+  );
+}
+
+function deliveryFromPayload(payload: Record<string, unknown>): "guide" | "queue" {
+  const intent = asRecord(payload.intent);
+  const admittedDelivery = stringField(intent, "admittedDelivery");
+  if (admittedDelivery === "guide" || admittedDelivery === "queue") return admittedDelivery;
+  const delivery = stringField(payload, "delivery");
+  return delivery === "guide" ? "guide" : "queue";
 }
 
 function applyTurnSteerFinishedEvent(

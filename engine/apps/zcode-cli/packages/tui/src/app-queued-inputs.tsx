@@ -28,22 +28,23 @@ export function QueuedInputPanel({
   copy?: TuiCopy;
   inputs: QueuedInput[];
 }): React.ReactElement | null {
-  if (inputs.length === 0) return null;
+  const visibleInputs = queuedInputsForDisplay(inputs);
+  if (visibleInputs.length === 0) return null;
 
-  const visible = inputs.slice(0, QUEUED_INPUT_VISIBLE_COUNT);
-  const hiddenCount = Math.max(0, inputs.length - visible.length);
+  const visible = visibleInputs.slice(0, QUEUED_INPUT_VISIBLE_COUNT);
+  const hiddenCount = Math.max(0, visibleInputs.length - visible.length);
   const rowContentWidth = normalizeQueuedInputContentWidth(contentWidth);
 
   return h(
     "box",
     {
-      title: copy.input.queuedTitle(inputs.length),
+      title: copy.input.queuedTitle(visibleInputs.length),
       style: {
         backgroundColor: palette.panel,
         border: true,
         borderColor: palette.border,
         flexDirection: "column",
-        height: queuedInputPanelHeight(inputs.length),
+        height: queuedInputPanelHeight(visibleInputs.length),
         marginBottom: 1,
         paddingLeft: 1,
         paddingRight: 1,
@@ -63,6 +64,10 @@ export function QueuedInputPanel({
       ? h("text", { key: "more", style: { fg: palette.muted } }, copy.input.queuedMore(hiddenCount))
       : null,
   );
+}
+
+export function queuedInputsForDisplay(inputs: readonly QueuedInput[]): QueuedInput[] {
+  return inputs.filter((input) => input.delivery !== "guide");
 }
 
 export function upsertQueuedInput(

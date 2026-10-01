@@ -289,7 +289,7 @@ export interface TurnInputIntentMetadata {
   /** Admission 时固定；Queue/Guide 后续不得重新读取 Composer 或 Session 最新选择。 */
   modelSelection?: ModelSelection;
   /** 与本次用户 Submission 一起固定的协作模式。 */
-  mode?: "build" | "edit" | "plan" | "yolo";
+  mode?: "build" | "edit" | "plan" | "yolo" | "auto";
   admissionSeq: number;
   admittedAt: number;
   requestedDelivery: "auto" | "startNow" | "queue" | "guide";
@@ -346,6 +346,8 @@ export interface PendingTurnInput {
 export type TurnSteerResult =
   | {
       kind: "queued";
+      /** admission 后的真实投递车道；guide 不是普通 queue。 */
+      delivery: TurnSteerDeliveryMode;
       pendingInputId: string;
       queueLength: number;
       turnId: TurnId;

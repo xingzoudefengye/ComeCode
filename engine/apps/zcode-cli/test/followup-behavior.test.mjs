@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { escapeActionFor } from "../packages/tui/src/app-keyboard-helpers.ts";
 import { submitDuringActiveTurn } from "../packages/tui/src/app-submit.ts";
+import { queuedInputsForDisplay } from "../packages/tui/src/app-queued-inputs.tsx";
 import { resolveAppFollowupMode } from "../../../packages/ui/src/v4/composer/followupModeSettings.ts";
 
 // 纯函数测试覆盖 Esc 的三种状态，不依赖 OpenTUI 的终端事件注入。
@@ -21,6 +22,7 @@ test("运行中提交显式请求 guide 投递", async () => {
   let capturedOptions;
   const noop = () => {};
   const result = {
+    delivery: "guide",
     kind: "queued",
     pendingInputId: "guide-1",
     queueLength: 1,
@@ -57,4 +59,20 @@ test("运行中提交显式请求 guide 投递", async () => {
   assert.equal(capturedOptions.queueDelivery, "guide");
   assert.equal(capturedOptions.delivery, "auto");
   assert.equal(capturedOptions.expectedTurnId, "turn-1");
+  assert.equal(result.delivery, "guide");
+});
+
+test("Queue 面板只显示 queue，guide 和旧输入兼容规则正确", () => {
+  assert.deepEqual(
+    queuedInputsForDisplay([
+      { id: "guide", text: "guide", delivery: "guide" },
+      { id: "queue", text: "queue", delivery: "queue" },
+      { id: "legacy", text: "legacy" },
+    ]).map((input) => input.id),
+    ["queue", "legacy"],
+  );
+  assert.deepEqual(
+    queuedInputsForDisplay([{ id: "guide", text: "guide", delivery: "guide" }]),
+    [],
+  );
 });
