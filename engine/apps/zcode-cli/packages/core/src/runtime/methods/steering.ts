@@ -191,6 +191,7 @@ export async function steerTurn(
   });
 
   return {
+    delivery: delivery ?? "queue",
     kind: "queued",
     pendingInputId: pendingInput.id,
     queueLength,
@@ -286,6 +287,7 @@ export async function enqueueDeferredInput(
   });
 
   return {
+    delivery,
     kind: "queued",
     pendingInputId,
     queueLength,

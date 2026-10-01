@@ -112,6 +112,7 @@ export type DraftFileAttachment = {
 export type DraftAttachment = DraftFileAttachment | DraftImageAttachment;
 
 export type QueuedInput = {
+  delivery?: "guide" | "queue";
   id: string;
   text: string;
 };
