@@ -253,10 +253,10 @@ function render() {
     const enabledCount = (provider.models || []).filter(model => model.enabled !== false).length;
     const name = node('div', undefined, 'provider-name'), edit = button(undefined, () => openProviderDialog(provider), 'provider-edit');
     edit.title = '编辑供应商'; edit.setAttribute('aria-label', '编辑供应商');
-    // 线条图标仅负责展示，保留原生按钮的键盘操作和无障碍名称。
+    // 齿轮图标仅负责展示，保留原生按钮的键盘操作和无障碍名称。
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('aria-hidden', 'true'); icon.setAttribute('focusable', 'false');
-    path.setAttribute('d', 'M15 5l4 4M4 20l4-1L20 7a2.83 2.83 0 0 0-4-4L4 15z');
+    path.setAttribute('d', 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z');
     icon.append(path); edit.append(icon);
     name.append(node('strong', provider.name || provider.id || '未命名供应商'), edit);
     info.append(name, node('span', (provider.models || []).length + ' 个模型 · ' + enabledCount + ' 个已启用 · ' + (provider.baseUrl || '未设置地址'), 'provider-meta'));
