@@ -1,3 +1,4 @@
+import { CodeRenderable, type MarkdownOptions } from "@mbears/opentui-core";
 import { baseComponents } from "@mbears/opentui-react";
 import React from "react";
 import { createMarkdownSyntaxStyle } from "./app-markdown-theme.js";
@@ -47,6 +48,7 @@ export function MarkdownText({
         content,
         streaming,
         syntaxStyle,
+        renderNode: renderCompactMarkdownNode,
       });
     }
     return h("text", { style: { fg: textColor } }, content);
@@ -66,3 +68,13 @@ export function MarkdownText({
 
   return h("text", { style: { fg: textColor } }, content);
 }
+
+/** 只压缩普通段落的布局换行，代码/列表等结构及原始回复不做字符串替换。 */
+const renderCompactMarkdownNode: NonNullable<MarkdownOptions["renderNode"]> = (token, context) => {
+  const renderable = context.defaultRender();
+  if (token.type === "paragraph" && renderable instanceof CodeRenderable) {
+    renderable.content = token.raw.replace(/(?:\r?\n)+$/u, "");
+    renderable.marginBottom = 0;
+  }
+  return renderable;
+};
