@@ -96,6 +96,23 @@ test("网页模型配置支持同地址归类所需的多模型结构与供应�
   assert.deepEqual(saved.providers[0].models.map(model => typeof model === "string" ? model : model.id), ["model-a", "model-b", "model-c"]);
   assert.equal(after.config.providers[0].models.length, 3);
 });
+test("停用默认模型时保留停用配置并自动切换默认模型", async t => {
+  const f = await fixture(t), editor = createProviderConfigEditor(f);
+  const before = await editor.read();
+  const config = before.config;
+  config.provider = "api";
+  config.model = "model-a";
+  config.providers[0].models[0].enabled = false;
+  const after = await editor.save({ revision: before.revision, config });
+  assert.equal(after.saved, true);
+  const saved = JSON.parse(await readFile(join(f.dataRoot, "config.json"), "utf8"));
+  assert.equal(saved.providers[0].models[0].enabled, false);
+  assert.equal(saved.provider, "api");
+  assert.equal(saved.model, "model-b");
+  const resolved = await resolveUnifiedConfig(f);
+  assert.equal(resolved.model, "model-b");
+  assert.equal(resolved.providers[0].modelConfigs.find(model => model.id === "model-a").executable, false);
+});
 test("管理页前端脚本保持可执行语法", () => {
   // 页面脚本一旦语法错误，浏览器不会发起配置请求，只会停在“正在读取配置”。
   assert.doesNotThrow(() => new vm.Script(ADMIN_SCRIPT));

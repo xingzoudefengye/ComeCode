@@ -80,9 +80,11 @@ export async function prepareCliProviderRuntimeEnv(
   const selectedModel = selected?.modelConfigs.find((model) => model.id === config.model);
   if (selectedModel?.type === "gemini" || (config.provider && config.model && !selectedModel?.executable) || (explicitSelection && !selected?.executable)) {
     // 显式选择失败时不能让 Registry 静默回退到其他可用模型。
-    throw new Error(selectedModel?.type === "gemini"
-      ? "Gemini 仅支持识别和检查，当前版本暂不执行"
-      : config.diagnostics.errors.join("；") || "所选 Provider 不可执行，请检查模型和密钥配置");
+    throw new Error(selectedModel?.enabled === false
+      ? "所选模型已停用，请在模型管理页启用或选择其他模型"
+      : selectedModel?.type === "gemini"
+        ? "Gemini 仅支持识别和检查，当前版本暂不执行"
+        : config.diagnostics.errors.join("；") || "所选 Provider 不可执行，请检查模型和密钥配置");
   }
   const environmentSelection = env.COMECODE_PROVIDER?.trim() ||
     selected?.apiKeySource?.match(/^env:(OPENAI_API_KEY|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|GEMINI_API_KEY)$/u);

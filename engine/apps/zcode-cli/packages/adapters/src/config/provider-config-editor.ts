@@ -44,9 +44,21 @@ export function createProviderConfigEditor(options: UnifiedConfigLoadOptions) {
       if (snapshot.exists && snapshot.source !== snapshot.target && !parsed.data.migrate) throw new ConfigEditError(409, "保存将生成 JSON，原文件会保留并备份；请确认迁移");
       // 有效模型可能只来自旧 provider_config.json 或环境变量；保存网页草稿时也要保留其密钥来源。
       const effective = await resolveUnifiedConfig(options);
-      const document = restoreSecrets(parsed.data.config, snapshot.document, effective);
-      const preview = await resolveUnifiedConfig({ ...options, userDocument: document });
+      let document = restoreSecrets(parsed.data.config, snapshot.document, effective);
+      let preview = await resolveUnifiedConfig({ ...options, userDocument: document });
       if (preview.diagnostics.errors.length) throw new ConfigEditError(422, preview.diagnostics.errors.join("；"));
+      const selectedModel = document.provider && document.model
+        ? preview.providers.find((provider) => provider.id === document.provider)?.modelConfigs.find((model) => model.id === document.model)
+        : undefined;
+      if (selectedModel?.enabled === false) {
+        // 默认模型被停用时自动切到解析器选出的启用模型，避免保存后启动仍指向停用项。
+        if (preview.provider && preview.model) document = { ...document, provider: preview.provider, model: preview.model };
+        else {
+          const { provider: _provider, model: _model, ...withoutDefault } = document;
+          document = withoutDefault;
+        }
+        preview = await resolveUnifiedConfig({ ...options, userDocument: document });
+      }
       if (document.provider && document.model && !preview.providers.find((provider) => provider.id === document.provider)?.modelConfigs.some((model) => model.id === document.model && model.executable)) throw new ConfigEditError(422, "默认模型不可执行，请选择三种支持协议中的模型");
       const content = `${JSON.stringify(serializeDocument(document), null, 2)}\n`;
       await mkdir(dirname(snapshot.target), { recursive: true });
@@ -127,6 +139,7 @@ function resolvedModelDefinition(model: ResolvedUnifiedModel): UnifiedModelDefin
   return {
     id: model.id,
     ...(model.name ? { name: model.name } : {}),
+    ...(model.enabled === false ? { enabled: false } : {}),
     ...(model.type ? { type: model.type } : {}),
     ...(model.baseUrl ? { baseUrl: model.baseUrl } : {}),
     ...secretFields(model.apiKey, model.apiKeySource),

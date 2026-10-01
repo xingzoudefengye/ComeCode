@@ -13,9 +13,9 @@ const connectionShape = {
   vision: z.boolean().optional(),
 };
 const modelSchema = z
-  .object({ id: nonBlank, name: nonBlank.optional(), ...connectionShape })
+  .object({ id: nonBlank, name: nonBlank.optional(), enabled: z.boolean().optional(), ...connectionShape })
   .strict();
-const providerSchema = modelSchema.extend({
+const providerSchema = modelSchema.omit({ enabled: true }).extend({
   models: z.array(z.union([nonBlank, modelSchema])).optional(),
 });
 const documentSchema = z

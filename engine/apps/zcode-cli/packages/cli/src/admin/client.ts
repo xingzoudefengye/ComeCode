@@ -49,6 +49,7 @@ function editableDraftFromEffective() {
       models: (provider.models || []).map(model => ({
         id: model.id,
         ...(model.name ? { name: model.name } : {}),
+        ...(model.enabled === false ? { enabled: false } : {}),
         ...(model.type && model.type !== provider.type ? { type: model.type } : {}),
         ...(model.baseUrl && model.baseUrl !== provider.baseUrl ? { baseUrl: model.baseUrl } : {}),
         ...(environmentKeyName(model.apiKeySource) ? { apiKeyEnv: environmentKeyName(model.apiKeySource) } : {}),
@@ -172,17 +173,36 @@ function saveModelDialog(event) {
   if (!draft.providers.includes(provider)) draft.providers.push(provider);
   provider.models ||= [];
   if (!provider.models.includes(model)) provider.models.push(model);
-  if (!draft.provider || (editing && draft.provider === oldProvider.id && draft.model === oldModel.id)) { draft.provider = provider.id; draft.model = model.id; }
+  if (model.enabled !== false && (!draft.provider || (editing && draft.provider === oldProvider.id && draft.model === oldModel.id))) { draft.provider = provider.id; draft.model = model.id; }
   markDirty(); closeModelDialog(); render();
 }
 function defaults() {
   const modelSelect = $('default-model'); modelSelect.replaceChildren();
-  const entries = allModels(), counts = new Map();
+  const entries = allModels().filter(entry => entry.model.enabled !== false), counts = new Map();
   entries.forEach(entry => counts.set(modelName(entry), (counts.get(modelName(entry)) || 0) + 1));
   const automatic = node('option', '按配置顺序自动选择'); automatic.value = ''; modelSelect.append(automatic);
   entries.forEach(entry => { const option = node('option', displayName(entry, counts)); option.value = JSON.stringify([entry.provider.id, entry.model.id]); modelSelect.append(option); });
-  const current = draft.provider && draft.model ? JSON.stringify([draft.provider, draft.model]) : ''; modelSelect.value = current;
+  const current = draft.provider && draft.model ? JSON.stringify([draft.provider, draft.model]) : '';
+  modelSelect.value = entries.some(entry => JSON.stringify([entry.provider.id, entry.model.id]) === current) ? current : '';
   modelSelect.onchange = () => { if (!modelSelect.value) { delete draft.provider; delete draft.model; } else { const selected = JSON.parse(modelSelect.value); draft.provider = selected[0]; draft.model = selected[1]; } markDirty(); };
+}
+function toggleModel(entry, enabled) {
+  if (enabled) delete entry.model.enabled;
+  else entry.model.enabled = false;
+  if (!enabled && draft.provider === entry.provider.id && draft.model === entry.model.id) {
+    const candidates = allModels().filter(candidate => candidate.model.enabled !== false);
+    const fallback = candidates.find(candidate => candidate.provider === entry.provider) || candidates[0];
+    if (fallback) { draft.provider = fallback.provider.id; draft.model = fallback.model.id; }
+    else { delete draft.provider; delete draft.model; }
+  }
+  markDirty(); render();
+  status('“' + modelName(entry) + '”已' + (enabled ? '启用' : '停用') + '。点击“保存配置”，重启 ComeCode 后生效。');
+}
+function modelSwitch(entry) {
+  const label = node('label', undefined, 'model-toggle'), input = node('input'), track = node('span', undefined, 'switch-track'), text = node('span', entry.model.enabled === false ? '已停用' : '已启用', 'model-toggle-label');
+  input.type = 'checkbox'; input.id = 'model-toggle-' + encodeURIComponent(JSON.stringify([entry.provider.id, entry.model.id])); input.setAttribute('role', 'switch'); input.checked = entry.model.enabled !== false; input.setAttribute('aria-label', '启用模型 ' + modelName(entry)); input.disabled = busy;
+  input.onchange = () => { toggleModel(entry, input.checked); $(input.id).focus(); };
+  label.append(input, track, text); return label;
 }
 function render() {
   defaults(); const container = $('providers'); container.replaceChildren(); const entries = allModels();
@@ -192,14 +212,17 @@ function render() {
   draft.providers.filter(provider => (provider.models || []).length).forEach(provider => {
     const group = node('section', undefined, 'provider-group');
     const heading = node('div', undefined, 'provider-heading'), info = node('div');
-    info.append(node('strong', provider.name || provider.id || '未命名供应商'), node('span', (provider.models || []).length + ' 个模型 · ' + (provider.baseUrl || '未设置地址'), 'provider-meta'));
+    const enabledCount = (provider.models || []).filter(model => model.enabled !== false).length;
+    info.append(node('strong', provider.name || provider.id || '未命名供应商'), node('span', (provider.models || []).length + ' 个模型 · ' + enabledCount + ' 个已启用 · ' + (provider.baseUrl || '未设置地址'), 'provider-meta'));
     heading.append(info, button('编辑供应商', () => openProviderDialog(provider)));
     group.append(heading);
     (provider.models || []).forEach(model => {
-      const entry = { provider, model }, row = node('div', undefined, 'model-row');
+      const entry = { provider, model }, row = node('div', undefined, model.enabled === false ? 'model-row is-disabled' : 'model-row');
       const rowHeading = node('div', undefined, 'model-row-heading'), title = node('div');
       title.append(node('strong', displayName(entry, counts)), node('span', protocolName(model.type || provider.type), 'model-protocol'));
-      const actions = node('div', undefined, 'actions'); actions.append(button('编辑', () => openModelDialog(entry)), button('测试连接', () => test(entry)), button('删除', () => deleteModel(entry), 'danger'));
+      const actions = node('div', undefined, 'actions'), testButton = button('测试连接', () => test(entry));
+      if (model.enabled === false) { testButton.disabled = true; testButton.title = '请先启用模型再测试连接'; }
+      actions.append(modelSwitch(entry), button('编辑', () => openModelDialog(entry)), testButton, button('删除', () => deleteModel(entry), 'danger'));
       rowHeading.append(title, actions); row.append(rowHeading);
       const meta = node('div', undefined, 'model-meta'); meta.append(node('span', model.contextWindow ? Math.round(model.contextWindow / 1000) + 'K 上下文' : '默认上下文'), node('span', model.vision === true ? '支持图片' : model.vision === false ? '不支持图片' : '图片能力默认'), node('span', model.toolCalling === true ? '支持工具' : model.toolCalling === false ? '不支持工具' : '工具能力默认')); row.append(meta);
       const url = node('p', model.baseUrl || provider.baseUrl || '未设置接口地址', 'model-url'); row.append(url); group.append(row);
@@ -228,10 +251,10 @@ async function load() {
 async function save() {
   if (busy) return;
   let migrate = false; if (snapshot.requiresMigration) { migrate = await confirmAction('迁移为 JSON', '将保存为 JSON，原配置文件会保留并备份。注释不会迁入新文件。是否继续？'); if (!migrate) return; }
-  busy = true; $('save').disabled = true;
+  busy = true; $('save').disabled = true; document.querySelectorAll('.model-toggle input').forEach(input => { input.disabled = true; });
   try { snapshot = await api('config', 'PUT', { revision: snapshot.revision, migrate, config: draft }); draft = structuredClone(snapshot.config); dirty = false; render(); status('已保存。请重启 ComeCode 使用新设置。' + (snapshot.backup ? '\\n原配置已备份。' : '')); }
   catch(error) { status(error.message, true); }
-  finally { busy = false; $('save').disabled = Boolean(snapshot.errors && snapshot.errors.length); }
+  finally { busy = false; $('save').disabled = Boolean(snapshot.errors && snapshot.errors.length); document.querySelectorAll('.model-toggle input').forEach(input => { input.disabled = false; }); }
 }
 async function test(entry) {
   if (dirty) { status('请先保存修改，再测试已保存的模型。', true); return; }
