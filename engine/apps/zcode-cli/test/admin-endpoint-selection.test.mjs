@@ -96,7 +96,7 @@ test("同地址不同供应商按下拉 ID 选择，取消/重开不保留上次
   assert.equal(f.get("model-key").value, "");
 });
 
-test("供应商名称同行紧随可访问铅笔图标，点击沿用编辑弹框", () => {
+test("供应商名称同行紧随可访问齿轮图标，点击沿用编辑弹框", () => {
   const f = form(providers(), true);
   const heading = f.get("providers").options[0].options[0];
   assert.equal(heading.className, "provider-heading");
@@ -113,6 +113,7 @@ test("供应商名称同行紧随可访问铅笔图标，点击沿用编辑弹�
   assert.equal(edit.attributes["aria-label"], "编辑供应商");
   assert.equal(edit.options[0].tag, "svg");
   assert.equal(edit.options[0].attributes["aria-hidden"], "true");
+  assert.match(edit.options[0].options[0].attributes.d, /^M12\.22/);
   edit.onclick();
   assert.equal(f.get("provider-dialog").open, true);
   assert.equal(f.get("provider-edit-id").value, "first");
