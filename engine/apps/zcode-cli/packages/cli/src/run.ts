@@ -548,6 +548,10 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       );
     case "doctor":
       return runDoctor(ctx, options, workingDirectory);
+    case "admin": {
+      const { runAdminCommand } = await import("./admin/command.js");
+      return runAdminCommand(ctx, commandDeps, parsed.positionals.slice(1));
+    }
     case "config":
       return await runConfigCommand(ctx, options, commandDeps, parsed.positionals.slice(1), {
         model: parsed.values.model as string | undefined,

@@ -71,7 +71,7 @@ export function parseUnifiedConfigJson(
     }
   }
   return {
-    document: { model: parsed.data.model, provider: parsed.data.provider, providers },
+    document: { model: parsed.data.model, provider: parsed.data.provider, providers, ...(parsed.data.providers ? { ownsProviderMembership: true } : {}) },
     diagnostics: { errors, warnings: [] },
   };
 }

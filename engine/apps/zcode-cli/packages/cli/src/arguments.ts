@@ -15,6 +15,9 @@ export const parseGlobalArgs = (argv: string[]) =>
       "output-format": {
         type: "string",
       },
+      web: { type: "boolean" },
+      "no-web": { type: "boolean" },
+      "web-port": { type: "string" },
       "no-color": {
         type: "boolean",
       },

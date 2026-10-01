@@ -511,3 +511,4 @@ export {
   type UnifiedProviderDefinition,
   type UnifiedProviderType,
 } from "./provider-config.js";
+export { createProviderConfigEditor, ConfigEditError } from "./provider-config-editor.js";

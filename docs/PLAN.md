@@ -121,11 +121,9 @@ M0 基线
 - 规则与边界见 [T2.2](specs/T2.2.md)。继续复用现有 JSON materialize 路径，不重做 Registry 或持久化机制。
 - 验证：配置组合、旧 JSON/TOML 兼容测试与真实 CLI 子进程 + 本地 HTTP mock 完整对话；检查默认模型、鉴权、JSON stdout 和 stderr 脱敏。
 
-### T2.3 Gemini 原生支持
-- 依赖：T2.1
-- 位置：`CLI/adapters/src/model/model-execution.ts`（281-372 行附近按 API 类型创建模型的地方）。
-- 做法：引入 `@ai-sdk/google`（锁定精确版本，和现有 `@ai-sdk/*` 主版本匹配）；新增 `gemini` API 类型；检查工具调用、流式输出、图片输入、thinking 参数、token 用量字段的映射。
-- 验收：用 Gemini 跑一个包含多次工具调用（读文件 + 编辑 + 运行命令）的任务；用量统计正确。
+### T2.3 Gemini 原生支持（取消，2026-10-01）
+- 当前执行只支持 Chat Completions / Responses / Anthropic Messages 三种协议。
+- Gemini 原生适配不再作为里程碑/发布前置；旧配置只识别与检查，不执行。
 
 ### T2.4 cc-switch / Codex / Claude Code 配置导入
 - 依赖：T2.1
@@ -139,7 +137,7 @@ M0 基线
 ### T2.5 内置 Provider 目录本地化
 - 依赖：T1.4
 - 位置：`engine/config/provider/zcode-builtin.json`
-- 做法：复制为 `comecode-builtin.json`；删除 z.ai 专属的 Coding Plan 和网关条目（或标注为可选）；补充 Gemini、OpenAI 兼容通用模板；核对各家 base_url 与模型名是否是当前可用的。
+- 做法：复制为 `comecode-builtin.json`；删除 z.ai 专属的 Coding Plan 和网关条目（或标注为可选）；补充三种协议的通用模板；核对各家 base_url 与模型名是否是当前可用的。
 - 验收：`comecode config providers` 能列出内置模板；每个模板都有单测校验字段合法。
 
 ---
@@ -244,7 +242,7 @@ M0 基线
 
 ### T4.4 配置页
 - 依赖：T4.3、T2.1
-- 内容：Provider 列表与增删改（写回 `config.toml`，保留注释和格式）、"测试连接"按钮（发一个最小请求）、默认模型选择、API Key 脱敏显示。
+- 内容：Provider 列表与增删改（写回 `config.json`，兼容读取 TOML/JSONC，迁移需确认并备份）、"测试连接"按钮（发一个最小请求）、默认模型选择、API Key 脱敏显示。
 
 ### T4.5 会话页
 - 依赖：T4.3
