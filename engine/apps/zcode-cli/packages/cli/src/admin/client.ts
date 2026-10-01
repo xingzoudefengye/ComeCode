@@ -31,6 +31,36 @@ function markDirty() { dirty = true; status('有未保存的修改。保存后�
 function button(text, action, className) { const item = node('button', text, className); item.type = 'button'; item.onclick = action; return item; }
 function allModels() { return draft.providers.flatMap(provider => (provider.models || []).map(model => ({ provider, model }))); }
 function modelName(entry) { return entry.model.name || entry.model.id || '未命名模型'; }
+function environmentKeyName(source) { return typeof source === 'string' && source.startsWith('env:') ? source.slice(4) : ''; }
+function editableDraftFromEffective() {
+  const effective = snapshot.effective;
+  if (!effective || !Array.isArray(effective.providers) || effective.providers.length === 0) return structuredClone(snapshot.config);
+  // 列表展示运行时有效模型；草稿不携带真实 Key，保存时由服务端按 ID 保留密钥。
+  return {
+    ...(effective.provider ? { provider: effective.provider } : {}),
+    ...(effective.model ? { model: effective.model } : {}),
+    providers: effective.providers.map(provider => ({
+      id: provider.id,
+      ...(provider.name ? { name: provider.name } : {}),
+      ...(provider.type ? { type: provider.type } : {}),
+      ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
+      ...(environmentKeyName(provider.apiKeySource) ? { apiKeyEnv: environmentKeyName(provider.apiKeySource) } : {}),
+      ...(provider.apiKey || provider.apiKeySource ? { hasApiKey: true } : {}),
+      models: (provider.models || []).map(model => ({
+        id: model.id,
+        ...(model.name ? { name: model.name } : {}),
+        ...(model.type && model.type !== provider.type ? { type: model.type } : {}),
+        ...(model.baseUrl && model.baseUrl !== provider.baseUrl ? { baseUrl: model.baseUrl } : {}),
+        ...(environmentKeyName(model.apiKeySource) ? { apiKeyEnv: environmentKeyName(model.apiKeySource) } : {}),
+        ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+        ...(model.maxOutputTokens !== undefined ? { maxOutputTokens: model.maxOutputTokens } : {}),
+        ...(model.toolCalling !== undefined ? { toolCalling: model.toolCalling } : {}),
+        ...(model.vision !== undefined ? { vision: model.vision } : {}),
+        ...(model.apiKey || model.apiKeySource ? { hasApiKey: true } : {}),
+      })),
+    })),
+  };
+}
 function displayName(entry, counts) { return counts.get(modelName(entry)) > 1 ? (entry.provider.name || entry.provider.id || '供应商') + ' / ' + modelName(entry) : modelName(entry); }
 function findProvider(baseUrl, except) {
   // 相同请求地址自动归入同一 Provider；协议差异由模型级覆盖保存。
@@ -192,7 +222,7 @@ async function deleteModel(entry) {
   markDirty(); render();
 }
 async function load() {
-  try { snapshot = await api('config'); draft = structuredClone(snapshot.config); dirty = false; render(); status(snapshot.errors.length ? '配置有错误，未允许覆盖：' + snapshot.errors.join('；') : '配置已加载。修改后保存，重启 ComeCode 生效。', Boolean(snapshot.errors.length)); }
+  try { snapshot = await api('config'); draft = editableDraftFromEffective(); dirty = false; render(); status(snapshot.errors.length ? '配置有错误，未允许覆盖：' + snapshot.errors.join('；') : '配置已加载。修改后保存，重启 ComeCode 生效。', Boolean(snapshot.errors.length)); }
   catch(error) { status(error.message, true); }
 }
 async function save() {

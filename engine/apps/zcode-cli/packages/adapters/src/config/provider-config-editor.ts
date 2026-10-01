@@ -6,7 +6,9 @@ import { DEFAULT_ENVIRONMENT_MODELS } from "./provider-environment.js";
 import {
   parseUnifiedConfigJson, parseUnifiedConfigToml, resolveUnifiedConfig,
   resolveUnifiedConfigPaths, toPublicUnifiedConfig,
-  type UnifiedConfigDocument, type UnifiedConfigLoadOptions, type UnifiedProviderDefinition,
+  type ResolvedUnifiedConfig, type ResolvedUnifiedModel, type ResolvedUnifiedProvider,
+  type UnifiedConfigDocument, type UnifiedConfigLoadOptions, type UnifiedModelDefinition,
+  type UnifiedProviderDefinition,
 } from "./provider-config.js";
 
 const saveSchema = z.object({
@@ -40,7 +42,9 @@ export function createProviderConfigEditor(options: UnifiedConfigLoadOptions) {
       if (parsed.data.revision !== snapshot.revision) throw new ConfigEditError(409, "配置已被修改，请重新加载再保存");
       if (snapshot.errors.length) throw new ConfigEditError(422, "原配置有错误，请先修复；未覆盖原文件");
       if (snapshot.exists && snapshot.source !== snapshot.target && !parsed.data.migrate) throw new ConfigEditError(409, "保存将生成 JSON，原文件会保留并备份；请确认迁移");
-      const document = restoreSecrets(parsed.data.config, snapshot.document);
+      // 有效模型可能只来自旧 provider_config.json 或环境变量；保存网页草稿时也要保留其密钥来源。
+      const effective = await resolveUnifiedConfig(options);
+      const document = restoreSecrets(parsed.data.config, snapshot.document, effective);
       const preview = await resolveUnifiedConfig({ ...options, userDocument: document });
       if (preview.diagnostics.errors.length) throw new ConfigEditError(422, preview.diagnostics.errors.join("；"));
       if (document.provider && document.model && !preview.providers.find((provider) => provider.id === document.provider)?.modelConfigs.some((model) => model.id === document.model && model.executable)) throw new ConfigEditError(422, "默认模型不可执行，请选择三种支持协议中的模型");
@@ -96,7 +100,53 @@ function publicDocument(document: UnifiedConfigDocument) {
     models: provider.models?.map((model) => typeof model === "string" ? { id: model, hasApiKey: false } : hide(model as unknown as Record<string, unknown>)) ?? [],
   })) };
 }
-function restoreSecrets(input: unknown, current: UnifiedConfigDocument): UnifiedConfigDocument {
+function mergeSecretFallback(
+  configured: UnifiedProviderDefinition | undefined,
+  fallback: UnifiedProviderDefinition | undefined,
+): UnifiedProviderDefinition | undefined {
+  if (!configured) return fallback;
+  if (configured.apiKey !== undefined || configured.apiKeyEnv !== undefined || !fallback) return configured;
+  return { ...configured, ...(fallback.apiKey ? { apiKey: fallback.apiKey } : {}), ...(fallback.apiKeyEnv ? { apiKeyEnv: fallback.apiKeyEnv } : {}) };
+}
+
+function resolvedProviderDefinition(provider: ResolvedUnifiedProvider): UnifiedProviderDefinition {
+  return {
+    ...(provider.type ? { type: provider.type } : {}),
+    ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
+    ...secretFields(provider.apiKey, provider.apiKeySource),
+    models: provider.modelConfigs.map(resolvedModelDefinition),
+  };
+}
+
+function resolvedModelHasOwnSecret(model: ResolvedUnifiedModel, provider: ResolvedUnifiedProvider): boolean {
+  if (!model.apiKey) return false;
+  return model.apiKey !== provider.apiKey || model.apiKeySource !== provider.apiKeySource;
+}
+
+function resolvedModelDefinition(model: ResolvedUnifiedModel): UnifiedModelDefinition {
+  return {
+    id: model.id,
+    ...(model.name ? { name: model.name } : {}),
+    ...(model.type ? { type: model.type } : {}),
+    ...(model.baseUrl ? { baseUrl: model.baseUrl } : {}),
+    ...secretFields(model.apiKey, model.apiKeySource),
+    ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
+    ...(model.maxOutputTokens !== undefined ? { maxOutputTokens: model.maxOutputTokens } : {}),
+    ...(model.toolCalling !== undefined ? { toolCalling: model.toolCalling } : {}),
+    ...(model.vision !== undefined ? { vision: model.vision } : {}),
+  };
+}
+
+function secretFields(apiKey: string | undefined, source: string | undefined): Pick<UnifiedProviderDefinition, "apiKey" | "apiKeyEnv"> {
+  if (source?.startsWith("env:")) return { apiKeyEnv: source.slice(4) };
+  return apiKey ? { apiKey } : {};
+}
+
+function restoreSecrets(
+  input: unknown,
+  current: UnifiedConfigDocument,
+  effective?: ResolvedUnifiedConfig,
+): UnifiedConfigDocument {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ConfigEditError(400, "配置必须是对象");
   const raw = input as Record<string, unknown>;
   if (!Array.isArray(raw.providers)) throw new ConfigEditError(400, "providers 必须是数组");
@@ -112,7 +162,9 @@ function restoreSecrets(input: unknown, current: UnifiedConfigDocument): Unified
   };
   const providers = raw.providers.map((value) => {
     const id = value && typeof value === "object" ? (value as Record<string, unknown>).id : undefined;
-    const previous = typeof id === "string" ? current.providers[id] : undefined;
+    const configured = typeof id === "string" ? current.providers[id] : undefined;
+    const resolved = typeof id === "string" ? effective?.providers.find((provider) => provider.id === id) : undefined;
+    const previous = mergeSecretFallback(configured, resolved ? resolvedProviderDefinition(resolved) : undefined);
     const provider = restore(value, previous);
     if (provider.models !== undefined) {
       if (!Array.isArray(provider.models)) throw new ConfigEditError(400, "models 必须是数组");
@@ -120,7 +172,12 @@ function restoreSecrets(input: unknown, current: UnifiedConfigDocument): Unified
         if (typeof model === "string") return model;
         const modelId = model && typeof model === "object" ? (model as Record<string, unknown>).id : undefined;
         const old = previous?.models?.find((entry) => (typeof entry === "string" ? entry : entry.id) === modelId);
-        return restore(model, typeof old === "object" ? old : undefined);
+        const resolvedModel = resolved?.modelConfigs.find((candidate) => candidate.id === modelId);
+        // 只有模型拥有独立凭据时才回退；继承 Provider 的 Key 不能复制到模型级。
+        const fallbackModel = resolved && resolvedModel && resolvedModelHasOwnSecret(resolvedModel, resolved)
+          ? resolvedModelDefinition(resolvedModel)
+          : undefined;
+        return restore(model, mergeSecretFallback(typeof old === "object" ? old : undefined, fallbackModel));
       });
     }
     return provider;

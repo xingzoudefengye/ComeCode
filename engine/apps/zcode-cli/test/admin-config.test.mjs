@@ -13,6 +13,46 @@ async function fixture(t) {
   const dataRoot=join(root,"user"); await mkdir(dataRoot); await mkdir(join(root,".comecode")); await writeFile(join(root,".comecode","config.json"),"{}"); await writeFile(join(dataRoot,"config.json"),JSON.stringify(document()));
   return {root, dataRoot, cwd:root, env:{}, targetProviderFile:join(dataRoot,"v2","provider_config.json")};
 }
+test("网页读取有效旧 Provider 时仍展示模型，保存草稿保留旧密钥", async t => {
+  const f = await fixture(t);
+  await rm(join(f.dataRoot, "config.json"));
+  await mkdir(join(f.dataRoot, "v2"), { recursive: true });
+  await writeFile(join(f.dataRoot, "v2", "provider_config.json"), JSON.stringify({
+    schemaVersion: 1,
+    config: {
+      providerConfigRules: {
+        providerRules: [{ providerId: "legacy-api", config: {
+          api: { type: "openai-chat-completions", baseUrl: "https://legacy.example/v1" },
+          access: { apiKey: "private-legacy-key" },
+          personalModelIds: ["legacy-model"],
+        } }],
+      },
+      defaultModelSelection: { providerId: "legacy-api", modelId: "legacy-model" },
+    },
+  }));
+  const editor = createProviderConfigEditor(f);
+  const before = await editor.read();
+  assert.equal(before.config.providers.length, 0);
+  assert.equal(before.effective.providers.length, 1);
+  assert.equal(before.effective.providers[0].models[0].id, "legacy-model");
+  assert.doesNotMatch(JSON.stringify(before), /private-legacy-key/u);
+
+  const draft = {
+    provider: "legacy-api",
+    model: "legacy-model",
+    providers: [{
+      id: "legacy-api",
+      type: "openai-chat",
+      baseUrl: "https://legacy.example/v1",
+      hasApiKey: true,
+      models: [{ id: "legacy-model", hasApiKey: true }],
+    }],
+  };
+  await editor.save({ revision: before.revision, config: draft });
+  const saved = JSON.parse(await readFile(join(f.dataRoot, "config.json"), "utf8"));
+  assert.equal(saved.providers[0].apiKey, "private-legacy-key");
+  assert.equal(saved.providers[0].models[0].id, "legacy-model");
+});
 test("网页编辑保存保留未改密钥、模型能力、备份、版本冲突与非托管文件", async t=>{
   const f=await fixture(t), editor=createProviderConfigEditor(f); const before=await editor.read();
   assert.doesNotMatch(JSON.stringify(before),/private-admin-test-key|private-model-key/u);
