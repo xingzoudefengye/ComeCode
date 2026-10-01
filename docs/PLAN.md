@@ -110,7 +110,7 @@ M0 基线
 - 依赖：T1.2
 - 实现：`CLI/adapters/src/config/provider-config.ts`，在 CLI 边界转换为兼容的 `provider_config.json`，不改 Provider Registry 和内部协议。
 - 已完成：用户级/项目级配置发现、最小 TOML 子集、标准环境变量归一化、CLI 覆盖、`config path|show|check`、API Key 脱敏、OpenAI/Anthropic type 映射，以及 Gemini 仅检查不执行。
-- 验证：统一配置单测覆盖解析、合并优先级、环境变量、脱敏、兼容 materialize；未实现 Gemini 原生适配、配置导入和 Web 后台，分别留给 T2.3、T2.4、M4。
+- 验证：统一配置单测覆盖解析、合并优先级、环境变量、脱敏、兼容 materialize；Gemini 原生适配已取消，配置导入已在 T2.4 完成，Web 后台留给 M4。
 
 2026-10-01 首次使用体验修复：无模型首屏中文操作卡片、`comecode config setup` 向导、带注释模板、密钥隐藏与覆盖备份；规则和验收见 [首次模型配置引导](specs/PROVIDER-ONBOARDING.md)。
 
@@ -126,6 +126,7 @@ M0 基线
 - Gemini 原生适配不再作为里程碑/发布前置；旧配置只识别与检查，不执行。
 
 ### T2.4 cc-switch / Codex / Claude Code 配置导入
+- 状态：已完成（2026-10-01）。实现 `comecode import codex|claude` 与 `comecode --import codex|claude`，支持本地配置映射、幂等追加、迁移备份和密钥脱敏；详见 [cc-switch 兼容说明](cc-switch.md)。
 - 依赖：T2.1
 - 做法：
   - 先调研 cc-switch 实际写入的文件和字段（参考其仓库 `farion1231/cc-switch` 文档与源码），写到 `docs/cc-switch.md`。

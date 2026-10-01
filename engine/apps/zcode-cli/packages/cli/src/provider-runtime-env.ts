@@ -116,7 +116,7 @@ function requiresProviderRuntime(argv: readonly string[]): boolean {
   try {
     // 复用真实路由解析，避免把 --json/--cwd 的参数误识别成模型命令。
     const parsed = parseGlobalArgs(extractDisallowedToolsArgs(argv).args);
-    if (parsed.values.help || parsed.values.version) return false;
+    if (parsed.values.help || parsed.values.version || parsed.values.import !== undefined) return false;
     if (parsed.values.prompt !== undefined || parsed.values.target !== undefined) return true;
     return ["tui", "app-server", "agent-server"].includes(parsed.positionals[0] ?? "tui");
   } catch {
