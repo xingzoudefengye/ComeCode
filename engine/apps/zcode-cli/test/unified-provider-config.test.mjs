@@ -109,6 +109,9 @@ api_key_env = "MISSING_KEY"
 
 test("materialize 生成旧 Provider Config 兼容格式且不强行写入 contextWindow", async () => {
   const root = await mkdtemp(join(tmpdir(), "comecode-materialize-"));
+  // 隔离祖先目录里的真实配置，验收只使用本测试的凭据与模型。
+  await mkdir(join(root, ".comecode"), { recursive: true });
+  await writeFile(join(root, ".comecode", "config.toml"), "# isolated test project\n", "utf8");
   const user = join(root, "config.toml");
   const target = join(root, "v2", "provider_config.json");
   await writeFile(user, `model = "model-a"\nprovider = "local"\n[providers.local]\ntype = "openai-responses"\nbase_url = "https://local.test/v1"\napi_key = "plain-secret"\n`, "utf8");

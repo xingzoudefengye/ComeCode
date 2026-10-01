@@ -1,4 +1,7 @@
 import { chmod, readFile, rm } from "node:fs/promises";
+import { execFile as execFileCallback } from "node:child_process";
+import { createRequire } from "node:module";
+import { promisify } from "node:util";
 import { readThirdPartyNotices, stageThirdPartyNotices } from "../../../../../scripts/third-party-notices.mjs";
 import { basename, dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -201,6 +204,22 @@ export const resolveBuildAliases = ({
   "@zcode/core": resolve(cliDirectory, "../core/dist/index.js"),
 });
 
+/** 单包 CLI build 也刷新直接运行时产物，防止把已过期的默认窗口打入 bundle。 */
+export async function rebuildCliRuntimeDependencies({ rootDirectory = projectRoot } = {}) {
+  const require = createRequire(import.meta.url);
+  const compiler = require.resolve("typescript/bin/tsc");
+  const execFile = promisify(execFileCallback);
+  // contracts 是 core 的类型/事件依赖，顺序不能反过来。
+  for (const name of ["contracts", "core"]) {
+    const directory = resolve(rootDirectory, "packages", name);
+    await execFile(process.execPath, [compiler, "--project", resolve(directory, "tsconfig.json")], {
+      cwd: directory,
+      windowsHide: true,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  }
+}
+
 export const buildCli = async ({
   cliDirectory = cliRoot,
   rootDirectory = projectRoot,
@@ -212,6 +231,7 @@ export const buildCli = async ({
   }),
 } = {}) => {
   const cliVersion = await version;
+  await rebuildCliRuntimeDependencies({ rootDirectory });
   const outfile = resolve(cliDirectory, "dist/zcode.cjs");
   const sourcemapFile = `${outfile}.map`;
   const notices = await readThirdPartyNotices(resolve(rootDirectory, "../.."));

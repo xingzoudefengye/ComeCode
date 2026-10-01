@@ -221,9 +221,13 @@ export class EventReducer {
       // AI SDK v6 的 provider input 已经是 total input（含 cache read/write）；
       // 这里通过统一 helper 计算 context used，避免各处重复理解 cache breakdown。
       const contextUsed = getModelUsageContextTokens(payload.usage);
+      // 主请求携带实际模型窗口，必须同步投影；否则回合结果会把 TUI 拉回旧窗口。
+      const contextWindow = payload.contextWindow;
+      const hasContextWindow = contextWindow !== undefined && Number.isInteger(contextWindow) && contextWindow > 0;
       return {
         ...p,
         ...(contextUsed !== undefined ? { contextUsed } : {}),
+        ...(hasContextWindow ? { contextWindow } : {}),
         updatedAt: e.timestamp,
       };
     },
