@@ -15,7 +15,7 @@ Provider 配置导入已支持：
 
 `project.md` → `decisions.md` → `tasks.md` → `bugs.md` → `memory.md`。
 
-使用 `comecode memory init` 创建模板，`comecode memory path` 查看路径，`comecode memory check` 检查文件状态。`.ai/.local/` 用于未来归档，初始化时自动加入 `.gitignore`。 在 TUI 会话中输入 `/memory save` 可等待一次显式提取；它不覆盖已有文件，是否发生实际修改由当前会话内容决定。
+使用 `comecode memory init` 创建模板，`comecode memory path` 查看路径，`comecode memory check` 检查文件状态。`.ai/.local/` 由程序保存内部运行状态，初始化时自动加入 `.gitignore`。用户只需在 TUI 中输入 `/memory save` 触发显式提取；它不覆盖已有文件，是否发生实际修改由当前会话内容决定。
 
 ## 加载与缓存
 
@@ -32,4 +32,4 @@ Runtime 首次初始化上下文时读取上述五个文件，并按固定顺序
 ## 当前边界
 
 - 旧用户级记忆代码仍保留兼容模块，但 ComeCode 项目记忆默认写入工作区 `.ai/`。
-- `.ai/.local/archive/` 的原文归档和 RecallArchive 检索属于后续永续会话任务，当前只预留目录忽略规则。
+- 压缩摘要和干活指南由程序自动携带；没有新增压缩原文归档，也不提供 RecallArchive 或 `memory search` 命令。已提交的指南、短上下文和项目记忆机制保持不变。
