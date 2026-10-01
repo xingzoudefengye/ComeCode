@@ -264,3 +264,35 @@ test("真实前端修改 Grok 地址/协议且 Key 留空，预览测试保存�
     assert.doesNotMatch(JSON.stringify(saved), /apiKeyFrom|hasApiKey/);
   }
 });
+
+
+test("列表测试按钮直接发起请求、不弹确认且防重复点击，成功失败均恢复按钮", async () => {
+  for (const outcome of ["success", "protocol-failure", "network-failure"]) {
+    let calls = 0, finish;
+    const f = form(providers(), true, async (url, options) => {
+      calls += 1;
+      assert.equal(url, "/api/test");
+      assert.deepEqual(JSON.parse(options.body), { provider: "first", model: "old-a", confirm: true });
+      await new Promise(resolve => { finish = resolve; });
+      if (outcome === "network-failure") throw new Error("网络连接失败");
+      return { ok: true, json: async () => ({ ok: outcome === "success", message: outcome === "success" ? "连接成功" : "响应协议不匹配" }) };
+    });
+    const buttons = [];
+    const visit = element => { if (element.tag === "button" && element.textContent === "测试连接") buttons.push(element); (element.options || []).forEach(visit); };
+    visit(f.get("providers"));
+    const control = buttons[0];
+    const operation = control.onclick();
+    assert.equal(calls, 1);
+    assert.equal(f.get("confirm").open, undefined);
+    assert.equal(control.disabled, true);
+    assert.equal(control.textContent, "测试中…");
+    await control.onclick();
+    await buttons[1].onclick();
+    assert.equal(calls, 1);
+    finish(); await operation;
+    assert.equal(control.disabled, false);
+    assert.equal(control.textContent, "测试连接");
+    assert.equal(f.get("status").className, outcome === "success" ? "" : "error");
+    assert.equal(f.get("status").textContent, outcome === "success" ? "连接成功" : outcome === "network-failure" ? "网络连接失败" : "响应协议不匹配");
+  }
+});
