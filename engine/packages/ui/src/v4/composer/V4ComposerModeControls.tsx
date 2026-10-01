@@ -74,7 +74,7 @@ function V4ComposerModeSwitchImpl({
       name: "Mode",
       category: "mode",
       type: "select",
-      currentValue: draftConfig?.mode ?? "build",
+      currentValue: draftConfig?.mode ?? "auto",
       options: getZCodeAgentAvailableModes()
         .filter((mode) => mode.id !== "plan")
         .map((mode) => ({ value: mode.id, name: mode.name })),
@@ -117,7 +117,7 @@ function V4ComposerModeSwitchImpl({
               aria-label={intl.formatMessage({ id: "chat.toolbar.mode.label" })}
               className={cn(
                 "group/mode h-7 gap-1 rounded-lg px-2 text-ui-base data-[composer-compact=true]:w-7 data-[composer-compact=true]:px-0",
-                selected.id === "yolo" && "text-warning hover:text-warning",
+                (selected.id === "yolo" || selected.id === "auto") && "text-warning hover:text-warning",
               )}
             >
               <Icon className="size-4" />

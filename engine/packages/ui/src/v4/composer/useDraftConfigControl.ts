@@ -462,7 +462,7 @@ export function useDraftConfigControl(params: {
       if (mode === "plan" || mode === "plan-off") {
         updateComposerDraft((current) => ({
           ...current,
-          mode: current.mode === "plan" ? "build" : (current.mode ?? "build"),
+          mode: current.mode === "plan" ? "auto" : (current.mode ?? "auto"),
           planEnabled: mode === "plan",
           initializeFromNewTask: undefined,
         }));

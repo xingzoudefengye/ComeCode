@@ -84,7 +84,7 @@ export function getSessionShellSelection(
 }
 
 export function getMode(this: AgentRuntimeInternal): CollaborationMode {
-  return this.config.mode ?? "build";
+  return this.config.mode ?? "auto";
 }
 
 export function getPlanEnabled(this: AgentRuntimeInternal): boolean {

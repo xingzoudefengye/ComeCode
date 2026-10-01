@@ -225,7 +225,7 @@ function buildBaselineMetaFromSummary(
     workspaceIdentity: target.workspaceIdentity,
     createdAt: summary.createdAt,
     updatedAt: summary.lastActivityAt,
-    mode: "build",
+    mode: "auto",
     provider: ZCODE_AGENT_PROVIDER,
     ...(summary.parentSessionId ? { forkedFromTaskId: summary.parentSessionId } : {}),
     ...(status ? { status } : {}),

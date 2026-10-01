@@ -292,7 +292,7 @@ export const DefaultRuntimeConfig: RuntimeConfig = {
     idleTimeoutMs: DEFAULT_MODEL_STREAM_IDLE_TIMEOUT_MS,
   },
   permission: {
-    mode: "build",
+    mode: "auto",
     allowedTools: [],
     disallowedTools: [],
     autoApproveHighRisk: false,

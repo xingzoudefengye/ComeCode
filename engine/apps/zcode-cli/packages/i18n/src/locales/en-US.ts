@@ -45,7 +45,7 @@ Options:
     "Bash(git *)" removes all of Bash; command patterns are not matched.
   --force-mcs      Force mid-conversation system projection for Anthropic providers
   --locale <locale>  UI locale: en-US, zh-CN, or auto
-  --mode <mode>    Permission mode for prompts: build, edit, plan, or yolo (default: yolo for --prompt)
+  --mode <mode>    Permission mode for prompts: build, edit, plan, yolo, or auto (default: auto for --prompt)
   --model <model>  Override the configured default model
   --provider <id>  Override the configured Provider ID
   --resume <sessionId>  Resume a persisted session by sessionId (sess_...)
@@ -66,7 +66,7 @@ Slash Commands:
   /dwf [list|cancel|resume]  List, cancel, or resume dynamic workflow runs
   /fork [latest|checkpointId]  Fork a new session from a workspace checkpoint
   /mcp [list|status|connect|disconnect]  Show or manage MCP servers
-  /mode [mode]          Show or switch permission mode: build, edit, plan, or yolo
+  /mode [mode]          Show or switch permission mode: build, edit, plan, yolo, or auto
   /model [id]           Show or switch the current session model
   /new                  Start a fresh session in the TUI
   /resume [sessionId]   Resume a session by sessionId; omit it for latest in cwd

@@ -42,7 +42,7 @@ export const createCliModeState = (mode?: CliPermissionMode): CliModeState => ({
 });
 
 export const currentCliMode = (state: CliModeState): CliRuntimeMode =>
-  state.current ?? state.override ?? "build";
+  state.current ?? state.override ?? "auto";
 
 /** The TUI's Plan entry projects the runtime's independent planning flag. */
 export function readTuiMode(

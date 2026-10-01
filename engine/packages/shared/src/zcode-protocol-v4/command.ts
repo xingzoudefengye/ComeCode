@@ -211,9 +211,9 @@ export const commandPayloadSchemas = {
     thought: z.string(),
   }),
   // additive（冻结面按黄金测试背书演进）：agent 协作模式切换。
-  // 值域 = core CollaborationMode 的可切换子集（auto 非用户可切，不进 UI 命令面）。
+  // auto 自己批准计划并跳过工具确认，对齐 Claude Code CLI 的 auto。
   switchCollaborationMode: z.object({
-    mode: z.enum(["build", "edit", "plan", "yolo"]),
+    mode: z.enum(["build", "edit", "plan", "yolo", "auto"]),
   }),
   setFollowupMode: z.object({ mode: z.enum(["queue", "guide"]) }),
   pauseGoal: z.object({}),

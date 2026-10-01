@@ -11,7 +11,7 @@ export type ExecutionState = z.infer<typeof executionStateSchema>;
 /** 在接纳边界固定旧请求语义，不能在队列消费时按当前配置重新解释。 */
 export function resolveExecutionState(
   input: { mode?: string; planEnabled?: boolean },
-  current: ExecutionState = { mode: "build", planEnabled: false },
+  current: ExecutionState = { mode: "auto", planEnabled: false },
 ): ExecutionState {
   const mode = executionPermissionModeSchema.safeParse(input.mode);
   return {
