@@ -131,7 +131,11 @@ function mergeSecretFallback(
 ): UnifiedProviderDefinition | undefined {
   if (!configured) return fallback;
   if (configured.apiKey !== undefined || configured.apiKeyEnv !== undefined || !fallback) return configured;
-  return { ...configured, ...(fallback.apiKey ? { apiKey: fallback.apiKey } : {}), ...(fallback.apiKeyEnv ? { apiKeyEnv: fallback.apiKeyEnv } : {}) };
+  return {
+    ...configured,
+    ...(fallback.apiKey ? { apiKey: fallback.apiKey } : {}),
+    ...(fallback.apiKeyEnv ? { apiKeyEnv: fallback.apiKeyEnv } : {}),
+  };
 }
 
 function resolvedProviderDefinition(provider: ResolvedUnifiedProvider): UnifiedProviderDefinition {
@@ -179,11 +183,17 @@ function restoreSecrets(
   const restore = (value: unknown, previous: UnifiedProviderDefinition | undefined) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new ConfigEditError(400, "供应商和模型必须是对象");
     const { hasApiKey: _hasApiKey, clearApiKey, ...definition } = value as Record<string, unknown>;
-    if (definition.apiKey === "" || definition.apiKey === undefined) {
+    if (clearApiKey === true) {
+      // 明确清除时同时删除明文 Key 和环境变量来源，避免旧凭据被恢复。
       delete definition.apiKey;
-      if (clearApiKey !== true && !definition.apiKeyEnv && previous?.apiKey) definition.apiKey = previous.apiKey;
+      // 如果页面同时填写了新的环境变量，它代表替换来源，不能被清除动作删掉。
+      if (!definition.apiKeyEnv) delete definition.apiKeyEnv;
+    } else if (definition.apiKey === "" || definition.apiKey === undefined) {
+      delete definition.apiKey;
+      // 页面只传 hasApiKey，不传明文；编辑协议或地址时保留原来的 Key 来源。
+      if (!definition.apiKeyEnv && previous?.apiKey) definition.apiKey = previous.apiKey;
+      else if (!definition.apiKeyEnv && previous?.apiKeyEnv) definition.apiKeyEnv = previous.apiKeyEnv;
     }
-    if (clearApiKey === true) delete definition.apiKey;
     return definition;
   };
   const providers = raw.providers.map((value) => {
