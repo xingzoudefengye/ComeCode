@@ -868,7 +868,7 @@
           "config": {
             "enabled": true,
             "properties": {
-              "contextWindow": 200000,
+              "contextWindow": 512000,
               "inputFormat": {
                 "supportsText": true,
                 "supportsImage": false,

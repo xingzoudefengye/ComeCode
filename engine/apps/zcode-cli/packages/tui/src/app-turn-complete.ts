@@ -20,9 +20,21 @@ export function applyModelCacheAndBudgetEvent(
   ) {
     setCacheStats((current) => ({ ...current, hitRate }));
   }
+  // 辅助请求不能覆盖主会话预算；缺少 querySource 的旧主事件仍兼容读取。
+  const isMainRequest = payload.querySource === "main_turn" ||
+    (payload.querySource === undefined && payload.stopReason !== "tool_internal");
+  if (!isMainRequest) return;
   const compactThreshold = numberField(payload, "compactThreshold");
-  if (compactThreshold !== undefined || payload.querySource === "main_turn")
-    setContextUsage((current) => ({ ...current, compactThreshold }));
+  const contextWindow = numberField(payload, "contextWindow");
+  const hasContextWindow = contextWindow !== undefined && Number.isInteger(contextWindow) && contextWindow > 0;
+  if (hasContextWindow || compactThreshold !== undefined || payload.querySource === "main_turn") {
+    // 同一主请求事件同时更新窗口和阈值，不在界面推算或强行覆盖模型窗口。
+    setContextUsage((current) => ({
+      ...current,
+      ...(hasContextWindow ? { contextWindow } : {}),
+      ...(compactThreshold !== undefined || payload.querySource === "main_turn" ? { compactThreshold } : {}),
+    }));
+  }
 }
 
 /**

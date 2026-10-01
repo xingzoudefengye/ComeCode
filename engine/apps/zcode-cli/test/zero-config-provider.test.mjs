@@ -14,6 +14,8 @@ async function fixture(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   const dataRoot = join(root, ".comecode");
   await mkdir(dataRoot, { recursive: true });
+  // 临时目录可能位于用户主目录下，空项目边界阻止向上读取真实用户配置。
+  await writeFile(join(dataRoot, "config.toml"), "# isolated test project\n", "utf8");
   return { root, dataRoot };
 }
 

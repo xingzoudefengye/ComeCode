@@ -233,6 +233,10 @@ test("完整会话仅请求用户配置的模型白名单主机", async () => {
     });
     const result = await app.submitPrompt("Reply with ComeCode smoke ok");
     assert.equal(result.response, "ComeCode smoke ok");
+    // 真实 runtime 的主请求事件和回合 projection 必须同时保留显式 32K 模型窗口。
+    const mainComplete = result.events.find((event) => event.type === "model_complete" && event.payload.querySource === "main_turn");
+    assert.equal(mainComplete?.payload.contextWindow, 32_000);
+    assert.equal(result.projection.contextWindow, 32_000);
     assert.ok(requested.length > 0);
     assert.deepEqual([...new Set(requested.map((url) => url.hostname))], ["model.example"]);
     await assert.rejects(stat(join(root, ".zcode")), { code: "ENOENT" });
