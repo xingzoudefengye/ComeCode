@@ -182,7 +182,15 @@ function restoreSecrets(
   if (!Array.isArray(raw.providers)) throw new ConfigEditError(400, "providers 必须是数组");
   const restore = (value: unknown, previous: UnifiedProviderDefinition | undefined) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new ConfigEditError(400, "供应商和模型必须是对象");
-    const { hasApiKey: _hasApiKey, clearApiKey, ...definition } = value as Record<string, unknown>;
+    const { hasApiKey: _hasApiKey, clearApiKey, apiKeyFrom, ...definition } = value as Record<string, unknown>;
+    if (apiKeyFrom !== undefined && clearApiKey !== true && !definition.apiKey && !definition.apiKeyEnv) {
+      // 迁移/重命名时按原模型恢复有效凭据；引用只供本次编辑使用，不持久化、不回传密钥。
+      const source = z.object({ provider: z.string().min(1), model: z.string().min(1) }).strict().safeParse(apiKeyFrom);
+      if (!source.success) throw new ConfigEditError(422, "原模型凭据来源格式不正确，请重新打开编辑框");
+      const original = effective?.providers.find((entry) => entry.id === source.data.provider)?.modelConfigs.find((entry) => entry.id === source.data.model);
+      if (!original?.apiKey) throw new ConfigEditError(422, "原模型凭据已失效，请重新加载或填写 API Key");
+      previous = secretFields(original.apiKey, original.apiKeySource);
+    }
     if (clearApiKey === true) {
       // 明确清除时同时删除明文 Key 和环境变量来源，避免旧凭据被恢复。
       delete definition.apiKey;
