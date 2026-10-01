@@ -3,7 +3,7 @@ import type { CompactModelMessage } from "./manual.js";
 import { estimateMessageTokens, hasEnoughMessagesToCompact } from "./manual.js";
 import type { LocalMicrocompactPolicyConfig } from "./microcompact.js";
 
-// 未提供模型窗口时按 512K 计算；自动压缩阈值仍由 60% 策略决定。
+// 未提供模型窗口时按 512K 计算；自动压缩阈值仍由 75% 策略决定。
 export const DEFAULT_COMPACT_CONTEXT_WINDOW = 512_000;
 // 正常请求默认输出已收敛到 32K，auto compact 必须预留同一目标；
 // 否则请求预算和压缩窗口会继续按两套常量计算。
@@ -11,7 +11,7 @@ export const DEFAULT_AUTOCOMPACT_OUTPUT_RESERVE_TOKENS = 32_000;
 const PREFLIGHT_AUTOCOMPACT_OUTPUT_RESERVE_TOKENS = 21_000;
 export const MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000;
 export const AUTOCOMPACT_BUFFER_TOKENS = 13_000;
-export const DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT = 60;
+export const DEFAULT_AUTOCOMPACT_THRESHOLD_PERCENT = 75;
 export const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3;
 
 export interface AutoCompactPolicyConfig {

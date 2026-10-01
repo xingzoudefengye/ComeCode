@@ -91,24 +91,24 @@ test("第二次压缩会用新指南替换第一次指南", () => {
   assert.equal(wireText.includes("第二版指南"), true);
 });
 
-test("512K 默认在 307.2K 压缩，真实小窗口和输出预留优先", () => {
-  assert.equal(getAutoCompactThreshold(), 307_200);
-  assert.equal(getAutoCompactThreshold({ contextWindow: 128_000 }), 76_800);
+test("512K 默认在 384K 压缩，真实小窗口和输出预留优先", () => {
+  assert.equal(getAutoCompactThreshold(), 384_000);
+  assert.equal(getAutoCompactThreshold({ contextWindow: 128_000 }), 94_000);
   assert.equal(getAutoCompactThreshold({ contextWindow: 32_000 }), 0);
   assert.equal(
     getAutoCompactThreshold({ contextWindow: 32_000, maxOutputTokens: 4_000, bufferTokens: 1_000 }),
-    19_200,
+    24_000,
   );
   for (const contextWindow of [undefined, 0, -1, NaN, Infinity]) {
-    assert.equal(getAutoCompactThreshold({ contextWindow }), 307_200);
+    assert.equal(getAutoCompactThreshold({ contextWindow }), 384_000);
   }
-  for (const tokenCount of [307_199, 307_200]) {
+  for (const tokenCount of [383_999, 384_000]) {
     const decision = shouldAutoCompact({
       messages,
       tokenOverride: { source: "provider_usage", tokenCount },
     });
-    assert.equal(decision.shouldCompact, tokenCount >= 307_200);
-    assert.equal(decision.thresholdPercent, 60);
+    assert.equal(decision.shouldCompact, tokenCount >= 384_000);
+    assert.equal(decision.thresholdPercent, 75);
   }
 });
 
@@ -116,7 +116,7 @@ test("显式百分比遵循安全预算，非法百分比回退，熔断与关�
   assert.equal(getAutoCompactThreshold({ thresholdPercentOverride: 90 }), 460_800);
   assert.equal(getAutoCompactThreshold({ thresholdPercentOverride: 50 }), 256_000);
   for (const thresholdPercentOverride of [0, -1, 101, NaN, Infinity]) {
-    assert.equal(getAutoCompactThreshold({ thresholdPercentOverride }), 307_200);
+    assert.equal(getAutoCompactThreshold({ thresholdPercentOverride }), 384_000);
   }
   assert.equal(shouldAutoCompact({ messages, config: { enabled: false } }).reason, "disabled");
   assert.equal(shouldAutoCompact({ messages, consecutiveFailures: 3 }).reason, "circuit_breaker");
