@@ -57,7 +57,7 @@ export function createInitialConversationSnapshot(
         queueLength: 0,
         autoDrain: true,
       },
-      "queue",
+      "guide",
     ),
     meta: { title: "", titleSource: "default" },
     // mode 初值 = core 默认协作模式（session-mode-port getMode 的 "build" 回落）。
@@ -68,7 +68,7 @@ export function createInitialConversationSnapshot(
       model: "",
       thought: "",
       thoughtLevels: [],
-      followupMode: "queue",
+      followupMode: "guide",
       mode: "build",
     },
     modelTransition: null,

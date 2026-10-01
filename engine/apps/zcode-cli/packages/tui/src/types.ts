@@ -203,6 +203,8 @@ export type TuiSendInput = (
   options: {
     abortSignal?: AbortSignal;
     delivery?: InputDelivery;
+    /** 运行中输入的产品路由；TUI 默认显式使用 guide。 */
+    queueDelivery?: "guide" | "queue";
     expectedTurnId?: TurnId;
     onEvent?: (event: SessionEvent) => void | Promise<void>;
     requestPermission?: TuiRequestPermission;

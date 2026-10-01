@@ -148,12 +148,13 @@ export async function submitDuringActiveTurn(input: {
     input.draftAttachments.length === 0 ? compactCommandFromText(input.text) : undefined;
   const localUserMessage = createLocalUserMessage(redactSensitivePromptForTranscript(input.text));
   try {
-    input.setStatus("Queueing input...");
+    input.setStatus("Guiding current task...");
     const result = await input.options.sendInput(
       toPromptInput(input.text, input.draftAttachments, input.modelSelection),
       {
         abortSignal: input.signal,
         delivery: "auto",
+        queueDelivery: "guide",
         expectedTurnId: input.activeTurnId,
         onEvent: input.applySessionEvent,
         requestPermission: input.requestPermission,
@@ -186,8 +187,8 @@ export async function submitDuringActiveTurn(input: {
     input.setStatus(
       result.kind === "queued"
         ? result.queueLength > 1
-          ? `Input queued (${result.queueLength} pending).`
-          : "Input queued."
+          ? `Input guided (${result.queueLength} pending).`
+          : "Input guided."
         : `Input not queued: ${result.reason}.`,
     );
   } catch (error) {

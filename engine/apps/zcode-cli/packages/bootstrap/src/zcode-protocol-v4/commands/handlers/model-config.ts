@@ -257,9 +257,9 @@ export async function applyRequestedSessionConfig(
     );
   }
 
-  // followupMode：runtime 缺省即 queue（投影初值同），仅非缺省值需要显式写——
-  // runtime.setFollowupMode 无同值守卫（无条件追加事件），显式传 "queue" 会产空转 delta。
-  if (config.followupMode && config.followupMode !== "queue") {
+  // followupMode：runtime 缺省即 guide（投影初值同），仅显式 queue 需要写入——
+  // runtime.setFollowupMode 无同值守卫（无条件追加事件），显式传 "guide" 会产空转 delta。
+  if (config.followupMode && config.followupMode !== "guide") {
     await record.app.setFollowupMode(config.followupMode);
   }
 }
