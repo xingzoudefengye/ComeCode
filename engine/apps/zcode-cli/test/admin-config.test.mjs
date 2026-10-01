@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import vm from "node:vm";
 import { mkdtemp, mkdir, readFile, writeFile, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createProviderConfigEditor, ConfigEditError } from "../packages/adapters/dist/config/provider-config-editor.js";
 import { materializeUnifiedConfig, resolveUnifiedConfig } from "../packages/adapters/dist/config/provider-config.js";
 import { startAdminServer } from "../packages/cli/src/admin/server.ts";
+import { ADMIN_SCRIPT } from "../packages/cli/src/admin/client.ts";
 import { testProviderConnection } from "../packages/cli/src/admin/test-connection.ts";
 const document = () => ({ provider: "api", model: "model-b", providers: [{ id: "api", type: "openai-chat", baseUrl: "https://example.test/v1", apiKey: "private-admin-test-key", contextWindow: 512000, models: [{ id: "model-a" }, { id: "model-b", type: "anthropic", baseUrl: "https://anthropic.example/v1", apiKey: "private-model-key", vision: false }] }] });
 async function fixture(t) {
@@ -93,6 +95,10 @@ test("网页模型配置支持同地址归类所需的多模型结构与供应�
   assert.equal(saved.providers[0].name, "我的模型服务");
   assert.deepEqual(saved.providers[0].models.map(model => typeof model === "string" ? model : model.id), ["model-a", "model-b", "model-c"]);
   assert.equal(after.config.providers[0].models.length, 3);
+});
+test("管理页前端脚本保持可执行语法", () => {
+  // 页面脚本一旦语法错误，浏览器不会发起配置请求，只会停在“正在读取配置”。
+  assert.doesNotThrow(() => new vm.Script(ADMIN_SCRIPT));
 });
 test("HTTP 鉴权、同源、Host、CSP、脱敏、体积限制和保存",async t=>{
   const f=await fixture(t),server=await startAdminServer(f);t.after(()=>server.close());const token=new URLSearchParams(new URL(server.url).hash.slice(1)).get('token');const headers={Authorization:'Bearer '+token};

@@ -15,8 +15,8 @@ const protocols = [
 ];
 const protocolName = type => (protocols.find(item => item[0] === type) || ['', type || '未设置'])[1];
 const normalizeUrl = value => {
-  try { const url = new URL(String(value || '').trim()); url.hash = ''; url.pathname = url.pathname.replace(/\\/+$/, '') || '/'; return url.toString().replace(/\\/$/, ''); }
-  catch { return String(value || '').trim().replace(/\\/+$/, '').toLowerCase(); }
+  try { const url = new URL(String(value || '').trim()); url.hash = ''; url.pathname = url.pathname.replace(/\/+$/, '') || '/'; return url.toString().replace(/\/$/, ''); }
+  catch { return String(value || '').trim().replace(/\/+$/, '').toLowerCase(); }
 };
 async function api(path, method = 'GET', body) {
   const response = await fetch('/api/' + path, { method, headers: { Authorization: 'Bearer ' + token, ...(body ? {'Content-Type':'application/json'} : {}) }, ...(body ? {body:JSON.stringify(body)} : {}) });
