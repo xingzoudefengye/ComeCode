@@ -6,7 +6,7 @@ import { ADMIN_STYLE } from "../packages/cli/src/admin/assets.ts";
 
 // 最小 DOM 覆盖表单事件与草稿，不向模型服务发起请求。
 function form(config, renderPage = false) {
-  const elements = new Map();
+  const elements = new Map(), windowHandlers = new Map();
   const element = tag => ({ tag, attributes: {}, value: "", hidden: false, checked: false, options: [],
     append(...items) { this.options.push(...items); }, replaceChildren() { this.options = []; },
     setAttribute(name, value) { this.attributes[name] = value; }, showModal() { this.open = true; }, close() {}, focus() {},
@@ -14,14 +14,14 @@ function form(config, renderPage = false) {
   const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const context = vm.createContext({ URL, URLSearchParams, structuredClone,
     location: { hash: "", pathname: "/" }, sessionStorage: { getItem: () => null },
-    document: { getElementById: get, createElement: element, createElementNS: (_namespace, tag) => element(tag) }, window: { addEventListener() {} },
+    document: { getElementById: get, createElement: element, createElementNS: (_namespace, tag) => element(tag) }, window: { addEventListener(type, handler) { windowHandlers.set(type, handler); } },
   });
   new vm.Script(ADMIN_SCRIPT).runInContext(context);
   const run = code => new vm.Script(code).runInContext(context);
   run('draft = ' + JSON.stringify(config) + ';');
   if (renderPage) run('snapshot = { source: "fixture", target: "fixture", effective: { paths: {} }, errors: [] }; render();');
   else run('render = () => {}; openModelDialog(null);');
-  return { get, run, draft: () => JSON.parse(run('JSON.stringify(draft)')) };
+  return { get, run, dispatch(type, event) { windowHandlers.get(type)?.(event); }, draft: () => JSON.parse(run('JSON.stringify(draft)')) };
 }
 const providers = () => ({ providers: [
   { id: "first", name: "接口 A", type: "anthropic", baseUrl: "https://a.example/v1", hasApiKey: true, models: [{ id: "old-a" }] },
@@ -37,6 +37,8 @@ test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型�
   assert.equal(f.get("model-endpoint-toggle").textContent, undefined);
   assert.deepEqual(f.get("model-endpoint").options.map(option => option.value), ["", "first", "second"]);
   assert.deepEqual(f.get("model-endpoint-menu").options.map(option => option.textContent), ["手动填写", "接口 A · https://a.example/v1", "接口 B · https://b.example/v1"]);
+  assert.equal(f.get("model-type-display").value, "Chat Completions（兼容）");
+  assert.deepEqual(f.get("model-type-menu").options.map(option => option.textContent), ["Chat Completions（兼容）", "Responses", "Anthropic Messages"]);
   select(f, "first");
   assert.equal(f.get("model-url").value, "https://a.example/v1");
   assert.equal(f.get("model-url").hidden, false);
@@ -55,7 +57,9 @@ test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", (
   select(f, "second");
   assert.equal(f.get("model-key").value, "");
   assert.equal(f.get("model-type").value, "openai-responses");
-  f.get("model-type").value = "openai-chat"; add(f, "compatible-model");
+  f.get("model-type").value = "openai-chat"; f.get("model-type").onchange();
+  assert.equal(f.get("model-type-display").value, "Chat Completions（兼容）");
+  add(f, "compatible-model");
   assert.equal(f.draft().providers[1].models[1].type, "openai-chat");
   f.run("openModelDialog(null)"); select(f, "second"); f.get("model-key").value = "other-unsaved-key";
   select(f, "");
@@ -103,15 +107,28 @@ test("同地址不同供应商按下拉 ID 选择，取消/重开不保留上次
   assert.equal(f.get("model-key").value, "");
 });
 
+test("点击外部空白会收起地址和协议菜单", () => {
+  const f = form(providers());
+  f.run("toggleModelEndpointMenu(); toggleModelTypeMenu();");
+  assert.equal(f.get("model-endpoint-menu").hidden, false);
+  assert.equal(f.get("model-type-menu").hidden, false);
+  f.dispatch("click", { target: { closest: () => null } });
+  assert.equal(f.get("model-endpoint-menu").hidden, true);
+  assert.equal(f.get("model-type-menu").hidden, true);
+});
+
+test("地址与协议下拉使用相同的整宽菜单样式", () => {
+  assert.match(ADMIN_STYLE, /\.endpoint-picker,\.protocol-picker\{position:relative\}/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker-menu,\.protocol-picker-menu\{[^}]*left:0[^}]*right:0/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle,\.protocol-picker-toggle\{[^}]*width:38px/);
+});
+
 test("供应商名称框与齿轮保持同高并垂直居中", () => {
   assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*display:inline-flex/);
   assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*align-items:center/);
   assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*height:28px/);
   assert.match(ADMIN_STYLE, /\.provider-edit\{[^}]*height:28px/);
-  assert.match(ADMIN_STYLE, /\.endpoint-picker\{position:relative\}/);
-  assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle\{[^}]*width:38px/);
-  assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle:hover\{background:transparent/);
-  assert.match(ADMIN_STYLE, /\.endpoint-picker-menu\{[^}]*left:0[^}]*right:0/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle:hover,\.protocol-picker-toggle:hover\{background:transparent/);
 });
 
 test("供应商名称同行紧随可访问齿轮图标，点击沿用编辑弹框", () => {
