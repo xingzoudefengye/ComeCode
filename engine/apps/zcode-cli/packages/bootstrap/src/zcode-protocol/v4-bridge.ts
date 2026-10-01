@@ -1153,7 +1153,7 @@ export function createConversationV4Gateway(
           ...(modelSelection?.options?.reasoningLevel
             ? { thoughtLevel: modelSelection.options.reasoningLevel }
             : {}),
-          followupMode: context.v4Gateway?.getSessionFollowupMode(sessionId) ?? "queue",
+          followupMode: context.v4Gateway?.getSessionFollowupMode(sessionId) ?? "guide",
         },
         inheritLatestTarget: false,
       });

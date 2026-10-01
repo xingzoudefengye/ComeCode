@@ -97,6 +97,11 @@ export function workflowExpansionActionFor({
   return undefined;
 }
 
+export function escapeActionFor({ busy, draftValue }: { busy: boolean; draftValue: string }): "guide" | "abort" | "noop" {
+  if (!busy) return "noop";
+  return draftValue.trim() ? "guide" : "abort";
+}
+
 export const PROMPT_DRAFT_CLEARED_STATUS = "Ready.";
 export const CTRL_C_EXIT_PROMPT = "Press Ctrl-C again to exit.";
 export const CTRL_C_EXIT_CONFIRMATION_WINDOW_MS = 2_000;

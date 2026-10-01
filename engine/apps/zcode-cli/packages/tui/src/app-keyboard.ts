@@ -13,6 +13,7 @@ import {
   completeModelCommand,
   completeSlashCommand,
   createCtrlCExitGuard,
+  escapeActionFor,
   type CtrlCExitGuard,
   isModeSwitchKey,
   resetCtrlCExitGuard,
@@ -46,6 +47,7 @@ export {
   completeModelCommand,
   completeSlashCommand,
   createCtrlCExitGuard,
+  escapeActionFor,
   isModeSwitchKey,
   resetCtrlCExitGuard,
   resolveCtrlCExitIntent,
@@ -299,6 +301,11 @@ export function useTuiKeyboardControls({
             return;
           }
           if (busy) {
+            if (escapeActionFor({ busy, draftValue }) === "guide") {
+              // 运行中有草稿时，Esc 沿用 Claude Code/Codex 的快捷交互，立即引导当前任务。
+              void submitValue(draftValue);
+              return;
+            }
             abortControllerRef.current?.abort();
             setStatus("Pausing current output...");
             return;
