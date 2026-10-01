@@ -16,6 +16,7 @@ import {
   type ZCodeBuiltinRefreshEvent,
 } from "@zcode/provider-node";
 import type { CliEnv } from "./env.js";
+import { extractDisallowedToolsArgs, parseGlobalArgs } from "./arguments.js";
 
 export const SEA_ZCODE_BUILTIN_PROVIDER_CONFIG_ASSET_KEY = "zcode-provider/zcode-builtin.json";
 
@@ -49,6 +50,7 @@ interface PrepareCliProviderRuntimeEnvOptions {
   readonly sea?: SeaProviderConfigAssets;
   readonly appVersion?: string;
   readonly platform?: string;
+  readonly stderr?: Pick<NodeJS.WriteStream, "write">;
 }
 
 /** 为运行 Core 或写入模型选择的 CLI Entry 定位同一 Environment 的 Provider Config。 */
@@ -64,13 +66,28 @@ export async function prepareCliProviderRuntimeEnv(
   const personalFilePath =
     explicitPersonal ?? join(dataBaseDir, "v2", PERSONAL_PROVIDER_CONFIG_FILE_NAME);
   // 统一 config.toml 只在 CLI 边界 materialize，旧 Provider Registry 继续读取 JSON。
-  await materializeUnifiedConfig({
+  const config = await materializeUnifiedConfig({
     cwd: extractCliWorkingDirectory(options.argv),
+    dataRoot: dataBaseDir,
     env,
     targetProviderFile: personalFilePath,
     legacyProviderFile: personalFilePath,
     cliOverrides: extractProviderCliOverrides(options.argv),
   });
+  const selected = config.providers.find((provider) => provider.id === config.provider);
+  const explicitSelection = extractProviderCliOverrides(options.argv).provider?.trim() || env.COMECODE_PROVIDER?.trim();
+  if (selected?.type === "gemini" || (explicitSelection && !selected?.executable)) {
+    // 显式选择失败时不能让 Registry 静默回退到其他可用模型。
+    throw new Error(selected?.type === "gemini"
+      ? "Gemini 仅支持识别和检查，当前版本暂不执行"
+      : config.diagnostics.errors.join("；") || "所选 Provider 不可执行，请检查模型和密钥配置");
+  }
+  const environmentSelection = env.COMECODE_PROVIDER?.trim() ||
+    selected?.apiKeySource?.match(/^env:(OPENAI_API_KEY|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|GEMINI_API_KEY)$/u);
+  if (environmentSelection && selected?.executable && config.model) {
+    // JSON 字符串转义控制字符；只说明选择，不输出 key 或 endpoint。
+    options.stderr?.write(`ComeCode Provider: ${JSON.stringify(config.provider)} / ${JSON.stringify(config.model)}（环境配置，CLI 参数优先）\n`);
+  }
   if (explicitZCodeBuiltin && explicitPersonal) {
     return {
       [ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]: explicitZCodeBuiltin,
@@ -94,31 +111,16 @@ export async function prepareCliProviderRuntimeEnv(
 }
 
 function requiresProviderRuntime(argv: readonly string[]): boolean {
-  if (argv.some((arg) => arg === "--help" || arg === "-h" || arg === "--version" || arg === "-v")) {
+  try {
+    // 复用真实路由解析，避免把 --json/--cwd 的参数误识别成模型命令。
+    const parsed = parseGlobalArgs(extractDisallowedToolsArgs(argv).args);
+    if (parsed.values.help || parsed.values.version) return false;
+    if (parsed.values.prompt !== undefined || parsed.values.target !== undefined) return true;
+    return ["tui", "app-server", "agent-server"].includes(parsed.positionals[0] ?? "tui");
+  } catch {
+    // 参数错误交给 run 统一报告；此前不应产生配置写盘副作用。
     return false;
   }
-  if (
-    argv.some(
-      (arg) =>
-        arg === "--prompt" ||
-        arg === "-p" ||
-        arg.startsWith("--prompt=") ||
-        arg === "--target" ||
-        arg.startsWith("--target="),
-    )
-  ) {
-    return true;
-  }
-
-  const command = argv[0];
-  if (command === undefined || command.startsWith("-")) return true;
-  return (
-    command === "tui" ||
-    command === "app-server" ||
-    command === "agent-server" ||
-    command === "login" ||
-    command === "logout"
-  );
 }
 
 async function resolveBundledZCodeBuiltinProviderConfig(input: {

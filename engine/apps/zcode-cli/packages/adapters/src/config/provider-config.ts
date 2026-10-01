@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { parse, resolve, dirname, join } from "node:path";
 import { resolveComeCodeDataRoot } from "./comecode-env.js";
+import { DEFAULT_ENVIRONMENT_MODELS, hasStandardEnvironment, standardEnvironmentDocument } from "./provider-environment.js";
 
 /* oxlint-disable eslint(max-lines) -- 统一配置的解析、合并和兼容 materialize 必须在同一边界维护。 */
 export type UnifiedProviderType = "openai-chat" | "openai-responses" | "anthropic" | "gemini";
@@ -218,7 +219,7 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
     hasFileSource = true;
     document = mergeDocuments(document, await readTomlFile(filePath, diagnostics));
   }
-  document = mergeDocuments(document, standardEnvironmentDocument(env));
+  document = mergeDocuments(document, standardEnvironmentDocument(env, !hasFileSource));
   document = mergeDocuments(document, {
     providers: {},
     ...(options.cliOverrides?.model?.trim() ? { model: options.cliOverrides.model.trim() } : {}),
@@ -226,12 +227,16 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
   });
   const hasSource = hasFileSource || hasStandardEnvironment(env) || Boolean(options.cliOverrides?.model?.trim() || options.cliOverrides?.provider?.trim());
   const selectedProvider = document.provider ?? legacy.defaultModelSelection?.providerId ?? inferProviderId(document);
-  const selectedModel = document.model ?? legacy.defaultModelSelection?.modelId;
+  // 环境探测选中的 Provider 使用自己的默认模型，不能继承旧 JSON 中另一家的模型。
+  const environmentModel = !hasFileSource && selectedProvider
+    ? DEFAULT_ENVIRONMENT_MODELS[document.providers[selectedProvider]?.type ?? ""]
+    : undefined;
+  const selectedModel = document.model ?? environmentModel ?? legacy.defaultModelSelection?.modelId;
   const entries = new Map<string, UnifiedProviderDefinition>(Object.entries(legacy.providers));
   for (const [id, definition] of Object.entries(document.providers)) {
     entries.set(id, mergeProviderDefinition(entries.get(id), definition));
   }
-  if (selectedProvider && selectedModel && !entries.has(selectedProvider)) diagnostics.errors.push(`Provider 不存在: ${selectedProvider}`);
+  if (selectedProvider && !entries.has(selectedProvider)) diagnostics.errors.push(`Provider 不存在: ${selectedProvider}`);
   const providers = [...entries.entries()].map(([id, definition]) => resolveProvider(id, definition, selectedProvider, selectedModel, env, diagnostics));
   const managedProviderIds = Object.freeze(Object.keys(document.providers));
   return Object.freeze({
@@ -375,33 +380,6 @@ async function readLegacyProviderFile(filePath: string, diagnostics: { errors: s
   }
 }
 
-function standardEnvironmentDocument(env: Readonly<Record<string, string | undefined>>): UnifiedConfigDocument {
-  const providers: Record<string, UnifiedProviderDefinition> = {};
-  if (env.OPENAI_API_KEY?.trim() || env.OPENAI_BASE_URL?.trim())
-    providers.openai = {
-      type: "openai-chat",
-      ...(env.OPENAI_BASE_URL?.trim() ? { baseUrl: env.OPENAI_BASE_URL.trim() } : {}),
-      ...(env.OPENAI_API_KEY?.trim() ? { apiKeyEnv: "OPENAI_API_KEY" } : {}),
-    };
-  const anthropicKey = env.ANTHROPIC_API_KEY?.trim() || env.ANTHROPIC_AUTH_TOKEN?.trim();
-  if (anthropicKey || env.ANTHROPIC_BASE_URL?.trim())
-    providers.anthropic = {
-      type: "anthropic",
-      ...(env.ANTHROPIC_BASE_URL?.trim() ? { baseUrl: env.ANTHROPIC_BASE_URL.trim() } : {}),
-      ...(env.ANTHROPIC_API_KEY?.trim()
-        ? { apiKeyEnv: "ANTHROPIC_API_KEY" }
-        : { apiKeyEnv: "ANTHROPIC_AUTH_TOKEN" }),
-    };
-  if (env.GEMINI_API_KEY?.trim())
-    providers.gemini = { type: "gemini", apiKeyEnv: "GEMINI_API_KEY" };
-  const model = env.COMECODE_MODEL?.trim() || env.MODEL?.trim();
-  return { providers, ...(model ? { model } : {}) };
-}
-
-function hasStandardEnvironment(env: Readonly<Record<string, string | undefined>>): boolean {
-  return Boolean(env.OPENAI_API_KEY?.trim() || env.OPENAI_BASE_URL?.trim() || env.ANTHROPIC_API_KEY?.trim() || env.ANTHROPIC_AUTH_TOKEN?.trim() || env.ANTHROPIC_BASE_URL?.trim() || env.GEMINI_API_KEY?.trim() || env.COMECODE_MODEL?.trim() || env.MODEL?.trim());
-}
-
 function mergeProviderDefinition(
   current: UnifiedProviderDefinition | undefined,
   next: UnifiedProviderDefinition,
@@ -439,7 +417,11 @@ function resolveProvider(id: string, definition: UnifiedProviderDefinition, sele
   const apiKeyFromEnv = definition.apiKeyEnv?.trim() ? env[definition.apiKeyEnv.trim()]?.trim() : undefined;
   const apiKey = definition.apiKey?.trim() || apiKeyFromEnv;
   const baseUrl = definition.baseUrl?.trim() || (type ? DEFAULT_BASE_URL[type] : undefined);
-  const models = uniqueStrings(definition.models ?? (id === selectedProvider && selectedModel ? [selectedModel] : []));
+  // CLI/环境显式选中的模型必须准入，不能被低优先级 models 列表挡住。
+  const models = uniqueStrings([
+    ...(definition.models ?? []),
+    ...(id === selectedProvider && selectedModel ? [selectedModel] : []),
+  ]);
   if (!type) diagnostics.errors.push(`Provider ${id}: 缺少 type`);
   else if (!(type in TYPE_TO_API)) diagnostics.errors.push(`Provider ${id}: 未知 type ${type}`);
   if (baseUrl) { try { new URL(baseUrl); } catch { diagnostics.errors.push(`Provider ${id}: base_url 不是有效 URL`); } }

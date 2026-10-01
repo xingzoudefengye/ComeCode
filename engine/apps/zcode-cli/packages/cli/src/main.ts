@@ -85,6 +85,7 @@ async function main(): Promise<void> {
         await prepareCliProviderRuntimeEnv({
           argv,
           env: process.env,
+          stderr,
         }),
       );
     }
