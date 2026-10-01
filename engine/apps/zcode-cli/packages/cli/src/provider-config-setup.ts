@@ -52,10 +52,10 @@ export async function runProviderConfigSetup(
     };
   })();
   try {
-    ctx.stderr.write("ComeCode 模型配置向导\n准备好服务商给的：接口地址、模型名称、API Key。Ctrl+C 可取消。\n");
+    ctx.stderr.write("ComeCode 模型配置向导\n需要填写：接口地址、模型名称、API Key。Ctrl+C 可取消。\n");
     if (paths.project) ctx.stderr.write(`注意：项目配置 ${paths.project} 会优先覆盖用户设置；保存后请检查它。\n`);
     ctx.stderr.write(`保存位置：${paths.user}\n`);
-    const typeChoice = await ask("1. 服务类型：1=OpenAI 兼容/NewAPI/DeepSeek（默认），2=OpenAI Responses，3=Anthropic/Claude：");
+    const typeChoice = await ask("1. 服务类型：1=OpenAI Chat Completions 兼容接口（默认），2=OpenAI Responses，3=Anthropic/Claude：");
     const type = ({ "": "openai-chat", "1": "openai-chat", "2": "openai-responses", "3": "anthropic" } as Record<string, string>)[typeChoice];
     if (!type) throw new Error("服务类型无效，请选择 1、2 或 3，再运行向导。");
     const defaultUrl = type === "anthropic" ? "https://api.anthropic.com/v1" : "https://api.openai.com/v1";
@@ -71,7 +71,7 @@ export async function runProviderConfigSetup(
       }
     }
     let model = "";
-    while (!model) model = await ask("3. 模型名称（从服务商模型列表复制，例如 deepseek-chat）：");
+    while (!model) model = await ask("3. 模型名称（从服务商模型列表复制，以该平台提供的实际名称为准）：");
     let apiKey = "";
     while (!apiKey) apiKey = await ask("4. API Key（输入不显示，粘贴后按回车）：", true);
     const content = [

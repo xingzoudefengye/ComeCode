@@ -4,12 +4,12 @@ import { dirname } from "node:path";
 import { resolveUnifiedConfigPaths } from "@zcode/adapters/config";
 import type { CliEnv } from "./env.js";
 
-export const PROVIDER_CONFIG_EXAMPLE = `# 将下面三个值换成服务商提供的信息，保留双引号。
+export const PROVIDER_CONFIG_EXAMPLE = `# 将下面三个值换成你选择的模型平台提供的信息，保留双引号。
 model = "填写模型名称"
 provider = "my-api"
 
 [providers.my-api]
-type = "openai-chat" # NewAPI、DeepSeek 等 OpenAI 兼容接口使用此项
+type = "openai-chat" # 支持 OpenAI Chat Completions 的兼容接口使用此项
 base_url = "https://你的接口地址/v1" # 复制服务商给的 API 地址，不是网页地址
 api_key = "填写你的 API Key" # 密钥不要发给别人，也不要提交到 Git
 # 如果服务商要求 Responses：type = "openai-responses"
@@ -30,7 +30,7 @@ export function providerSetupResponse(_locale?: string, env: CliEnv = process.en
     ? `notepad "${paths.project ?? paths.user}"`
     : `用文本编辑器打开：${paths.project ?? paths.user}`;
   return [
-    "还没有可用模型，先完成一次配置（不需要厂商账号登录）",
+    "尚未配置模型",
     "",
     "最简单的方法：配置向导",
     "1. 退出当前界面：按两次 Ctrl+C，按提示确认退出。",
@@ -38,11 +38,9 @@ export function providerSetupResponse(_locale?: string, env: CliEnv = process.en
     "3. 按提示填写接口地址、模型名称和 API Key，然后保存。",
     "4. 运行 comecode config check；检查通过后再运行 comecode。",
     "",
-    "这三个信息从哪里来？打开你购买/使用的模型服务商或 NewAPI 的控制台：",
     "- 接口地址：复制 API 地址（通常以 /v1 结尾，不是控制台网页地址）。",
     "- API Key：在“密钥 / API Keys / 令牌”页面创建或复制。",
     "- 模型名称：从服务商的模型列表复制，不能随便起名字。",
-    "没有这些信息时，ComeCode 不能调用模型；先向你的服务商获取。",
     "",
     "也可以手动填写配置文件",
     `用户配置：${paths.user}`,
@@ -61,10 +59,9 @@ export function providerSetupStartupResponse(env: CliEnv, cwd: string): string {
   const paths = resolveUnifiedConfigPaths({ env, cwd });
   const status = ensureProviderConfigTemplate(paths.user);
   return [
-    "欢迎使用 ComeCode：先配置一个模型",
-    "目前还没有可用模型，不是你的输入有问题。",
-    "准备三项信息：接口地址、模型名称、API Key（从模型服务商/NewAPI 控制台取得）。",
+    "尚未配置模型",
     "",
+    "需要填写：接口地址、模型名称、API Key。",
     "按两次 Ctrl+C，确认退出后，在终端运行：",
     "comecode config setup",
     "按中文向导填写并保存 → comecode config check → comecode。",

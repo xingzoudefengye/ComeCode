@@ -94,7 +94,7 @@ test("无模型 TUI 首屏即给配置卡片，普通 sendInput 也不发起模�
     runTui: async (options) => {
       startup = await options.loadStartupOptions();
       assert.match(startup.initialResult.response, /comecode config setup/u);
-      assert.match(startup.initialResult.response, /先配置一个模型/u);
+      assert.match(startup.initialResult.response, /尚未配置模型/u);
       const result = await options.sendInput("你好", {});
       assert.equal(result.kind, "command_result");
       assert.match(result.result.response, /config setup/u);
@@ -170,4 +170,19 @@ test("真实 TUI 渲染首屏卡片时配置向导命令可见且无 OSC 控制�
   } finally {
     await React.act(async () => view.renderer.destroy());
   }
+});
+
+
+test("公开引导只保留操作步骤，不包含个人接入方式或解释性旁白", async (t) => {
+  const f = await fixture(t);
+  const { providerSetupStartupResponse, PROVIDER_CONFIG_TEMPLATE } = await import("../packages/cli/src/provider-setup.ts");
+  for (const text of [providerSetupStartupResponse(f.env, f.root), providerSetupResponse("zh-CN", f.env, f.root), PROVIDER_CONFIG_TEMPLATE]) {
+    assert.doesNotMatch(text, /NewAPI|你的newapi|购买\/使用|网关|模型客户端|不提供模型|不是你的输入/u);
+  }
+  const startup = providerSetupStartupResponse(f.env, f.root);
+  assert.match(startup, /需要填写：接口地址、模型名称、API Key/u);
+  assert.match(startup, /comecode config setup/u);
+  await runProviderConfigSetup(f.ctx, f.env, f.root, scriptedAsk(["1", "", "my-model", "test-key", "n"], []));
+  assert.doesNotMatch(f.readStderr(), /NewAPI|DeepSeek|不需要自建网关|不提供模型/u);
+  assert.match(f.readStderr(), /需要填写：接口地址、模型名称、API Key/u);
 });
