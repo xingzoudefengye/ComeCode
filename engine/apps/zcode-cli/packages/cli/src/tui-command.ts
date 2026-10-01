@@ -1,3 +1,4 @@
+import { providerSetupStartupResponse } from "./provider-setup.js";
 import type { RunContext, GlobalOptions } from "@zcode/shared-types";
 import { resolveZCodeRuntimeEnv } from "@zcode/shared";
 import { createNodeClipboardImageReader } from "./clipboard-image.js";
@@ -70,6 +71,10 @@ export const runTuiCommand = async (
             }).catch(() => undefined),
           ]);
           return {
+            // 首屏直接展示配置卡片，不要求用户先发送一句话才能发现没有模型。
+            ...(!metadata.modelOptions?.some((model) => !model.disabledReason)
+              ? { initialResult: { response: providerSetupStartupResponse(env, workspaceDirectory), responseFormat: "plain" as const, loginRequired: false } }
+              : {}),
             initialMode: currentCliMode(modeState),
             initialModel: metadata.model,
             initialThoughtLevel: metadata.thoughtLevel,

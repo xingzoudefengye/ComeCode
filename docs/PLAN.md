@@ -112,6 +112,8 @@ M0 基线
 - 已完成：用户级/项目级配置发现、最小 TOML 子集、标准环境变量归一化、CLI 覆盖、`config path|show|check`、API Key 脱敏、OpenAI/Anthropic type 映射，以及 Gemini 仅检查不执行。
 - 验证：统一配置单测覆盖解析、合并优先级、环境变量、脱敏、兼容 materialize；未实现 Gemini 原生适配、配置导入和 Web 后台，分别留给 T2.3、T2.4、M4。
 
+2026-10-01 首次使用体验修复：无模型首屏中文操作卡片、`comecode config setup` 向导、带注释模板、密钥隐藏与覆盖备份；规则和验收见 [首次模型配置引导](specs/PROVIDER-ONBOARDING.md)。
+
 ### T2.2 标准环境变量零配置启动（已完成，2026-10-01）
 - 依赖：T2.1
 - 已完成：无 TOML 时按 OpenAI → Anthropic → Gemini 探测非空凭据；固定默认模型；`COMECODE_PROVIDER` 选择；CLI 覆盖；stderr 启动说明；只读配置命令不写盘。

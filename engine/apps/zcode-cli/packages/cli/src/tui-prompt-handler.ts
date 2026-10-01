@@ -1,3 +1,4 @@
+import { providerSetupResponse } from "./provider-setup.js";
 import { getDefaultConfigPath, updateUiLocaleInFileConfig } from "@zcode/adapters/config";
 import type { SessionEvent } from "@zcode/contracts";
 import type { ZCodeAppOptions } from "@zcode/bootstrap";
@@ -261,6 +262,7 @@ export function createTuiSubmitPrompt(
     getLocale: () =>
       app?.getLocale?.() ?? resolveDisplayLocale(activeUiLocale, uiDetectedLocale) ?? startupLocale,
     hasSelectableModels: createTuiModelAvailabilityChecker(getApp),
+    getProviderSetupResponse: () => providerSetupResponse("zh-CN", deps.env, (deps.cwd ?? process.cwd)()),
     listCustomCommands: () => listCustomCommandsForTui(deps),
     listSessions: () => listSessionsForTui(deps),
     listSkills: () => listSkillsForTui(deps),
@@ -322,6 +324,12 @@ export function createTuiSubmitPrompt(
     activeRequestPermission = options?.requestPermission;
 
     try {
+      // 无模型时 sendInput 也必须回到统一引导，不能绕过 command-center 发起模型请求。
+      if (!(await createTuiModelAvailabilityChecker(getApp)())) {
+        return { kind: "command_result", result: await submitPrompt(input, {
+          ...options, abortSignal: options?.abortSignal ?? new AbortController().signal,
+        }) };
+      }
       // Model/effort changes configure subsequent requests, including during an active turn.
       const command = parseSlashCommand(typeof input === "string" ? input : input.text);
       if (command?.type === "known" && (command.name === "model" || command.name === "effort")) {

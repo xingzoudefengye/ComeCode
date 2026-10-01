@@ -63,6 +63,7 @@ export function appendAgentResult(
     ...finalized,
     {
       content: result.response,
+      ...(result.responseFormat === "plain" ? { parts: [{ type: "text" as const, text: result.response, format: "plain" as const }] } : {}),
       role: "agent",
     },
   ];

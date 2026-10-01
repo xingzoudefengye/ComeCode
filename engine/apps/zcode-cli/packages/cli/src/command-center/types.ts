@@ -301,6 +301,7 @@ export type CommandCenterDeps = {
   getLocale?: () => TuiSubmitPromptResult["locale"];
   getMode?: () => CommandCenterMode;
   hasSelectableModels?: () => Promise<boolean> | boolean;
+  getProviderSetupResponse?: () => string;
   listSessions?: () => Promise<CommandCenterSession[]>;
   listCustomCommands?: () => Promise<CommandCenterCustomCommandListOutcome>;
   listSkills?: () => Promise<CommandCenterSkillListOutcome>;

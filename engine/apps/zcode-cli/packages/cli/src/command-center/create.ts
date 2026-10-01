@@ -39,7 +39,8 @@ export function createCommandCenter(deps: CommandCenterDeps): TuiSubmitPrompt {
       return {
         loginRequired: false,
         mode: deps.getMode?.(),
-        response: loginRequiredResponse(deps.getLocale?.()),
+        response: deps.getProviderSetupResponse?.() ?? loginRequiredResponse(deps.getLocale?.()),
+        responseFormat: "plain" as const,
       };
     }
 
@@ -81,7 +82,8 @@ export function createCommandCenter(deps: CommandCenterDeps): TuiSubmitPrompt {
         return {
           loginRequired: false,
           mode: deps.getMode?.(),
-          response: loginRequiredResponse(deps.getLocale?.()),
+          response: deps.getProviderSetupResponse?.() ?? loginRequiredResponse(deps.getLocale?.()),
+        responseFormat: "plain" as const,
         };
       }
 
