@@ -400,7 +400,7 @@ function render() {
       const entry = { provider, model }, row = node('div', undefined, model.enabled === false ? 'model-row is-disabled' : 'model-row');
       const rowHeading = node('div', undefined, 'model-row-heading'), title = node('div');
       title.append(node('strong', displayName(entry, counts)), node('span', protocolName(model.type || provider.type), 'model-protocol'));
-      const actions = node('div', undefined, 'actions'), testButton = button('测试连接', () => test(entry));
+      const actions = node('div', undefined, 'actions'), testButton = button('测试连接', () => test(entry, testButton));
       if (model.enabled === false) { testButton.disabled = true; testButton.title = '请先启用模型再测试连接'; }
       actions.append(modelSwitch(entry), button('编辑', () => openModelDialog(entry)), testButton, button('删除', () => deleteModel(entry), 'danger'));
       rowHeading.append(title, actions); row.append(rowHeading);
@@ -443,11 +443,18 @@ async function save() {
   finally { busy = false; document.querySelectorAll('.model-toggle input').forEach(input => { input.disabled = false; }); }
 }
 
-async function test(entry) {
-  if (!await confirmAction('测试模型连接', '将向 ' + modelName(entry) + ' 发起一次最小请求，服务商可能收费。是否继续？')) return;
+async function test(entry, control) {
+  if (busy) return;
+  // 点击按钮即表示测试意图，不重复弹窗；忙状态防止连点产生多次请求。
+  busy = true;
+  if (control) { control.disabled = true; control.textContent = '测试中…'; }
   status('正在测试连接…');
   try { const result = await api('test', 'POST', { provider: entry.provider.id, model: entry.model.id, confirm: true }); status(result.message, !result.ok); }
   catch(error) { status(error.message, true); }
+  finally {
+    busy = false;
+    if (control) { control.disabled = entry.model.enabled === false; control.textContent = '测试连接'; }
+  }
 }
 $('model-endpoint').onchange = selectModelEndpoint;
 $('model-endpoint-toggle').onclick = toggleModelEndpointMenu;
