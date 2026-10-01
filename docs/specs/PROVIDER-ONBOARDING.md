@@ -10,6 +10,7 @@
 - 引导首选 `comecode config setup`：中文向导逐步询问协议（OpenAI 兼容/chat、Responses、Anthropic）、URL、模型、Key，验证 URL，隐藏密钥输入，不发送联网探测请求。
 - 不要求用户区分内部 JSON 字段；指向 ~/.comecode/config.toml（支持现有数据根）；有项目 TOML 时说明项目覆盖优先，修改项目文件或带 --cwd 到目标项目执行检查。
 - 首次无文件自动用 exclusive create 写入全注释中文 TOML 模板；不写入有效凭据或虚构可执行模型。全注释模板不阻断已有环境变量零配置规则。
+- 向导问题必须在 readline 光标刷新后仍可见，并显示当前等待输入的字段。普通问题交由 readline.question(prompt) 显示，密钥问题单独显示并隐藏输入。验收必须检查应用 ANSI 清屏/光标操作后的终端画面，不只检查输出字符串里曾出现提示。
 - 向导只允许 TTY，非交互给步骤；取消不写盘；覆盖已有用户文件前明确确认且备份，默认不覆盖；现有文件不可覆盖或备份失败时报告，不吞掉失败。
 - 模板创建失败给出失败原因和可复制模板，不假称成功；已有文件不覆盖、不在提示里读取密钥。
 - 不在 Markdown/TUI 中输出 OSC 8 控制字符；Windows 提供准确的 notepad 命令，其他平台可按纯文本路径打开。
@@ -30,3 +31,9 @@
 - adapters build、TUI bundle 与 CLI bundle 构建通过；本机 comecode 启动 shim 指向本次构建文件。
 - freshness 检查因 GitHub fetch 连接重置失败。包级 lint 有既有 apps/zcode-cli 忽略规则，CLI 聚合脚本有既有 turbo 不可用限制；未更改这些配置。
 - 当前仅在 Windows / Node 24.19.0 验证，仓库指定 Node 24.14.0；未使用真实密钥或付费模型。
+
+## 向导提示消失修复（2026-10-01）
+
+根因：先手动输出问题，再调用 readline.question("")，正常终端的 readline 重绘会擦掉当前行。TERM=dumb 不触发重绘，原字符串测试漏掉此问题。普通问题改由 question(prompt) 显示；密钥问题仍单独显示，隐藏其重绘和回显。
+
+验证：新 ANSI 画面回归测试在旧实现下复现第一步空白，修复后各步骤均可见；PowerShell PTY（TERM=xterm-256color）逐步输入假凭据至取消保存通过，密钥不回显、配置未写入。CLI 全量 83/83，CLI/engine typecheck、bundle 构建、--help、架构检查通过。改动文件直接 oxlint 0 warning / 0 error；根 lint 70 个既有 warning、0 error；包级 lint 仍因现有忽略规则没有匹配文件。

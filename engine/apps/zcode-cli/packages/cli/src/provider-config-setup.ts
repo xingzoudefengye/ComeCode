@@ -40,10 +40,12 @@ export async function runProviderConfigSetup(
     reader.on("close", () => controller.abort());
     close = () => { reader.close(); output.end(); };
     return async (prompt: string, secret = false) => {
-      ctx.stderr.write(prompt);
       hidden = secret;
+      // 普通问题交由 readline 重绘；手动打印后 question("") 会清屏擦掉提示。
+      // 密钥问题只手动打印，readline 的重绘与输入回显都由 hidden 抑制。
+      if (secret) ctx.stderr.write(prompt);
       try {
-        const answer = await reader.question("", { signal: controller.signal });
+        const answer = await reader.question(secret ? "" : prompt, { signal: controller.signal });
         if (secret) ctx.stderr.write("\n");
         return answer.trim();
       } finally {
