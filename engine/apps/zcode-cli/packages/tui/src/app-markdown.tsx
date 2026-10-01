@@ -48,6 +48,8 @@ export function MarkdownText({
         content,
         streaming,
         syntaxStyle,
+        // 顶层块独立渲染，保留列表、编号列表和嵌套列表的层级。
+        internalBlockMode: "top-level",
         renderNode: renderCompactMarkdownNode,
       });
     }

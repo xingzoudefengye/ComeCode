@@ -91,6 +91,25 @@ export function ContentPane({
   );
 }
 
+function UserMessageView({ content }: { content: string }): React.ReactElement {
+  const paragraphs = content.split(/\r?\n\s*\r?\n/u);
+  return h(
+    "box",
+    { style: { flexDirection: "column", width: "100%" } },
+    ...paragraphs.map((paragraph, index) =>
+      h(
+        "box",
+        {
+          key: `user-paragraph-${index}`,
+          style: { flexDirection: "row", marginTop: index > 0 ? 1 : 0, width: "100%" },
+        },
+        h("text", { style: { fg: palette.accent, flexShrink: 0 } }, "> "),
+        h("text", { style: { fg: palette.text, flexGrow: 1 } }, paragraph),
+      ),
+    ),
+  );
+}
+
 export function MessageRow({
   copy = DEFAULT_TUI_COPY,
   expandedWorkflowRunIds,
@@ -148,7 +167,9 @@ export function MessageRow({
           }),
         ]
       : parts.length === 0
-        ? [h("text", { key: "content", style: { fg: plainTextColor } }, message.content)]
+        ? [isUserMessage
+          ? h(UserMessageView, { content: message.content, key: "user-content" })
+          : h("text", { key: "content", style: { fg: plainTextColor } }, message.content)]
         : []),
     ...parts.map((part, partIndex) => {
       if (part.type === "tool") {

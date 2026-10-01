@@ -52,7 +52,7 @@ async function render(t, element, width = 90) {
 }
 const row = (lines, text) => lines.findIndex((line) => line.includes(text));
 
-test("原生对话渲染：消息之间一行，Thought 后一行，正文段落无额外空行", async (t) => {
+test("原生对话渲染：用户与模型分层，Thought 和正文段落保持适度间距", async (t) => {
   for (const mode of ["dark", "light"]) {
     setActiveTuiThemeMode(mode);
     const view = await render(
@@ -80,21 +80,21 @@ test("原生对话渲染：消息之间一行，Thought 后一行，正文段落
     const lines = view.captureCharFrame().split("\n");
     assert.equal(row(lines, "Thought") - row(lines, "你好"), 2);
     assert.equal(row(lines, "你好！") - row(lines, "Thought"), 2);
-    assert.equal(row(lines, "目前工作区") - row(lines, "你好！"), 1);
-    assert.equal(row(lines, "有什么想") - row(lines, "目前工作区"), 1);
+    assert.equal(row(lines, "目前工作区") - row(lines, "你好！"), 2);
+    assert.equal(row(lines, "有什么想") - row(lines, "目前工作区"), 2);
     assert.equal(row(lines, "今天是几月") - row(lines, "有什么想"), 2);
     assert.equal(row(lines, "今天是 2026") - row(lines, "今天是几月"), 2);
-    assert.equal(row(lines, "顺便一提") - row(lines, "今天是 2026"), 1);
+    assert.equal(row(lines, "顺便一提") - row(lines, "今天是 2026"), 2);
     await view.close();
   }
 });
 
-test("Markdown 段落紧凑不修改原文，保留代码空行与列表、表格内容", async (t) => {
+test("Markdown 段落保留块间距，不修改原文并保留代码、列表、表格内容", async (t) => {
   const content =
     "正文第一段\n\n正文第二段\n\n```text\ncode-first\n\ncode-last\n```\n\n- item-one\n- item-two\n\n| column | value |\n| --- | --- |\n| table-row | 42 |";
   const view = await render(t, React.createElement(MarkdownText, { content, streaming: false }));
   const lines = view.captureCharFrame().split("\n");
-  assert.equal(row(lines, "正文第二段") - row(lines, "正文第一段"), 1);
+  assert.equal(row(lines, "正文第二段") - row(lines, "正文第一段"), 2);
   assert.equal(row(lines, "code-last") - row(lines, "code-first"), 2);
   assert.equal(row(lines, "item-two") - row(lines, "item-one"), 1);
   assert.ok(row(lines, "table-row") > row(lines, "item-two"));
@@ -122,7 +122,7 @@ test("流式文本更新不重复增加消息分隔，完成时与流式布局�
     assert.equal(row(lines, "stream-first") - row(lines, "stream-user"), 2);
     assert.equal(
       row(lines, "stream-second") - row(lines, "stream-first"),
-      1,
+      2,
       `streaming=${streaming}\n${lines.slice(0, 12).join("\n")}`,
     );
   }
@@ -162,7 +162,36 @@ test("同回合工具与回答续段不叠加间隔，换行与 Markdown 硬换�
   assert.equal(row(lines, "continuation-one") - row(lines, "tool-result"), 1);
   assert.equal(row(lines, "continuation-two") - row(lines, "continuation-one"), 1);
   assert.equal(row(lines, "continuation-three") - row(lines, "continuation-two"), 1);
-  assert.equal(row(lines, "last-paragraph") - row(lines, "continuation-three"), 1);
+  assert.equal(row(lines, "last-paragraph") - row(lines, "continuation-three"), 2);
   assert.equal(row(lines, "next-user") - row(lines, "last-paragraph"), 2);
   assert.equal(JSON.stringify(messages), before);
+});
+
+
+test("用户消息使用引用标记，模型列表保留层级缩进", async (t) => {
+  const userView = await render(
+    t,
+    React.createElement(ContentPane, {
+      focused: false,
+      messages: [{ role: "user", content: "第一段\n\n第二段" }],
+    }),
+  );
+  const userLines = userView.captureCharFrame().split("\n");
+  assert.ok(userLines.some((line) => line.includes("> 第一段")));
+  assert.ok(userLines.some((line) => line.includes("> 第二段")));
+
+  const markdown = await render(
+    t,
+    React.createElement(MarkdownText, {
+      content: "- 一级项目\n  - 二级项目\n\n1. 第一个步骤\n2. 第二个步骤",
+      streaming: false,
+    }),
+  );
+  const lines = markdown.captureCharFrame().split("\n");
+  const top = lines.find((line) => line.includes("一级项目"));
+  const nested = lines.find((line) => line.includes("二级项目"));
+  assert.ok(top && nested);
+  assert.ok(nested.indexOf("二级项目") > top.indexOf("一级项目"));
+  assert.ok(lines.some((line) => line.includes("第一个步骤")));
+  assert.ok(lines.some((line) => line.includes("第二个步骤")));
 });
