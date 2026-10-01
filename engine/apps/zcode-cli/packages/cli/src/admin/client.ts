@@ -251,8 +251,16 @@ function render() {
     const group = node('section', undefined, 'provider-group');
     const heading = node('div', undefined, 'provider-heading'), info = node('div');
     const enabledCount = (provider.models || []).filter(model => model.enabled !== false).length;
-    info.append(node('strong', provider.name || provider.id || '未命名供应商'), node('span', (provider.models || []).length + ' 个模型 · ' + enabledCount + ' 个已启用 · ' + (provider.baseUrl || '未设置地址'), 'provider-meta'));
-    heading.append(info, button('编辑供应商', () => openProviderDialog(provider)));
+    const name = node('div', undefined, 'provider-name'), edit = button(undefined, () => openProviderDialog(provider), 'provider-edit');
+    edit.title = '编辑供应商'; edit.setAttribute('aria-label', '编辑供应商');
+    // 线条图标仅负责展示，保留原生按钮的键盘操作和无障碍名称。
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('aria-hidden', 'true'); icon.setAttribute('focusable', 'false');
+    path.setAttribute('d', 'M15 5l4 4M4 20l4-1L20 7a2.83 2.83 0 0 0-4-4L4 15z');
+    icon.append(path); edit.append(icon);
+    name.append(node('strong', provider.name || provider.id || '未命名供应商'), edit);
+    info.append(name, node('span', (provider.models || []).length + ' 个模型 · ' + enabledCount + ' 个已启用 · ' + (provider.baseUrl || '未设置地址'), 'provider-meta'));
+    heading.append(info);
     group.append(heading);
     (provider.models || []).forEach(model => {
       const entry = { provider, model }, row = node('div', undefined, model.enabled === false ? 'model-row is-disabled' : 'model-row');
