@@ -43,6 +43,7 @@ import type { TuiWorkflowCard } from "./app-workflow-mirror.js";
 import type { SubagentItem, SubagentsController } from "./app-subagents.js";
 import { SubagentView } from "./app-subagent-view.js";
 import type { RuntimeActivity } from "./app-runtime-activity.js";
+import { palette } from "./app-model.js";
 import type { SelectionCopyResult } from "./app-copy.js";
 
 export type TuiAppProps = {
@@ -218,6 +219,8 @@ export function AppView(props: {
               cacheHitRate: props.cacheStats?.hitRate,
               focused: !readOnly,
               busy: props.busy,
+              clipboardStatus: props.status?.startsWith("图片：") ? props.status : undefined,
+              imagePasteAvailable: Boolean(props.options.readClipboardImage),
               contentWidth: actionPanelContentWidth,
               contextUsage: props.contextUsage,
               copy: props.copy,
@@ -248,6 +251,8 @@ export function AppView(props: {
 }
 
 function ComposerInputArea(props: {
+  clipboardStatus?: string;
+  imagePasteAvailable?: boolean;
   runtimeActivity?: RuntimeActivity;
   backgroundCount?: number;
   cacheHitRate?: number;
@@ -333,8 +338,11 @@ function ComposerInputArea(props: {
       copy: props.copy,
       inputs: props.queuedInputs,
     }),
+    // 图片结果在主界面可见，不再依赖默认隐藏的侧栏。
+    props.clipboardStatus ? h("text", { style: { fg: palette.muted, height: 1 } }, props.clipboardStatus) : null,
     h(InputPane, {
       busy: props.busy,
+      imagePasteAvailable: props.imagePasteAvailable,
       contentWidth: props.contentWidth,
       copy: props.copy,
       editorRef: props.editorRef,

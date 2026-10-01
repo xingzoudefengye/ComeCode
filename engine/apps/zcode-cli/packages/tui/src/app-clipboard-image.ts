@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { isValidClipboardImage } from "./app-input.js";
 import type { PromptInputEditor } from "./app-input-pane.js";
@@ -30,27 +30,31 @@ export function useClipboardImagePaste({
   setStatus,
   setStatusDetails,
 }: UseClipboardImagePasteOptions): () => Promise<void> {
+  const readingRef = useRef(false);
   return useCallback(async () => {
+    if (readingRef.current) return;
     if (busy) {
-      setStatus("Image paste is available when the prompt is idle.");
+      setStatus("图片：请等待当前回复结束后再粘贴。");
       return;
     }
     if (!options.readClipboardImage) {
-      setStatus("Image paste is not available in this terminal.");
+      setStatus("图片：当前终端未接入剪贴板读取。");
       return;
     }
 
+    readingRef.current = true;
     try {
-      setStatus("Reading image from clipboard...");
+      setStatusDetails([]);
+      setStatus("图片：正在读取剪贴板…");
       const image = await options.readClipboardImage({
         abortSignal: abortControllerRef.current?.signal,
       });
       if (!image) {
-        setStatus("No image found in clipboard.");
+        setStatus("图片：剪贴板中没有图片，请先复制截图，再粘贴或输入 /paste。");
         return;
       }
       if (!isValidClipboardImage(image)) {
-        setStatus("Clipboard image is not a supported image format.");
+        setStatus("图片：剪贴板图片格式不受支持。");
         return;
       }
 
@@ -68,10 +72,12 @@ export function useClipboardImagePaste({
       if (!insertPlaceholderIntoEditor(inputEditorRef.current, placeholder)) {
         setDraftValue(appendedImagePlaceholder(getDraftValue(), placeholder));
       }
-      setStatus(`Attached ${placeholder}.`);
+      setStatus(`图片：已添加 ${placeholder}，输入问题后按回车发送。`);
     } catch (error) {
-      setStatus("Could not read image from clipboard.");
+      setStatus("图片：读取剪贴板失败，请重新复制截图后再试。");
       setStatusDetails([error instanceof Error ? error.message : String(error)]);
+    } finally {
+      readingRef.current = false;
     }
   }, [
     abortControllerRef,
@@ -88,7 +94,8 @@ export function useClipboardImagePaste({
 }
 
 function appendedImagePlaceholder(draft: string, placeholder: string): string {
-  const trimmed = draft.trimEnd();
+  // 本地 /paste 是操作指令，成功后只保留图片占位符，不作为用户正文提交。
+  const trimmed = draft.trim() === "/paste" ? "" : draft.trimEnd();
   return trimmed ? `${trimmed} ${placeholder}` : placeholder;
 }
 

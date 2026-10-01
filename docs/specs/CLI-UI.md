@@ -39,6 +39,15 @@
 - engine 根 typecheck 通过，根 lint 0 error / 70 个既有 warning；architecture changed 0 violation；git diff --check 通过。
 - 验收使用原生测试 renderer；用户实际终端视觉效果仍需重启 ComeCode 后确认。
 
+
+## 图片粘贴入口与反馈（2026-10-02）
+
+- 剪贴板由 CLI 平台 reader 读取，TUI 图片粘贴 hook 唯一拥有读取中状态和本地草稿附件；不轮询剪贴板，不改终端/VS Code 配置，不在读取时发送到模型。
+- 保留 Ctrl+V，并提供 TUI 本地 `/paste` 命令；对只转发空 bracketed paste、不转发 Ctrl+V 的终端，也尝试读取剪贴板图片；普通非空文本粘贴保持原样。`/paste` 不发送到模型、不写入对话历史，成功后替换为 `[image #N]`。输入框空白时显示入口提示。
+- 粘贴读取中、成功、没有图片、格式不支持、失败/忙碌等反馈在主界面输入框附近显示，不依赖隐藏侧栏。
+- 重复触发只读取一次；失败不改草稿；普通文本粘贴（非空）不触发自动图片读取。附件占位符和原有文本保持一致，提交时通过既有 `toPromptInput` 生成图片附件。
+- Windows PowerShell reader 显式使用 STA，区分无图片与读取失败；不回显图片内容/凭据。
+- 验收：原生 TUI renderer 模拟真实按键和空/文本 bracketed paste，检查占位符及提交附件；覆盖 Ctrl+V、`/paste`、空粘贴、空剪贴板、失败、重复触发和普通文本粘贴。实际 OS 剪贴板只做本地读取，不在自动化测试中发送到服务商；若外部终端连空 paste 也不转发（完全吞掉 Ctrl+V），则仍可输入 `/paste` 读取，不新增快捷键。
 ## Markdown 正文稳定渲染（2026-10-02）
 
 - 同一主题下复用同一个原生 `SyntaxStyle` 实例；无关状态刷新不重新启动历史 Markdown 正文的异步高亮，避免文字短暂消失后重建。
