@@ -153,6 +153,59 @@ test("模型保存前连接测试失败不会写入配置文件", async t => {
   const saved = JSON.parse(await readFile(join(f.dataRoot, "config.json"), "utf8"));
   assert.equal(saved.providers[0].models.some(model => model.id === "failed-save-model"), false);
 });
+test("连接测试必须验证协议响应，并让 Anthropic 根地址与真实 SDK 一致", async t => {
+  const f = await fixture(t);
+  const config = await resolveUnifiedConfig({
+    ...f,
+    userDocument: {
+      provider: "anthropic-api",
+      model: "grok-4.7",
+      providers: {
+        "anthropic-api": {
+          type: "anthropic",
+          baseUrl: "https://example.test",
+          apiKey: "private-anthropic-key",
+          models: ["grok-4.7"],
+        },
+      },
+    },
+  });
+  let requestUrl = "";
+  const result = await testProviderConnection(
+    { provider: "anthropic-api", model: "grok-4.7", confirm: true },
+    config,
+    async (url) => {
+      requestUrl = url;
+      return new Response(JSON.stringify({ type: "message", content: [] }), { status: 200, headers: { "content-type": "application/json" } });
+    },
+  );
+  assert.equal(result.ok, true);
+  assert.equal(requestUrl, "https://example.test/v1/messages");
+
+  const htmlConfig = await resolveUnifiedConfig({
+    ...f,
+    userDocument: {
+      provider: "chat-api",
+      model: "grok-4.7",
+      providers: {
+        "chat-api": {
+          type: "openai-chat",
+          baseUrl: "https://example.test",
+          apiKey: "private-chat-key",
+          models: ["grok-4.7"],
+        },
+      },
+    },
+  });
+  const htmlResult = await testProviderConnection(
+    { provider: "chat-api", model: "grok-4.7", confirm: true },
+    htmlConfig,
+    async () => new Response("<html>ComeCode</html>", { status: 200, headers: { "content-type": "text/html" } }),
+  );
+  assert.equal(htmlResult.ok, false);
+  assert.match(htmlResult.message, /不是有效的 Chat Completions/u);
+});
+
 test("三种协议连接测试沿用有效模型与凭据，失败不回显正文且必须确认",async t=>{
   const f=await fixture(t),doc=document();doc.providers[0].models.push({id:'responses',type:'openai-responses'});await writeFile(join(f.dataRoot,'config.json'),JSON.stringify(doc));const config=await resolveUnifiedConfig(f);
   for(const [model,suffix,key] of [['model-a','/chat/completions','private-admin-test-key'],['model-b','/messages','private-model-key'],['responses','/responses','private-admin-test-key']]){
@@ -163,6 +216,44 @@ test("三种协议连接测试沿用有效模型与凭据，失败不回显正�
   const failed=await testProviderConnection({provider:'api',model:'model-a',confirm:true},config,async()=>{throw new Error('private-key');});assert.doesNotMatch(JSON.stringify(failed),/private-key/u);
 });
 
+
+test("编辑协议时保留供应商和模型原有的明文或环境变量 Key", async t => {
+  const f = await fixture(t);
+  const env = { SHARED_PROVIDER_KEY: "private-shared-env-key" };
+  const documentWithEnv = {
+    provider: "api",
+    model: "model-b",
+    providers: [{
+      id: "api",
+      type: "anthropic",
+      baseUrl: "https://anthropic.example",
+      apiKeyEnv: "SHARED_PROVIDER_KEY",
+      models: [{ id: "model-a" }, { id: "model-b" }],
+    }],
+  };
+  await writeFile(join(f.dataRoot, "config.json"), JSON.stringify(documentWithEnv));
+  const editor = createProviderConfigEditor({ ...f, env });
+  const before = await editor.read();
+  const draft = {
+    revision: before.revision,
+    config: {
+      provider: "api",
+      model: "model-b",
+      providers: [{
+        id: "api",
+        type: "openai-chat",
+        baseUrl: "https://anthropic.example/v1",
+        hasApiKey: true,
+        models: [{ id: "model-a", hasApiKey: true }, { id: "model-b", hasApiKey: true }],
+      }],
+    },
+  };
+  const preview = await editor.preview(draft);
+  const provider = preview.resolved.providers.find((item) => item.id === "api");
+  assert.equal(provider.apiKey, "private-shared-env-key");
+  assert.equal(provider.apiKeySource, "env:SHARED_PROVIDER_KEY");
+  assert.equal(provider.modelConfigs.find((model) => model.id === "model-b").executable, true);
+});
 
 test("新模型复用共享 Key/环境变量来源，不回显密钥或改写其他模型凭据", async t => {
   for (const useEnvironment of [false, true]) {
