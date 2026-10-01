@@ -83,6 +83,7 @@ export function ContentPane({
             index,
             key: `${index}-${message.role}`,
             message,
+            previousRole: messages[index - 1]?.role,
             terminalWidth,
             workflowCardsByToolCallId,
           }),
@@ -93,7 +94,9 @@ export function ContentPane({
 export function MessageRow({
   copy = DEFAULT_TUI_COPY,
   expandedWorkflowRunIds,
+  index,
   message,
+  previousRole,
   terminalWidth = 100,
   workflowCardsByToolCallId,
 }: {
@@ -101,6 +104,7 @@ export function MessageRow({
   expandedWorkflowRunIds?: ReadonlySet<string>;
   index: number;
   message: Message;
+  previousRole?: Message["role"];
   terminalWidth?: number;
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
 }): React.ReactElement {
@@ -123,6 +127,8 @@ export function MessageRow({
       style: {
         backgroundColor: rowBackground,
         flexDirection: "column",
+        // 按消息边界留白，不能按流式碎片重复添加间隔。
+        marginTop: index > 0 && (isUserMessage || previousRole === "user") ? 1 : 0,
         marginBottom: 0,
         minHeight: 1,
         paddingLeft: isUserMessage ? 1 : 0,
@@ -173,7 +179,7 @@ export function MessageRow({
           part,
         });
       }
-      return assistantText && part.format !== "plain"
+      const textView = assistantText && part.format !== "plain"
         ? h(MarkdownText, {
             backgroundColor: rowBackground,
             content: part.text,
@@ -181,6 +187,10 @@ export function MessageRow({
             streaming: message.streaming,
           })
         : h("text", { key: `text-${partIndex}`, style: { fg: plainTextColor } }, part.text);
+      // 思考标签与正文的间隔只归消息容器，避免与 Thought 外边距叠加。
+      return parts[partIndex - 1]?.type === "thought"
+        ? h("box", { key: `after-thought-${partIndex}`, style: { marginTop: 1, flexDirection: "column" } }, textView)
+        : textView;
     }),
   );
 }

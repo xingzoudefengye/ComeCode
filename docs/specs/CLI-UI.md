@@ -8,7 +8,7 @@
 - 输入框内部只保留编辑区和 `Type a prompt` 占位提示；模式、模型、思考强度、会话标识统一显示在输入框外部下方的单行状态栏中，模式只出现一次。
 - 空闲时 `Ready` 与上述元信息合并在同一行；运行、等待确认、失败和完成状态替换或补充该行内容，不单独增加一行。
 - 右侧信息侧栏默认隐藏，主会话占满终端宽度；保留现有切换入口，用户需要查看 Status、Subagents、MCP、Modified Files 或 Todos 时再打开。
-- 对话区采用紧凑列表密度：消息之间不插入额外空行，用户消息只保留弱背景区分，不用上下空白撑高卡片。
+- 对话区采用紧凑列表密度：用户与回答之间留一行，回答内部普通段落紧凑排列；用户消息只保留弱背景区分，不用上下 padding 撑高卡片。
 - 输入框空闲时默认单行，用户输入换行后按内容扩展；外部状态栏固定单行，不额外增加编辑区高度。
 - 用户消息背景只比主背景略亮，并使用中性灰；深色主题不使用明显棕色，浅色主题不使用明显米黄色，避免用户消息像独立卡片一样跳出来。
 - 语义配色参考本机 `codex/codex-rs/tui/src/style.rs`、`transcript_view` 与 `bottom_pane/chat_composer` 的分层方式：用户消息使用低对比表面，助手正文使用主文本色，工具按运行/等待/成功/失败着色，思考和元信息使用次级色，差异内容使用新增/删除色。
@@ -23,3 +23,18 @@
 - TUI 包 typecheck、改动文件 oxlint 和源码 CLI `--help` 冒烟通过，diff 格式检查通过。
 - TUI 构建的 `tsc` 阶段通过，esbuild 阶段因沙箱 `spawn EPERM` 失败，尚未完成打包或实机视觉验收。
 - CLI 聚合 typecheck/lint 因 `turbo` 命令不可用失败；freshness 与架构检查因 Git 子进程 `spawn EPERM` 失败。
+
+## 对话间距（2026-10-01）
+
+- 用户与回答、回答与下一用户消息之间保留一个空行；首条消息不额外留白。消息分隔由 ContentPane/MessageRow 负责，不按流式 delta 插入消息或空行。
+- 同一回答内普通 Markdown 段落紧凑排列，段落原有文本换行/硬换行保留，只去掉段落 token 尾部布局换行；代码块内容、列表、引用、表格和标题结构不做文本替换。
+- Thought 与正文之间保留一行，分隔归消息 parts 容器；Thought 自身不增加第二份外边距。工具明细维持紧凑，不给每条工具/流式碎片加空行。
+- 不改消息数据、复制内容、模型回复、恢复和流式合并规则；布局规则在流式/完成/恢复后保持一致。
+- 验收使用真实原生测试 renderer，覆盖截图样例、多回合、Thought、普通段落、代码空行、列表/表格、流式更新与浅/深主题；执行 TUI typecheck/oxlint/build、CLI 全量测试及 help。
+
+### 间距验证结果
+
+- 4 项原生渲染回归通过，检查实际终端行位置：截图同类多回合、Thought、普通段落、代码空行、列表/表格、流式更新与完成、工具续段及浅/深主题。
+- CLI 全量 106/106 测试通过；TUI typecheck、改动源码 oxlint（0 warning / 0 error）、TUI 与 CLI 构建、comecode --help 通过。
+- engine 根 typecheck 通过，根 lint 0 error / 70 个既有 warning；architecture changed 0 violation；git diff --check 通过。
+- 验收使用原生测试 renderer；用户实际终端视觉效果仍需重启 ComeCode 后确认。
