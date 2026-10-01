@@ -1187,24 +1187,12 @@ export function createZCodeTaskServiceAdapter(
   }
 
   /**
-   * session/setMode → v4 switchCollaborationMode。
-   * auto 例外保真：v4 命令值域刻意排除 auto（「auto 非用户可切，不进 UI 命令面」，
-   * command.ts 裁决），而旧协议 ZCodeSessionMode 含 auto 且旧 op 接受它——为 UI 行为
-   * 零变化，auto 继续走旧 op，其余值一律 v4 原生。过渡归宿 = auto 语义在 v4 侧裁决后收口。
+   * session/setMode → v4 switchCollaborationMode。auto 与其余权限模式走同一条命令。
    */
   async function switchCollaborationModeViaProtocol(
     target: TaskTarget,
     mode: ZCodeSessionMode,
   ): Promise<void> {
-    if (mode === "auto") {
-      await options.zcodeAgentService.setMode({
-        workspacePath: target.workspacePath,
-        workspaceIdentity: target.workspaceIdentity,
-        sessionId: target.taskId,
-        mode,
-      });
-      return;
-    }
     await sendConfigCasCommandV4(
       target,
       "switchCollaborationMode",

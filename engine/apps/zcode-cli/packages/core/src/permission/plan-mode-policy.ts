@@ -28,6 +28,14 @@ export function resolvePlanModeTransitionPermission(
     };
   }
 
+  if (context.toolName === EXIT_PLAN_MODE_TOOL_NAME && context.prePlanMode === "auto") {
+    return {
+      behavior: "allow",
+      reason: "Auto mode approves the plan and continues without a confirmation prompt",
+      ruleId: "mode.auto.plan",
+    };
+  }
+
   if (
     context.toolName === EXIT_PLAN_MODE_TOOL_NAME &&
     !(context.planEnabled ?? context.mode === "plan")

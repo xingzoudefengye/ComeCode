@@ -33,6 +33,11 @@ const ZCODE_AGENT_MODE_OPTIONS = [
     name: "Full access",
     description: "Edit and run commands with fewer confirmations.",
   },
+  {
+    id: "auto",
+    name: "Auto",
+    description: "Approve plans and run tools without confirmation prompts.",
+  },
 ] as const satisfies readonly ZCodeTaskModeInfo[];
 const ZCODE_AGENT_MODE_ID_SET = new Set<string>(ZCODE_AGENT_MODE_OPTIONS.map((mode) => mode.id));
 

@@ -43,7 +43,7 @@ declare const __CLI_VERSION__: string | undefined;
 const version = typeof __CLI_VERSION__ === "string" ? __CLI_VERSION__ : "0.0.0";
 
 const EMPTY_TARGET_ERROR = "--target requires non-empty text.";
-const DEFAULT_HEADLESS_PROMPT_MODE: CliPermissionMode = "yolo";
+const DEFAULT_HEADLESS_PROMPT_MODE: CliPermissionMode = "auto";
 const FORCE_MCS_SCOPE_ERROR = "--force-mcs can only be used with --prompt, --target, or tui.";
 const TARGET_REPLACE_REQUIRES_TARGET_ERROR = "--target-replace requires --target.";
 const TARGET_CONFLICTS_WITH_PROMPT_ERROR =
@@ -140,8 +140,11 @@ const normalizeLocaleOption = (value: string | undefined): UiLocale | undefined 
 const normalizePromptMode = (value: string | undefined): CliPermissionMode | undefined => {
   if (value === undefined) return undefined;
   const mode = value.toLowerCase();
-  if (mode === "build" || mode === "plan" || mode === "edit" || mode === "yolo") return mode;
-  throw new Error(`Unsupported --mode value: ${value}. Supported modes: build, edit, plan, yolo.`);
+  if (mode === "build" || mode === "plan" || mode === "edit" || mode === "yolo" || mode === "auto")
+    return mode;
+  throw new Error(
+    `Unsupported --mode value: ${value}. Supported modes: build, edit, plan, yolo, auto.`,
+  );
 };
 
 const normalizeBrowserUse = (value: string | undefined): GlobalOptions["browserUse"] => {

@@ -25,7 +25,7 @@ import type {
 export const initialSessionProjection = {
   createdAt: new Date(),
   updatedAt: new Date(),
-  mode: "build" as CollaborationMode,
+  mode: "auto" as CollaborationMode,
   status: "idle" as SessionStatus,
   turnCount: 0,
   totalTokenCount: 0,

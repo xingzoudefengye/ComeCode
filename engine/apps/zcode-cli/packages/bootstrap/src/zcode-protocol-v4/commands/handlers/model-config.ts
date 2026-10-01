@@ -63,8 +63,8 @@ function readActualThought(
   return fallbackSelection?.options?.reasoningLevel ?? "";
 }
 
-/** switchCollaborationMode 命令值域（command.ts z.enum 同源；auto 非用户可切不在内）。 */
-const SWITCHABLE_MODES: ReadonlySet<string> = new Set(["build", "edit", "plan", "yolo"]);
+/** switchCollaborationMode 命令值域（command.ts z.enum 同源，含 auto）。 */
+const SWITCHABLE_MODES: ReadonlySet<string> = new Set(["build", "edit", "plan", "yolo", "auto"]);
 
 /**
  * switchModelConfig：切换会话模型选型。跨模型时 app.setModel 换 provider client + 模型，
@@ -142,7 +142,7 @@ async function switchModelConfig(
 }
 
 /**
- * switchCollaborationMode：切换 agent 协作模式（plan/build/edit/yolo）。
+ * switchCollaborationMode：切换 agent 协作模式（plan/build/edit/yolo/auto）。
  * app.setMode 统一更新独立执行状态、持久化并发布 SessionModeChanged，
  * 命令层不再补发第二次事件，
  * v4 投影 reducer onSessionModeChanged 据此更新 config.mode。

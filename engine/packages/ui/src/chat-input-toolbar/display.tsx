@@ -200,7 +200,7 @@ function getConfigOptionEntryDescription(
 }
 
 function isHighPermissionModeValue(value: unknown): boolean {
-  return value === "yolo";
+  return value === "yolo" || value === "auto";
 }
 
 export function resolveModeOptionIcon(value: unknown): LucideIcon {

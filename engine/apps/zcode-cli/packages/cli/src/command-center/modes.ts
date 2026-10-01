@@ -5,6 +5,7 @@ const SWITCHABLE_COMMAND_CENTER_MODES = [
   "build",
   "edit",
   "yolo",
+  "auto",
 ] as const satisfies readonly SwitchableCommandCenterMode[];
 
 export function formatAvailableCommandCenterModes(): string {

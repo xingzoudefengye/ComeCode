@@ -133,16 +133,14 @@ export class PermissionService {
     }
 
     const planEnabled = context.planEnabled ?? context.mode === "plan";
-    if (context.mode === "yolo" && !planEnabled) {
-      return this.allow(context, capability, "mode.yolo", "Yolo mode bypasses permission prompts");
-    }
-
-    if (context.mode === "auto") {
-      return this.deny(
+    if ((context.mode === "yolo" || context.mode === "auto") && !planEnabled) {
+      return this.allow(
         context,
         capability,
-        "mode.auto.unimplemented",
-        "Auto mode is reserved but not implemented yet",
+        context.mode === "auto" ? "mode.auto" : "mode.yolo",
+        context.mode === "auto"
+          ? "Auto mode bypasses permission prompts"
+          : "Yolo mode bypasses permission prompts",
       );
     }
 
@@ -324,8 +322,7 @@ export class PermissionService {
    * 但**压不过"阻断"**——所以这里先自己走一遍硬阻断判定。
    *
    * 为什么不直接返回 ask：disallowedTools 是用户配置的硬禁用，项目 deny 规则符合工具自报的
-   * denyPriority: "beforeAsk"，auto 模式是"该模式未实现"的保护。少了这一步，一个被硬禁用的
-   * 工具会退化成"弹个窗、用户一点就能跑"。
+   * denyPriority: "beforeAsk"。少了这一步，一个被硬禁用的工具会退化成"弹个窗、用户一点就能跑"。
    *
    * 这些判定在 checkPermission 里按原有顺序还会各自出现一次；此处刻意只覆盖 alwaysAsk 工具，
    * 不改动其他工具的既有优先级（尤其 yolo 目前先于 disallowedTools 放行这一点）。
@@ -336,14 +333,6 @@ export class PermissionService {
     projectRules?: PermissionRuleset | null,
     rulePolicy?: ToolPermissionRulePolicy,
   ): PermissionDecisionResult {
-    if (context.mode === "auto") {
-      return this.deny(
-        context,
-        capability,
-        "mode.auto.unimplemented",
-        "Auto mode is reserved but not implemented yet",
-      );
-    }
     if (this.config.disallowedTools.has(context.toolName)) {
       return this.deny(
         context,
