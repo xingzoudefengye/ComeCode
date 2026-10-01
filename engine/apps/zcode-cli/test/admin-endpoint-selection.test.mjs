@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import vm from "node:vm";
 import { test } from "node:test";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createProviderConfigEditor } from "../packages/adapters/dist/config/provider-config-editor.js";
+import { testProviderConnection } from "../packages/cli/src/admin/test-connection.ts";
 import { ADMIN_SCRIPT } from "../packages/cli/src/admin/client.ts";
 import { ADMIN_STYLE } from "../packages/cli/src/admin/assets.ts";
 
@@ -184,4 +189,78 @@ test("供应商名称同行紧随可访问齿轮图标，点击沿用编辑弹�
   assert.equal(f.get("provider-dialog").open, true);
   assert.equal(f.get("provider-edit-id").value, "first");
   assert.equal(f.get("provider-edit-name").value, "接口 A");
+});
+
+
+test("编辑同地址协议不新建供应商，独立修改 Key 不覆盖其他模型", async () => {
+  const f = form(providers());
+  f.run('openModelDialog({ provider: draft.providers[0], model: draft.providers[0].models[0] });');
+  f.get("model-type").value = "openai-chat";
+  f.get("model-key").value = "replacement-model-key";
+  await f.run("testModelDialog();");
+  await f.run("saveModelDialog({ preventDefault() {} });");
+  const config = f.draft();
+  assert.equal(config.providers.length, 2);
+  assert.equal(config.providers[0].type, "anthropic");
+  assert.equal(config.providers[0].apiKey, undefined);
+  assert.equal(config.providers[0].models[0].type, "openai-chat");
+  assert.equal(config.providers[0].models[0].apiKey, "replacement-model-key");
+});
+
+test("真实前端修改 Grok 地址/协议且 Key 留空，预览测试保存均保留原模型凭据", async t => {
+  for (const source of ["shared", "model", "environment"]) {
+    const root = await mkdtemp(join(tmpdir(), "comecode-edit-model-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const dataRoot = join(root, "user");
+    await mkdir(dataRoot); await mkdir(join(root, ".comecode"));
+    await writeFile(join(root, ".comecode", "config.json"), "{}");
+    const secret = "private-" + source + "-key";
+    const provider = { id: "my-api", type: "anthropic", baseUrl: "https://example.test", apiKey: "private-shared-key", models: [{ id: "deepseek-flash" }, { id: "grok-4.7" }] };
+    const env = {};
+    if (source === "model") provider.models[1].apiKey = secret;
+    if (source === "environment") { delete provider.apiKey; provider.apiKeyEnv = "EDIT_MODEL_KEY"; env.EDIT_MODEL_KEY = secret; }
+    await writeFile(join(dataRoot, "config.json"), JSON.stringify({ provider: "my-api", model: "grok-4.7", providers: [provider] }));
+    const editor = createProviderConfigEditor({ cwd: root, dataRoot, env });
+    const before = await editor.read();
+    let calls = 0, testedProvider;
+    const f = form(before.config, false, async (url, options) => {
+      const input = JSON.parse(options.body);
+      if (url.endsWith("/api/test-draft")) {
+        const { test, ...saveInput } = input;
+        const preview = await editor.preview(saveInput);
+        testedProvider = test.provider;
+        const result = await testProviderConnection(test, preview.resolved, async (requestUrl, request) => {
+          calls += 1;
+          assert.equal(requestUrl, "https://example.test/v1/chat/completions");
+          assert.equal(request.headers.Authorization, "Bearer " + secret);
+          assert.equal(JSON.parse(request.body).model, "grok-4.7");
+          return new Response(JSON.stringify({ choices: [{ message: { role: "assistant", content: "OK" } }] }));
+        });
+        return { ok: true, json: async () => result };
+      }
+      const after = await editor.save(input);
+      return { ok: true, json: async () => after };
+    });
+    f.run('snapshot.revision = ' + JSON.stringify(before.revision) + '; openModelDialog({ provider: draft.providers[0], model: draft.providers[0].models[1] });');
+    f.get("model-url").value = "https://example.test/v1";
+    f.get("model-type").value = "openai-chat";
+    assert.equal(f.get("model-key").value, "");
+    await f.run("testModelDialog();");
+    assert.equal(calls, 1, f.get("model-dialog-help").textContent);
+    assert.equal(f.get("model-submit").disabled, false);
+    assert.equal(await readFile(join(dataRoot, "config.json"), "utf8"), JSON.stringify({ provider: "my-api", model: "grok-4.7", providers: [provider] }));
+    await f.run("saveModelDialog({ preventDefault() {} });");
+    const saved = JSON.parse(await readFile(join(dataRoot, "config.json"), "utf8"));
+    assert.equal(saved.provider, testedProvider);
+    assert.equal(saved.model, "grok-4.7");
+    const original = saved.providers.find(item => item.id === "my-api");
+    assert.equal(original.type, "anthropic");
+    assert.equal(original.models.length, 1);
+    const moved = saved.providers.find(item => item.id === testedProvider);
+    assert.equal(moved.type, "openai-chat");
+    assert.equal(moved.baseUrl, "https://example.test/v1");
+    if (source === "environment") { assert.equal(moved.apiKeyEnv, "EDIT_MODEL_KEY"); assert.equal(moved.apiKey, undefined); }
+    else assert.equal(moved.apiKey, secret);
+    assert.doesNotMatch(JSON.stringify(saved), /apiKeyFrom|hasApiKey/);
+  }
 });

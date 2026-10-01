@@ -276,3 +276,25 @@ test("新模型复用共享 Key/环境变量来源，不回显密钥或改写其
     assert.doesNotMatch(JSON.stringify(after), /private-environment-key|private-admin-test-key|private-new-model-key|private-model-key/);
   }
 });
+
+
+test("跨供应商或模型重命名的凭据引用仅服务端恢复，不落盘且失效来源拒绝保存", async t => {
+  const f = await fixture(t), editor = createProviderConfigEditor(f), before = await editor.read();
+  const candidate = structuredClone(before.config);
+  candidate.providers[0].models = candidate.providers[0].models.filter(model => model.id !== "model-b");
+  candidate.providers.push({ id: "moved", type: "openai-chat", baseUrl: "https://moved.example/v1", models: [{ id: "renamed-model", apiKeyFrom: { provider: "api", model: "model-b" } }] });
+  candidate.provider = "moved"; candidate.model = "renamed-model";
+  const input = { revision: before.revision, config: candidate };
+  const preview = await editor.preview(input);
+  assert.equal(preview.resolved.providers.find(provider => provider.id === "moved").modelConfigs[0].apiKey, "private-model-key");
+  const invalid = structuredClone(input);
+  invalid.config.providers[1].models[0].apiKeyFrom.model = "missing-model";
+  await assert.rejects(editor.preview(invalid), { status: 422 });
+  await assert.rejects(editor.save(invalid), { status: 422 });
+  assert.equal((await editor.read()).revision, before.revision);
+  const explicitKey = structuredClone(invalid);
+  explicitKey.config.providers[1].models[0].apiKey = "private-replacement-key";
+  assert.equal((await editor.preview(explicitKey)).resolved.providers.find(provider => provider.id === "moved").modelConfigs[0].apiKey, "private-replacement-key");
+  await editor.save(input);
+  assert.doesNotMatch(await readFile(join(f.dataRoot, "config.json"), "utf8"), /apiKeyFrom/u);
+});

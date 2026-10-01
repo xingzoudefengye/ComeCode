@@ -257,9 +257,10 @@ function applyModelDialogDraft(candidateDraft) {
   let provider = editingProviderId ? candidateDraft.providers.find(item => item.id === editingProviderId) : null;
   const oldProvider = provider;
   const oldModel = provider && editingModelId ? (provider.models || []).find(item => item.id === editingModelId) : null;
+  const wasDefault = Boolean(oldProvider && oldModel && candidateDraft.provider === oldProvider.id && candidateDraft.model === oldModel.id);
   const target = !editing ? modelConnectionProvider(candidateDraft) : findProvider(candidateDraft, baseUrl, oldProvider);
   if (target) provider = target;
-  else if (!provider || (editing && (provider.type !== type || normalizeUrl(provider.baseUrl) !== normalizeUrl(baseUrl)))) provider = { id: nextProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
+  else if (!provider || (editing && normalizeUrl(provider.baseUrl) !== normalizeUrl(baseUrl))) provider = { id: nextProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
   if (!provider) provider = { id: nextProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
   const isNewProvider = !candidateDraft.providers.includes(provider);
   // 复用已有 Provider 时保留它的默认协议；不同协议只记录在当前模型上。
@@ -269,18 +270,22 @@ function applyModelDialogDraft(candidateDraft) {
   model.id = modelId;
   if ($('model-name').value.trim()) model.name = $('model-name').value.trim(); else delete model.name;
   // 同地址不同协议时只覆盖当前模型，避免改变同一 Provider 的其他模型。
-  if (provider.type === type) { delete model.type; delete model.baseUrl; }
-  else { model.type = type; model.baseUrl = baseUrl; }
+  assignOptional(model, 'type', provider.type === type ? undefined : type);
+  assignOptional(model, 'baseUrl', normalizeUrl(provider.baseUrl) === normalizeUrl(baseUrl) ? undefined : baseUrl);
   assignOptional(model, 'contextWindow', readOptionalNumber('model-context'));
   assignOptional(model, 'maxOutputTokens', readOptionalNumber('model-output'));
   const tool = $('model-tool').value; assignOptional(model, 'toolCalling', tool === '' ? undefined : tool === 'true');
   const vision = $('model-vision').value; assignOptional(model, 'vision', vision === '' ? undefined : vision === 'true');
   if ($('clear-key').checked) { provider.clearApiKey = true; delete provider.apiKey; model.clearApiKey = true; delete model.apiKey; }
   if (key) {
-    if (!editing && !isNewProvider) { model.apiKey = key; delete model.apiKeyEnv; }
-    else { provider.apiKey = key; delete provider.clearApiKey; delete model.apiKey; }
+    if (!isNewProvider) { model.apiKey = key; delete model.apiKeyEnv; delete model.clearApiKey; }
+    else { provider.apiKey = key; delete provider.apiKeyEnv; delete provider.clearApiKey; delete model.apiKey; delete model.apiKeyEnv; }
+  } else if (oldModel && !$('clear-key').checked && (oldProvider !== provider || editingModelId !== modelId)) {
+    // 改地址/模型名会改变 ID：只传原模型引用，由服务端恢复 Key，避免新分组丢失凭据。
+    const owner = isNewProvider ? provider : model;
+    owner.apiKeyFrom = { provider: editingProviderId, model: editingModelId };
+    delete owner.apiKey; delete owner.apiKeyEnv;
   }
-  const wasDefault = Boolean(oldProvider && oldModel && candidateDraft.provider === oldProvider.id && candidateDraft.model === oldModel.id);
   if (editing && oldProvider && oldProvider !== provider && oldModel) {
     oldProvider.models = (oldProvider.models || []).filter(item => item !== oldModel);
     if (!oldProvider.models.length) candidateDraft.providers = candidateDraft.providers.filter(item => item !== oldProvider);
