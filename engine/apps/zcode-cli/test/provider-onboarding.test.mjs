@@ -114,13 +114,16 @@ test("真实终端输入密钥不回显，Ctrl+C 取消不修改配置", async (
   stdin.setRawMode = () => {};
   t.after(() => stdin.destroy());
   const answers = ["1", "https://model.example/v1", "test-model", "do-not-echo-this-secret", "y"];
+  const answeredPrompts = new Set();
   let output = "";
   const ctx = {
     stdin, stdout: f.ctx.stdout,
     stderr: { isTTY: true, columns: 100, write: (chunk) => {
       const text = chunk.toString();
       output += text;
-      if (/^[1-4]\. |^保存配置/u.test(text)) {
+      const step = /^(?:[1-4]\. |保存配置)/u.exec(text)?.[0];
+      if (step && !answeredPrompts.has(step)) {
+        answeredPrompts.add(step);
         const answer = answers.shift();
         setImmediate(() => stdin.write(`${text.startsWith("保存配置") ? "\u001b[A" : ""}${answer}\r`));
       }
@@ -185,4 +188,80 @@ test("公开引导只保留操作步骤，不包含个人接入方式或解释�
   await runProviderConfigSetup(f.ctx, f.env, f.root, scriptedAsk(["1", "", "my-model", "test-key", "n"], []));
   assert.doesNotMatch(f.readStderr(), /NewAPI|DeepSeek|不需要自建网关|不提供模型/u);
   assert.match(f.readStderr(), /需要填写：接口地址、模型名称、API Key/u);
+});
+
+
+test("readline 刷新后提问仍在终端画面中，等待输入而不是空白行", { timeout: 5000 }, async (t) => {
+  const previousTerm = process.env.TERM;
+  // 工具环境的 TERM=dumb 不触发 readline 清屏；显式覆盖才能复现用户终端。
+  process.env.TERM = "xterm-256color";
+  t.after(() => { if (previousTerm === undefined) delete process.env.TERM; else process.env.TERM = previousTerm; });
+  const { PassThrough } = await import("node:stream");
+  const f = await fixture(t);
+  const stdin = new PassThrough();
+  stdin.isTTY = true;
+  stdin.setRawMode = () => {};
+  t.after(() => stdin.destroy());
+  const lines = [""];
+  let row = 0;
+  let column = 0;
+  let rawOutput = "";
+  // 模拟 readline 使用的清屏/光标命令；输出过提示不代表提示仍在屏幕上。
+  const render = (chunk) => {
+    const text = chunk.toString();
+    rawOutput += text;
+    // oxlint-disable-next-line eslint(no-control-regex) -- 终端模拟必须识别真实 ESC 光标命令。
+    const tokens = text.match(/\u001b\[[0-9;]*[A-Za-z]|[^\u001b]/gu) ?? [];
+    for (const token of tokens) {
+      // oxlint-disable-next-line eslint(no-control-regex) -- 这里只解析 readline 输出的 ANSI 控制序列。
+      const sequence = /^\u001b\[([0-9;]*)([A-Za-z])$/u.exec(token);
+      if (sequence) {
+        const amount = Number(sequence[1]) || 1;
+        switch (sequence[2]) {
+          case "G": column = amount - 1; break;
+          case "A": row = Math.max(0, row - amount); break;
+          case "B": row += amount; break;
+          case "C": column += amount; break;
+          case "D": column = Math.max(0, column - amount); break;
+          case "J": lines[row] = (lines[row] ?? "").slice(0, column); lines.length = row + 1; break;
+          case "K": lines[row] = (lines[row] ?? "").slice(0, column); break;
+        }
+      } else if (token === "\r") column = 0;
+      else if (token === "\n") { row++; column = 0; }
+      else {
+        const current = [...(lines[row] ?? "")];
+        while (current.length < column) current.push(" ");
+        current[column++] = token;
+        lines[row] = current.join("");
+      }
+    }
+  };
+  // 大宽度避免此小型屏幕模型模拟自动换行；实际窗口另用 PTY 冒烟验收。
+  const ctx = { ...f.ctx, stdin, stderr: { isTTY: true, columns: 500, write: render } };
+  const finished = runProviderConfigSetup(ctx, f.env, f.root);
+  let closed = false;
+  finished.finally(() => { closed = true; });
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 30));
+  try {
+    await flush();
+    assert.equal(closed, false);
+    assert.match(lines.join("\n"), /1\. 服务类型：/u);
+    stdin.write("1\r");
+    await flush();
+    assert.match(lines.join("\n"), /2\. 接口地址/u);
+    stdin.write("https://model.example/v1\r");
+    await flush();
+    assert.match(lines.join("\n"), /3\. 模型名称/u);
+    stdin.write("model-test\r");
+    await flush();
+    assert.match(lines.join("\n"), /4\. API Key/u);
+    stdin.write("screen-private-key\r");
+    await flush();
+    assert.match(lines.join("\n"), /保存配置/u);
+    assert.doesNotMatch(rawOutput, /screen-private-key/u);
+    stdin.write("n\r");
+    assert.equal(await finished, 0);
+  } finally {
+    if (!closed) { stdin.write("\u0003"); await finished; }
+  }
 });
