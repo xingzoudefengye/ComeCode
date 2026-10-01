@@ -4,20 +4,22 @@ import { test } from "node:test";
 import { ADMIN_SCRIPT } from "../packages/cli/src/admin/client.ts";
 
 // 最小 DOM 覆盖表单事件与草稿，不向模型服务发起请求。
-function form(config) {
+function form(config, renderPage = false) {
   const elements = new Map();
-  const element = () => ({ value: "", hidden: false, checked: false, options: [],
+  const element = tag => ({ tag, attributes: {}, value: "", hidden: false, checked: false, options: [],
     append(...items) { this.options.push(...items); }, replaceChildren() { this.options = []; },
-    setAttribute() {}, showModal() {}, close() {}, focus() {},
+    setAttribute(name, value) { this.attributes[name] = value; }, showModal() { this.open = true; }, close() {}, focus() {},
   });
   const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const context = vm.createContext({ URL, URLSearchParams, structuredClone,
     location: { hash: "", pathname: "/" }, sessionStorage: { getItem: () => null },
-    document: { getElementById: get, createElement: element }, window: { addEventListener() {} },
+    document: { getElementById: get, createElement: element, createElementNS: (_namespace, tag) => element(tag) }, window: { addEventListener() {} },
   });
   new vm.Script(ADMIN_SCRIPT).runInContext(context);
   const run = code => new vm.Script(code).runInContext(context);
-  run('draft = ' + JSON.stringify(config) + '; render = () => {}; openModelDialog(null);');
+  run('draft = ' + JSON.stringify(config) + ';');
+  if (renderPage) run('snapshot = { source: "fixture", target: "fixture", effective: { paths: {} }, errors: [] }; render();');
+  else run('render = () => {}; openModelDialog(null);');
   return { get, run, draft: () => JSON.parse(run('JSON.stringify(draft)')) };
 }
 const providers = () => ({ providers: [
@@ -92,4 +94,27 @@ test("同地址不同供应商按下拉 ID 选择，取消/重开不保留上次
   assert.equal(f.get("model-endpoint").value, "");
   assert.equal(f.get("model-url").value, "");
   assert.equal(f.get("model-key").value, "");
+});
+
+test("供应商名称同行紧随可访问铅笔图标，点击沿用编辑弹框", () => {
+  const f = form(providers(), true);
+  const heading = f.get("providers").options[0].options[0];
+  assert.equal(heading.className, "provider-heading");
+  assert.equal(heading.options.length, 1);
+  const info = heading.options[0], name = info.options[0];
+  assert.equal(name.className, "provider-name");
+  assert.equal(name.options[0].textContent, "接口 A");
+  const edit = name.options[1];
+  assert.equal(edit.tag, "button");
+  assert.equal(edit.type, "button");
+  assert.equal(edit.className, "provider-edit");
+  assert.equal(edit.textContent, undefined);
+  assert.equal(edit.title, "编辑供应商");
+  assert.equal(edit.attributes["aria-label"], "编辑供应商");
+  assert.equal(edit.options[0].tag, "svg");
+  assert.equal(edit.options[0].attributes["aria-hidden"], "true");
+  edit.onclick();
+  assert.equal(f.get("provider-dialog").open, true);
+  assert.equal(f.get("provider-edit-id").value, "first");
+  assert.equal(f.get("provider-edit-name").value, "接口 A");
 });
