@@ -1,0 +1,95 @@
+import assert from "node:assert/strict";
+import vm from "node:vm";
+import { test } from "node:test";
+import { ADMIN_SCRIPT } from "../packages/cli/src/admin/client.ts";
+
+// 最小 DOM 覆盖表单事件与草稿，不向模型服务发起请求。
+function form(config) {
+  const elements = new Map();
+  const element = () => ({ value: "", hidden: false, checked: false, options: [],
+    append(...items) { this.options.push(...items); }, replaceChildren() { this.options = []; },
+    setAttribute() {}, showModal() {}, close() {}, focus() {},
+  });
+  const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
+  const context = vm.createContext({ URL, URLSearchParams, structuredClone,
+    location: { hash: "", pathname: "/" }, sessionStorage: { getItem: () => null },
+    document: { getElementById: get, createElement: element }, window: { addEventListener() {} },
+  });
+  new vm.Script(ADMIN_SCRIPT).runInContext(context);
+  const run = code => new vm.Script(code).runInContext(context);
+  run('draft = ' + JSON.stringify(config) + '; render = () => {}; openModelDialog(null);');
+  return { get, run, draft: () => JSON.parse(run('JSON.stringify(draft)')) };
+}
+const providers = () => ({ providers: [
+  { id: "first", name: "接口 A", type: "anthropic", baseUrl: "https://a.example/v1", hasApiKey: true, models: [{ id: "old-a" }] },
+  { id: "second", name: "接口 B", type: "openai-responses", baseUrl: "https://b.example/v1", apiKeyEnv: "FIXTURE_API_KEY", models: [{ id: "old-b" }] },
+] });
+function select(f, id) { f.get("model-endpoint").value = id; f.get("model-endpoint").onchange(); }
+function add(f, id) { f.get("model-id").value = id; f.run("saveModelDialog({ preventDefault() {} });"); }
+
+test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型追加到所选供应商", () => {
+  const f = form(providers());
+  assert.equal(f.get("model-endpoint").hidden, false);
+  assert.deepEqual(f.get("model-endpoint").options.map(option => option.value), ["", "first", "second"]);
+  select(f, "first");
+  assert.equal(f.get("model-url").value, "https://a.example/v1");
+  assert.equal(f.get("model-url").hidden, true);
+  assert.equal(f.get("model-type").value, "anthropic");
+  assert.equal(f.get("model-key").value, "");
+  assert.match(f.get("model-key-hint").textContent, /复用.*接口 A/);
+  add(f, "new-model");
+  assert.equal(f.draft().providers.length, 2);
+  assert.equal(f.draft().providers[0].models[1].id, "new-model");
+  assert.equal(f.draft().providers[0].models[1].apiKey, undefined);
+});
+
+test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", () => {
+  const f = form(providers());
+  select(f, "first"); f.get("model-key").value = "unsaved-key";
+  select(f, "second");
+  assert.equal(f.get("model-key").value, "");
+  assert.equal(f.get("model-type").value, "openai-responses");
+  f.get("model-type").value = "openai-chat"; add(f, "compatible-model");
+  assert.equal(f.draft().providers[1].models[1].type, "openai-chat");
+  f.run("openModelDialog(null)"); select(f, "second"); f.get("model-key").value = "other-unsaved-key";
+  select(f, "");
+  assert.equal(f.get("model-url").hidden, false);
+  assert.equal(f.get("model-url").value, "");
+  assert.equal(f.get("model-key").value, "");
+  assert.equal(f.get("model-key-hint").hidden, true);
+  f.get("model-url").value = "https://new.example/v1"; f.get("model-key").value = "new-service-key";
+  add(f, "manual-model");
+  assert.equal(f.draft().providers[2].baseUrl, "https://new.example/v1");
+  assert.equal(f.draft().providers[2].apiKey, "new-service-key");
+});
+
+test("没有地址时保持手填；仅有模型专用 Key 时不误报可复用，手填已有 URL 仍能复用", () => {
+  const empty = form({ providers: [] });
+  assert.equal(empty.get("model-endpoint").hidden, true);
+  assert.equal(empty.get("model-url").hidden, false);
+  const config = providers(); delete config.providers[0].hasApiKey;
+  config.providers[0].models[0].hasApiKey = true;
+  const f = form(config); select(f, "first");
+  assert.match(f.get("model-key-hint").textContent, /没有配置共享 API Key/);
+  f.get("model-url").value = "https://b.example/v1/"; f.get("model-url").oninput();
+  assert.match(f.get("model-key-hint").textContent, /复用.*接口 B/);
+});
+
+test("复用已有地址时新 Key 仅覆盖新增模型，不修改供应商共享 Key", () => {
+  const config = providers(); config.providers[0].apiKey = "shared-key";
+  const f = form(config); select(f, "first"); f.get("model-key").value = "new-model-key";
+  add(f, "own-key-model");
+  assert.equal(f.draft().providers[0].apiKey, "shared-key");
+  assert.equal(f.draft().providers[0].models[1].apiKey, "new-model-key");
+});
+
+test("同地址不同供应商按下拉 ID 选择，取消/重开不保留上次选择", () => {
+  const config = providers(); config.providers[1].baseUrl = config.providers[0].baseUrl;
+  const f = form(config); select(f, "second"); add(f, "from-second");
+  assert.equal(f.draft().providers[0].models.length, 1);
+  assert.equal(f.draft().providers[1].models[1].id, "from-second");
+  select(f, "first"); f.run("closeModelDialog(); openModelDialog(null);");
+  assert.equal(f.get("model-endpoint").value, "");
+  assert.equal(f.get("model-url").value, "");
+  assert.equal(f.get("model-key").value, "");
+});
