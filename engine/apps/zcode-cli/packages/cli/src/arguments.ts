@@ -79,6 +79,9 @@ export const parseGlobalArgs = (argv: string[]) =>
       provider: {
         type: "string",
       },
+      import: {
+        type: "string",
+      },
       verbose: {
         type: "boolean",
       },

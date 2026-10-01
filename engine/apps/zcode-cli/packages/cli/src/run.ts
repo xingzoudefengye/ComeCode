@@ -18,6 +18,7 @@ import { loadBootstrapModule } from "./bootstrap-loader.js";
 import { runEmbeddedSearchCli } from "./internal-search/embedded-search-cli.js";
 import { runCommandsCommand } from "./commands-command.js";
 import { runConfigCommand } from "./config-command.js";
+import { runImportCommand } from "./import-command.js";
 import { resolveCliCwd } from "./cwd.js";
 import { runLoginCommand, runLogoutCommand } from "./login-command.js";
 import { CLI_COMMAND_NAME, CLI_PROCESS_NAME } from "./process-name.js";
@@ -498,6 +499,15 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     },
   };
 
+  const importSource = parsed.values.import as string | undefined;
+  if (importSource !== undefined) {
+    if (parsed.positionals.length > 0) {
+      ctx.stderr.write("--import 不能与命令位置参数同时使用；请使用 comecode import <codex|claude>。\n");
+      return 1;
+    }
+    return await runImportCommand(ctx, options, commandDeps, importSource);
+  }
+
   if (typeof parsed.values.prompt === "string") {
     return await runPrompt(
       ctx,
@@ -557,6 +567,8 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
         model: parsed.values.model as string | undefined,
         provider: parsed.values.provider as string | undefined,
       });
+    case "import":
+      return await runImportCommand(ctx, options, commandDeps, parsed.positionals[1], parsed.positionals.slice(2));
     case "login":
       return await runLoginCommand(
         ctx,

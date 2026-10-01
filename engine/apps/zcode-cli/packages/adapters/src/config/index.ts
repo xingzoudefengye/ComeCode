@@ -512,3 +512,10 @@ export {
   type UnifiedProviderType,
 } from "./provider-config.js";
 export { createProviderConfigEditor, ConfigEditError } from "./provider-config-editor.js";
+export {
+  importProviderConfig,
+  ProviderConfigImportError,
+  type ProviderConfigImportOptions,
+  type ProviderConfigImportResult,
+  type ProviderConfigImportSource,
+} from "./provider-config-import.js";
