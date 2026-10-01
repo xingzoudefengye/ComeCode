@@ -36,7 +36,7 @@ test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型�
   assert.deepEqual(f.get("model-endpoint").options.map(option => option.value), ["", "first", "second"]);
   select(f, "first");
   assert.equal(f.get("model-url").value, "https://a.example/v1");
-  assert.equal(f.get("model-url").hidden, true);
+  assert.equal(f.get("model-url").hidden, false);
   assert.equal(f.get("model-type").value, "anthropic");
   assert.equal(f.get("model-key").value, "");
   assert.match(f.get("model-key-hint").textContent, /复用.*接口 A/);
@@ -60,7 +60,9 @@ test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", (
   assert.equal(f.get("model-url").value, "");
   assert.equal(f.get("model-key").value, "");
   assert.equal(f.get("model-key-hint").hidden, true);
-  f.get("model-url").value = "https://new.example/v1"; f.get("model-key").value = "new-service-key";
+  f.get("model-url").value = "https://new.example/v1"; f.get("model-url").oninput();
+  assert.equal(f.get("model-endpoint").value, "");
+  f.get("model-key").value = "new-service-key";
   add(f, "manual-model");
   assert.equal(f.draft().providers[2].baseUrl, "https://new.example/v1");
   assert.equal(f.draft().providers[2].apiKey, "new-service-key");
@@ -102,6 +104,9 @@ test("供应商名称框与齿轮保持同高并垂直居中", () => {
   assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*align-items:center/);
   assert.match(ADMIN_STYLE, /\.provider-name strong\{[^}]*height:28px/);
   assert.match(ADMIN_STYLE, /\.provider-edit\{[^}]*height:28px/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker\{position:relative\}/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker select\{[^}]*position:absolute/);
+  assert.match(ADMIN_STYLE, /\.endpoint-picker select\{[^}]*width:25%/);
 });
 
 test("供应商名称同行紧随可访问齿轮图标，点击沿用编辑弹框", () => {
