@@ -48,6 +48,7 @@ async function main(): Promise<void> {
       })
     : undefined;
 
+  let admin: { close(): Promise<void> } | undefined;
   try {
     if (
       !isProtocol &&
@@ -94,6 +95,10 @@ async function main(): Promise<void> {
         }),
       );
     }
+    if (isTui) {
+      const { prepareTuiAdmin } = await import("./admin/command.js");
+      admin = await prepareTuiAdmin(context, process.env);
+    }
     lifecycle?.signal.throwIfAborted();
     const { run } = await import("./run.js");
     lifecycle?.signal.throwIfAborted();
@@ -108,6 +113,7 @@ async function main(): Promise<void> {
     stderr.write(`${message}\n`);
     process.exitCode = 1;
   } finally {
+    await admin?.close();
     await waitForPendingWarnings();
     // 生命周期和 stderr guard 一直保留到实际退出，迟到的错误不能恢复递归写坏流。
     if (lifecycle) {

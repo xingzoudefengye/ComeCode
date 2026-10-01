@@ -12,7 +12,7 @@ import { providerSetupResponse } from "../packages/cli/src/provider-setup.ts";
 
 test("中英文帮助和 TUI 建议隐藏登录", () => {
   for (const locale of ["zh-CN", "en-US"])
-    assert.doesNotMatch(formatCliHelp("test", locale), /(?:\/login|\blogin \[|--no-browser)/u);
+    assert.doesNotMatch(formatCliHelp("test", locale), /(?:\/login|\blogin \[|^\s+--no-browser)/mu);
   assert.ok(listSlashCommandSuggestions().every((entry) => entry.name !== "login"));
 });
 

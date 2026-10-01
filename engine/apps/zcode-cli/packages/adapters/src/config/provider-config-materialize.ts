@@ -132,12 +132,14 @@ export async function materializeUnifiedConfig(
       ? { defaultModelSelection: { providerId: resolved.provider, modelId: resolved.model } }
       : {}),
   };
+  if (resolved.hasSource && !resolved.provider) delete (nextConfig as Record<string, unknown>).defaultModelSelection;
   await mkdir(dirname(options.targetProviderFile), { recursive: true });
   await writeFile(
     options.targetProviderFile,
     `${JSON.stringify({ schemaVersion: 1, config: nextConfig }, null, 2)}\n`,
     { encoding: "utf8", mode: 0o600 },
   );
+  await writeFile(`${options.targetProviderFile}.comecode-managed.json`, JSON.stringify(resolved.managedProviderIds.filter((id) => resolved.providers.some((provider) => provider.id === id))), { encoding: "utf8", mode: 0o600 });
   return resolved;
 }
 

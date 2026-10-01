@@ -36,6 +36,8 @@ export interface UnifiedConfigDocument {
   readonly model?: string;
   readonly provider?: string;
   readonly providers: Readonly<Record<string, UnifiedProviderDefinition>>;
+  /** JSON 显式供应商列表是成员集合，删除后不从派生旧 JSON 复活。 */
+  readonly ownsProviderMembership?: boolean;
 }
 
 export interface UnifiedConfigPaths {
@@ -86,6 +88,8 @@ export interface UnifiedConfigLoadOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly dataRoot?: string;
   readonly legacyProviderFile?: string;
+  /** 编辑预览复用有效配置规则，不创建临时用户文件。 */
+  readonly userDocument?: UnifiedConfigDocument;
   readonly cliOverrides?: { readonly model?: string; readonly provider?: string };
 }
 
@@ -147,6 +151,11 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
   let document: UnifiedConfigDocument = { providers: {} };
   let hasFileSource = false;
   for (const filePath of [paths.user, paths.project].filter((path): path is string => Boolean(path))) {
+    if (filePath === paths.user && options.userDocument) {
+      document = mergeDocuments(document, options.userDocument);
+      hasFileSource ||= Boolean(document.model || document.provider || Object.keys(document.providers).length || document.ownsProviderMembership);
+      continue;
+    }
     if (!existsSync(filePath)) continue;
     const candidates = filePath === paths.user ? paths.userCandidates : paths.projectCandidates.filter((candidate) => dirname(candidate) === dirname(filePath));
     const ignored = candidates.filter((candidate) => candidate !== filePath && existsSync(candidate));
@@ -154,7 +163,7 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
     const fileDocument = await readUnifiedFile(filePath, diagnostics);
     // 全注释的新手模板不阻断标准环境变量的零配置选择。
     hasFileSource ||= fileDocument.model !== undefined || fileDocument.provider !== undefined ||
-      Object.keys(fileDocument.providers).length > 0 || diagnostics.errors.length > 0;
+      Object.keys(fileDocument.providers).length > 0 || fileDocument.ownsProviderMembership === true || diagnostics.errors.length > 0;
     document = mergeDocuments(document, fileDocument);
   }
   document = mergeDocuments(document, standardEnvironmentDocument(env, !hasFileSource));
@@ -164,14 +173,18 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
     ...(options.cliOverrides?.provider?.trim() ? { provider: options.cliOverrides.provider.trim() } : {}),
   });
   const hasSource = hasFileSource || hasStandardEnvironment(env) || Boolean(options.cliOverrides?.model?.trim() || options.cliOverrides?.provider?.trim());
-  const selectedProvider = document.provider ?? inferProviderId(document) ?? legacy.defaultModelSelection?.providerId;
+  const selectedProvider = document.provider ?? inferProviderId(document) ?? (document.ownsProviderMembership ? undefined : legacy.defaultModelSelection?.providerId);
   // 环境探测选中的 Provider 使用自己的默认模型，不能继承旧 JSON 中另一家的模型。
   const environmentModel = !hasFileSource && selectedProvider
     ? DEFAULT_ENVIRONMENT_MODELS[document.providers[selectedProvider]?.type ?? ""]
     : undefined;
   const firstModel = selectedProvider ? document.providers[selectedProvider]?.models?.[0] : undefined;
   const selectedModel = document.model ?? environmentModel ?? (typeof firstModel === "string" ? firstModel : firstModel?.id) ?? legacy.defaultModelSelection?.modelId;
-  const entries = new Map<string, UnifiedProviderDefinition>(Object.entries(legacy.providers));
+  let previouslyManaged: string[] = [];
+  try { const ids: unknown = JSON.parse(await readFile(`${paths.legacyProviderFile}.comecode-managed.json`, "utf8")); if (Array.isArray(ids)) previouslyManaged = ids.filter((id): id is string => typeof id === "string"); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") diagnostics.errors.push("统一配置托管记录无法读取，请检查配置文件"); }
+  const retiredIds = document.ownsProviderMembership ? previouslyManaged.filter((id) => !(id in document.providers)) : [];
+  const entries = new Map<string, UnifiedProviderDefinition>(Object.entries(legacy.providers).filter(([id]) => !retiredIds.includes(id)));
   for (const [id, definition] of Object.entries(document.providers)) {
     const legacyDefinition = entries.get(id);
     // materialize 的旧模型连接是派生值，不能反压本次用户修改的供应商地址/凭据。
@@ -180,7 +193,7 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
   }
   if (selectedProvider && !entries.has(selectedProvider)) diagnostics.errors.push(`Provider 不存在: ${selectedProvider}`);
   const providers = [...entries.entries()].map(([id, definition]) => resolveProvider(id, definition, selectedProvider, selectedModel, env, diagnostics));
-  const managedProviderIds = Object.freeze([...Object.keys(document.providers), ...(hasSource && selectedProvider ? [selectedProvider] : [])]);
+  const managedProviderIds = Object.freeze([...Object.keys(document.providers), ...retiredIds, ...(hasSource && selectedProvider ? [selectedProvider] : [])]);
   return Object.freeze({
     paths,
     ...(selectedModel ? { model: selectedModel } : {}),
@@ -312,6 +325,7 @@ function mergeDocuments(base: UnifiedConfigDocument, next: UnifiedConfigDocument
   }
   return {
     providers,
+    ownsProviderMembership: next.ownsProviderMembership ?? base.ownsProviderMembership,
     ...(next.model !== undefined
       ? { model: next.model }
       : base.model !== undefined
