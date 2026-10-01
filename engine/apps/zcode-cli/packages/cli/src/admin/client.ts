@@ -121,6 +121,32 @@ function renderModelEndpointMenu() {
     menu.append(item);
   });
 }
+function closeModelTypeMenu() {
+  $('model-type-menu').hidden = true;
+  $('model-type-toggle').setAttribute('aria-expanded', 'false');
+}
+function toggleModelTypeMenu() {
+  const menu = $('model-type-menu');
+  menu.hidden = !menu.hidden;
+  $('model-type-toggle').setAttribute('aria-expanded', String(!menu.hidden));
+}
+function modelTypeOptions() {
+  const select = $('model-type');
+  return select.options.length ? Array.from(select.options) : protocols.map(item => ({ value: item[0], textContent: item[1] }));
+}
+function syncModelTypeDisplay() {
+  const select = $('model-type'), option = modelTypeOptions().find(item => item.value === select.value);
+  $('model-type-display').value = option ? option.textContent : protocolName(select.value);
+}
+function renderModelTypeMenu() {
+  const select = $('model-type'), menu = $('model-type-menu');
+  menu.replaceChildren();
+  modelTypeOptions().forEach(option => {
+    const item = button(option.textContent, () => { $('model-type').value = option.value; syncModelTypeDisplay(); closeModelTypeMenu(); renderModelTypeMenu(); }, 'protocol-picker-option');
+    item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.value === select.value));
+    menu.append(item);
+  });
+}
 function populateModelEndpoints(entry) {
   const select = $('model-endpoint'); select.replaceChildren();
   const manual = node('option', '手动填写'); manual.value = ''; select.append(manual);
@@ -141,7 +167,7 @@ function selectModelEndpoint() {
   // 换地址时清空新输入的 Key，防止跨供应商误用；存量 Key 不进入表单。
   $('model-key').value = ''; $('clear-key').checked = false;
   $('model-type').value = provider && provider.type ? provider.type : 'openai-chat';
-  closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
+  syncModelTypeDisplay(); closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
   if (!provider) $('model-url').focus();
 }
 function openModelDialog(entry) {
@@ -156,6 +182,7 @@ function openModelDialog(entry) {
   $('model-key').value = '';
   $('model-key').placeholder = model && (model.hasApiKey || (provider && provider.hasApiKey)) ? '已配置，留空保持不变' : '输入服务商提供的 API Key';
   $('model-type').value = model && model.type ? model.type : (provider && provider.type ? provider.type : 'openai-chat');
+  syncModelTypeDisplay(); renderModelTypeMenu(); closeModelTypeMenu();
   $('model-name').value = model && model.name ? model.name : '';
   $('model-context').value = model && model.contextWindow ? String(model.contextWindow) : '';
   $('model-output').value = model && model.maxOutputTokens ? String(model.maxOutputTokens) : '';
@@ -338,7 +365,16 @@ async function test(entry) {
 }
 $('model-endpoint').onchange = selectModelEndpoint;
 $('model-endpoint-toggle').onclick = toggleModelEndpointMenu;
+$('model-type-toggle').onclick = toggleModelTypeMenu;
+$('model-type').onchange = () => { syncModelTypeDisplay(); renderModelTypeMenu(); };
 $('model-url').oninput = handleModelUrlInput;
+window.addEventListener('click', event => {
+  const target = event.target;
+  if (!target || !target.closest || !target.closest('.endpoint-picker')) closeModelEndpointMenu();
+  if (!target || !target.closest || !target.closest('.protocol-picker')) closeModelTypeMenu();
+});
+window.addEventListener('keydown', event => { if (event.key === 'Escape') { closeModelEndpointMenu(); closeModelTypeMenu(); } });
+renderModelTypeMenu(); syncModelTypeDisplay();
 $('model-form').onsubmit = saveModelDialog;
 $('model-cancel').onclick = closeModelDialog;
 $('provider-form').onsubmit = saveProviderDialog;
