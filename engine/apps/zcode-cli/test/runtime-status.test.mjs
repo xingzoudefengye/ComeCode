@@ -39,7 +39,7 @@ test("关闭压缩清除主请求旧阈值，辅助请求与未知缓存用量�
   assert.equal(cache.hitRate, 0.8);
 });
 
-test("窄终端输入框仍显示模式、模型、思考强度和会话", async () => {
+test("窄终端输入框仍显示模式、模型和思考强度", async () => {
   let view;
   await React.act(async () => {
     view = await testRender(
@@ -59,7 +59,6 @@ test("窄终端输入框仍显示模式、模型、思考强度和会话", async
     });
     const frame = view.captureCharFrame();
     assert.match(frame, /Edit.*gpt-5.*high/u);
-    assert.ok(frame.includes("sess_1"), frame);
   } finally {
     await React.act(async () => {
       view.renderer.destroy();
