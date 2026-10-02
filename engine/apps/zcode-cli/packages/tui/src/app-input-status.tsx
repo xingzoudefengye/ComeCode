@@ -3,7 +3,6 @@ import React from "react";
 import type { ContextUsage } from "./app-model.js";
 import { DEFAULT_TUI_COPY } from "./app-locale.js";
 import { palette } from "./app-model.js";
-import { modelDisplayParts } from "./app-model-ref.js";
 import { spinnerFrame, useSpinnerFrame } from "./app-motion.js";
 import { displayWidth, truncateDisplay } from "./app-terminal-width.js";
 import { STALE_ACTIVITY_WARNING_MS, type RuntimeActivity } from "./app-runtime-activity.js";
@@ -105,9 +104,7 @@ function InputActiveStatusContent({
 export function InputComposerStatus({
   contentWidth,
   mode,
-  model,
   sessionId,
-  thoughtLevel,
 }: {
   contentWidth?: number;
   mode?: string;
@@ -116,15 +113,8 @@ export function InputComposerStatus({
   thoughtLevel: string;
 }): React.ReactElement {
   const maxWidth = composerStatusMetadataWidth(contentWidth);
-  const modelParts = modelDisplayParts(model);
-  const modelLabel =
-    modelParts.provider === "-" ? modelParts.model : `${modelParts.provider}/${modelParts.model}`;
   const modeLabel = mode ? `${mode.slice(0, 1).toUpperCase()}${mode.slice(1)}` : "-";
-  const thoughtLabel = thoughtLevel.trim() || "default";
-  const status = truncateDisplay(
-    `${modeLabel} | ${modelLabel} | ${thoughtLabel}`,
-    maxWidth,
-  );
+  const status = truncateDisplay(modeLabel, maxWidth);
   return h(
     "box",
     { style: { alignItems: "center", flexDirection: "row", height: COMPOSER_STATUS_HEIGHT, width: "100%" } },
@@ -134,20 +124,13 @@ export function InputComposerStatus({
 
 function composerStatusLabel(
   mode?: string,
-  model?: string,
-  sessionId?: string,
-  thoughtLevel?: string,
+  _model?: string,
+  _sessionId?: string,
+  _thoughtLevel?: string,
 ): string | undefined {
-  if (!model && !mode && !sessionId && !thoughtLevel) return undefined;
-  const modelParts = model ? modelDisplayParts(model) : undefined;
-  const modelLabel = modelParts
-    ? modelParts.provider === "-"
-      ? modelParts.model
-      : `${modelParts.provider}/${modelParts.model}`
-    : "-";
+  if (!mode) return undefined;
   const modeLabel = mode ? `${mode.slice(0, 1).toUpperCase()}${mode.slice(1)}` : "-";
-  const thoughtLabel = thoughtLevel?.trim() || "default";
-  return `${modeLabel} | ${modelLabel} | ${thoughtLabel}`;
+  return modeLabel;
 }
 
 function inputActiveStatusRow(
