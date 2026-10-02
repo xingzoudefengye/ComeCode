@@ -80,8 +80,9 @@ export function getNextTerminalSessionIndex(
   }
 }
 
-export function formatTerminalTabTitle(projectName: string, index: number): string {
-  return index === 1 ? projectName : `${projectName} ${index}`;
+export function formatTerminalTabTitle(shellLabel: string | null, fallback = "Terminal"): string {
+  const title = shellLabel?.trim() || fallback;
+  return title.length <= 30 ? title : `${title.slice(0, 27)}...`;
 }
 
 type TerminalSessionCloseAction = "none" | "close-panel" | "close-session";
