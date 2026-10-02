@@ -59,6 +59,16 @@ export const formatDuration = (durationMs: number | undefined): string => {
   return `${Math.round(durationMs / 1_000)}s`;
 };
 
+/** 完成时刻的时钟串（HH:mm:ss，本机时区）。无时刻/非法时返回空串。 */
+export const formatClockTime = (epochMs: number | undefined): string => {
+  if (epochMs === undefined || !Number.isFinite(epochMs)) return "";
+  const date = new Date(epochMs);
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+};
+
 export const truncatePlain = (value: string, maxLength: number): string => {
   if (value.length <= maxLength) return value;
   if (maxLength <= 3) return value.slice(0, Math.max(0, maxLength));

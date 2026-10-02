@@ -1,7 +1,10 @@
 import React from "react";
+import type { TuiCopy } from "@zcode/i18n";
 import type { ToolResultDisplayLine, ToolTranscriptPart } from "./app-model.js";
 import { ShikiDiffView, diffViewForWidth } from "./app-shiki-diff-view.js";
 import { palette } from "./app-model.js";
+import { DEFAULT_TUI_COPY } from "./app-locale.js";
+import { formatClockTime, formatDuration } from "./state.js";
 import { truncateDisplay } from "./app-terminal-width.js";
 import { activeTuiTheme } from "./theme/index.js";
 
@@ -17,15 +20,19 @@ const h = React.createElement as (
 ) => React.ReactElement;
 
 export function ToolTranscriptPartView({
+  copy = DEFAULT_TUI_COPY,
+  now,
   part,
   terminalWidth = 100,
 }: {
+  copy?: TuiCopy;
+  now?: number;
   part: ToolTranscriptPart;
   terminalWidth?: number;
 }): React.ReactElement {
   const statusColor = colorForStatus(part.status);
   const theme = activeTuiTheme();
-  const title = part.title ?? `Tool ${part.toolName} ${part.status}`;
+  const title = buildToolTitleLine(part, now, copy);
   const outputLines = part.output ? restoredOutputLines(part.output, terminalWidth) : [];
   // tool rows should align with assistant text; child detail rows carry their own indent.
   return h(
@@ -109,7 +116,45 @@ function colorForStatus(status: ToolTranscriptPart["status"]): string {
   if (status === "completed") return palette.success;
   if (status === "failed") return palette.danger;
   if (status === "running") return palette.accent;
-  return palette.warning;
+  return palette.muted;
+}
+
+/** 依状态取符号（i18n 控制，便于按语言调换）。 */
+function symbolForStatus(
+  status: ToolTranscriptPart["status"],
+  copy: TuiCopy,
+): string {
+  const symbols = copy.transcript.status;
+  if (status === "completed") return symbols.completed;
+  if (status === "failed") return symbols.failed;
+  if (status === "running") return symbols.running;
+  return symbols.pending;
+}
+
+/**
+ * 拼装工具行标题（单行）：`符号 名称[ · 耗时[ · 完成时刻]]`。
+ * 终态显示 recap 时长 + 完成时间；running 且有时钟时实时递增；无时刻的旧 part 退化为 `符号 名称`。
+ */
+function buildToolTitleLine(
+  part: ToolTranscriptPart,
+  now: number | undefined,
+  copy: TuiCopy,
+): string {
+  const label = part.title ?? part.toolName;
+  const suffix = toolStatusSuffix(part, now);
+  return `${symbolForStatus(part.status, copy)} ${label}${suffix}`;
+}
+
+function toolStatusSuffix(part: ToolTranscriptPart, now: number | undefined): string {
+  if (part.status === "running" && part.startedAt !== undefined && now !== undefined) {
+    return ` · ${formatDuration(now - part.startedAt)}`;
+  }
+  if (part.status === "completed" || part.status === "failed") {
+    if (part.durationMs === undefined) return "";
+    const time = part.finishedAt !== undefined ? ` · ${formatClockTime(part.finishedAt)}` : "";
+    return ` · ${formatDuration(part.durationMs)}${time}`;
+  }
+  return "";
 }
 
 function styleForDiffLine(line: ToolResultDisplayLine): Record<string, string> {

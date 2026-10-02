@@ -332,6 +332,12 @@ Slash Commands:
         thinking: "思考中...",
       },
       title: "对话",
+      status: {
+        completed: "+",
+        failed: "x",
+        running: ">",
+        pending: ".",
+      },
       workflow: {
         actors: "actors：",
         actorRow: ({ name, status }) => `${name} - ${status}`,

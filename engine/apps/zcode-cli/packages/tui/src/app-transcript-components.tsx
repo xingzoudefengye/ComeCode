@@ -24,6 +24,7 @@ export function ContentPane({
   id,
   focused,
   messages,
+  now,
   terminalWidth = 100,
   workflowCardsByToolCallId,
 }: {
@@ -34,6 +35,7 @@ export function ContentPane({
   id?: string;
   focused: boolean;
   messages: Message[];
+  now?: number;
   terminalWidth?: number;
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
 }): React.ReactElement {
@@ -83,6 +85,7 @@ export function ContentPane({
             index,
             key: `${index}-${message.role}`,
             message,
+            now,
             previousRole: messages[index - 1]?.role,
             terminalWidth,
             workflowCardsByToolCallId,
@@ -115,6 +118,7 @@ export function MessageRow({
   expandedWorkflowRunIds,
   index,
   message,
+  now,
   previousRole,
   terminalWidth = 100,
   workflowCardsByToolCallId,
@@ -123,6 +127,7 @@ export function MessageRow({
   expandedWorkflowRunIds?: ReadonlySet<string>;
   index: number;
   message: Message;
+  now?: number;
   previousRole?: Message["role"];
   terminalWidth?: number;
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
@@ -190,6 +195,7 @@ export function MessageRow({
         return h(ToolTranscriptPartView, {
           key: `tool-${part.toolCallId}`,
           part,
+          now,
           terminalWidth,
         });
       }

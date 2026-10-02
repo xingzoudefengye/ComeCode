@@ -269,6 +269,12 @@ export interface TuiCopy {
       thinking: string;
     };
     title: string;
+    status: {
+      completed: string;
+      failed: string;
+      running: string;
+      pending: string;
+    };
     workflow: {
       actors: string;
       actorRow(input: { name: string; status: string }): string;
