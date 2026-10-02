@@ -121,9 +121,8 @@ export function InputComposerStatus({
     modelParts.provider === "-" ? modelParts.model : `${modelParts.provider}/${modelParts.model}`;
   const modeLabel = mode ? `${mode.slice(0, 1).toUpperCase()}${mode.slice(1)}` : "-";
   const thoughtLabel = thoughtLevel.trim() || "default";
-  const sessionLabel = sessionId ? shortenSessionId(sessionId) : "session";
   const status = truncateDisplay(
-    `${modeLabel} | ${modelLabel} | ${thoughtLabel} | ${sessionLabel}`,
+    `${modeLabel} | ${modelLabel} | ${thoughtLabel}`,
     maxWidth,
   );
   return h(
@@ -148,8 +147,7 @@ function composerStatusLabel(
     : "-";
   const modeLabel = mode ? `${mode.slice(0, 1).toUpperCase()}${mode.slice(1)}` : "-";
   const thoughtLabel = thoughtLevel?.trim() || "default";
-  const sessionLabel = sessionId ? shortenSessionId(sessionId) : "session";
-  return `${modeLabel} | ${modelLabel} | ${thoughtLabel} | ${sessionLabel}`;
+  return `${modeLabel} | ${modelLabel} | ${thoughtLabel}`;
 }
 
 function inputActiveStatusRow(
@@ -249,11 +247,6 @@ function inputActiveStatusRow(
     contextBadge ? h("box", { style: { flexGrow: 1, minWidth: 1 } }) : null,
     contextBadge ? h("text", { style: { fg: palette.muted, flexShrink: 0 } }, contextBadge) : null,
   );
-}
-
-function shortenSessionId(sessionId: string): string {
-  const value = sessionId.trim();
-  return value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-6)}` : value;
 }
 
 function inputContextUsageBadge(contextUsage?: ContextUsage): string | undefined {
