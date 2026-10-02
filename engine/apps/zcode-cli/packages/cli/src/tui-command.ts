@@ -1,9 +1,11 @@
 import { providerSetupStartupResponse } from "./provider-setup.js";
 import type { RunContext, GlobalOptions } from "@zcode/shared-types";
+import { SessionEventType } from "@zcode/contracts";
 import { resolveZCodeRuntimeEnv } from "@zcode/shared";
 import { createNodeClipboardImageReader } from "./clipboard-image.js";
 import { createNodeClipboardTextWriter } from "./clipboard-text.js";
 import { listSlashCommandSuggestions } from "./command-center.js";
+import { setSessionProcessTitle } from "./process-title.js";
 import { registerCliShutdownHandlers } from "./shutdown.js";
 import { listCustomCommandsForTui, loadInitialTuiSessionMetadata } from "./tui-command-data.js";
 import { createTuiSubmitPrompt } from "./tui-prompt-handler.js";
@@ -59,6 +61,12 @@ export const runTuiCommand = async (
       cleanupTimeoutMs: deps.shutdownCleanupTimeoutMs,
       exitProcess: deps.exitProcess,
       process: deps.shutdownProcess,
+    });
+    // 会话标题实时同步到 process.title，让宿主终端 tab 显示当前会话名。
+    const unregisterSessionTitleSync = promptHandler.subscribeSessionEvents?.((event) => {
+      if (event.type !== SessionEventType.SessionTitleUpdated) return;
+      const payload = event.payload as { title?: unknown };
+      setSessionProcessTitle(typeof payload?.title === "string" ? payload.title : undefined);
     });
     try {
       return await runTui({
@@ -116,6 +124,7 @@ export const runTuiCommand = async (
         subscribeSessionEvents: promptHandler.subscribeSessionEvents,
       });
     } finally {
+      unregisterSessionTitleSync?.();
       unregisterShutdownHandlers();
       await promptHandler.close?.();
     }
