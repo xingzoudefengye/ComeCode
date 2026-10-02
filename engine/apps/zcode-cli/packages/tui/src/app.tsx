@@ -35,6 +35,7 @@ import type {
 import { useTuiThemeSync } from "./app-theme-sync.js";
 import { useSessionEventApplier } from "./app-session-event-handler.js";
 import { useTuiWorkflowRuns } from "./app-workflow-controller.js";
+import { useNow } from "./app-motion.js";
 import { useTuiApplyResult } from "./app-result.js";
 import { useSubagents } from "./app-subagents.js";
 import type { TuiOptions } from "./types.js";
@@ -97,6 +98,12 @@ export function TuiApp({
   const workflowRuns = useTuiWorkflowRuns({ copy: copy.tui, options, setMessages });
   const sidebar = useSidebarController();
   const subagents = useSubagents(options);
+
+  // 有进行中的工具行才走秒表，供其实时耗时递增；空闲零定时器。
+  const hasRunningTool = messages.some((message) =>
+    message.parts?.some((part) => part.type === "tool" && part.status === "running"),
+  );
+  const now = useNow(1_000, hasRunningTool);
 
   const abortControllerRef = useRef<AbortController | undefined>(undefined);
   const draftRef = useRef("");
@@ -402,6 +409,7 @@ export function TuiApp({
     messages,
     modifiedFiles,
     networkRequests,
+    now,
     options,
     queuedInputs,
     selection,

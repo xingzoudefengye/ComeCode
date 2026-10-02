@@ -136,6 +136,24 @@ export function useSpinnerFrame(animated: boolean): string {
   return spinnerFrame(frameMs);
 }
 
+/**
+ * 当前毫秒的秒表。仅在 `enabled` 期间每 `intervalMs` 触发一次重渲染，
+ * 供 running 工具行的实时耗时递增；空闲时零定时器、零成本。
+ */
+export function useNow(intervalMs: number, enabled: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [enabled, intervalMs]);
+
+  return now;
+}
+
 export function spinnerFrame(frameMs: number): string {
   const periodMs = SPINNER_FRAME_INTERVAL_MS * SPINNER_FRAMES.length;
   const frameIndex = Math.floor(positiveModulo(frameMs, periodMs) / SPINNER_FRAME_INTERVAL_MS);

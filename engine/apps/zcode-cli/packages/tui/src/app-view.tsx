@@ -90,6 +90,7 @@ export function AppView(props: {
   modelSelection?: ModelCommandSelectionState;
   messages: Message[];
   networkRequests: NetworkRequest[];
+  now?: number;
   options: TuiOptions;
   queuedInputs?: QueuedInput[];
   selection?: SelectionState;
@@ -198,6 +199,7 @@ export function AppView(props: {
         copy: props.copy,
         focused: false,
         messages: transcriptMessages,
+        now: props.now,
         terminalWidth: actionPanelContentWidth,
         workflowCardsByToolCallId: props.workflowCardsByToolCallId,
         expandedWorkflowRunIds: props.expandedWorkflowRunIds,

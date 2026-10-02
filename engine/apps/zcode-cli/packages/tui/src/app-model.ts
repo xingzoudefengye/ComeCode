@@ -61,13 +61,19 @@ export type ThoughtTranscriptPart = {
 export type ToolTranscriptPart = {
   detailLines: string[];
   error?: string;
+  /** 结束时刻(毫秒,event.timestamp)。无时刻(旧数据/未打点)时缺省。 */
+  finishedAt?: number;
   output?: string;
   resultDisplay?: ToolResultDisplay;
+  /** 首次出现(调度)时刻(毫秒,event.timestamp),供 running 实时耗时至终态折算 durationMs。 */
+  startedAt?: number;
   status: "pending" | "running" | "completed" | "failed";
   title?: string;
   toolCallId: string;
   toolName: string;
   type: "tool";
+  /** 终态耗时(finishedAt - startedAt,毫秒)。 */
+  durationMs?: number;
 };
 
 export type ToolResultDisplay = {

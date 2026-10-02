@@ -42,6 +42,8 @@ export function applyToolTranscriptEvent(
     const projection = buildToolTranscriptProjection(toolName, input, handlers.workspaceDirectory);
     const part: ToolTranscriptPart = {
       detailLines: projection.detailLines,
+      // 工具行一出场就开始计时(running 实时耗时至终态折算 durationMs)。
+      startedAt: event.timestamp.getTime(),
       status: "pending",
       title: projection.title,
       toolCallId,
@@ -61,7 +63,7 @@ export function applyToolTranscriptEvent(
         current,
         toolCallId,
         toolName,
-        { status: "running" },
+        { startedAt: event.timestamp.getTime(), status: "running" },
         assistantMessageId,
       ),
     );
@@ -75,6 +77,7 @@ export function applyToolTranscriptEvent(
         toolCallId,
         toolName,
         {
+          finishedAt: event.timestamp.getTime(),
           resultDisplay: resultDisplayFromPayload(payload),
           status: "completed",
         },
@@ -92,6 +95,7 @@ export function applyToolTranscriptEvent(
         toolName,
         {
           error: eventErrorMessage(payload),
+          finishedAt: event.timestamp.getTime(),
           status: "failed",
         },
         assistantMessageId,
@@ -194,12 +198,14 @@ function updateOrAppendToolPart(
     const parts = message.parts.map((part) => {
       if (part.type !== "tool" || part.toolCallId !== toolCallId) return part;
       found = true;
-      return { ...part, toolName, ...patch };
+      // 保留首次出现的 startedAt(running 不可把调度时刻顶成后来时刻),终态折算耗时。
+      return { ...part, toolName, ...withToolTiming(part, patch) };
     });
     return found ? { ...message, parts } : message;
   });
 
   if (found) return updated;
+  // 事件乱序/直接进入的兜底:以 patch 的时刻起步,终态耗时退化为 0。
   return upsertToolPart(
     updated,
     {
@@ -208,11 +214,26 @@ function updateOrAppendToolPart(
       toolCallId,
       toolName,
       type: "tool",
-      ...(patch.error ? { error: patch.error } : {}),
-      ...(patch.resultDisplay ? { resultDisplay: patch.resultDisplay } : {}),
+      ...withToolTiming(undefined, patch),
     },
     assistantMessageId,
   );
+}
+
+/** 合并工具的起始/结束时刻:运行与终态都尽量保留最早 startedAt,终态据其折算 durationMs。 */
+function withToolTiming(
+  existing: { startedAt?: number } | undefined,
+  patch: Partial<Omit<ToolTranscriptPart, "toolCallId" | "toolName" | "type">>,
+): Partial<Omit<ToolTranscriptPart, "toolCallId" | "toolName" | "type">> {
+  const startedAt = existing?.startedAt ?? patch.startedAt;
+  const next = { ...patch, ...(startedAt !== undefined ? { startedAt } : {}) };
+  if (
+    (patch.status === "completed" || patch.status === "failed") &&
+    patch.finishedAt !== undefined
+  ) {
+    next.durationMs = patch.finishedAt - (startedAt ?? patch.finishedAt);
+  }
+  return next;
 }
 
 function resultDisplayFromPayload(payload: Record<string, unknown>): ToolResultDisplay | undefined {

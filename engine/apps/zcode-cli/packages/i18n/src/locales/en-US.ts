@@ -335,6 +335,12 @@ Slash Commands:
         thinking: "Thinking...",
       },
       title: "Transcript",
+      status: {
+        completed: "+",
+        failed: "x",
+        running: ">",
+        pending: ".",
+      },
       workflow: {
         actors: "actors:",
         actorRow: ({ name, status }) => `${name} - ${status}`,
