@@ -24,7 +24,7 @@ export const GOAL_SUMMARY_TITLE_QUERY_SOURCE = "goal_summary_title";
 
 const TITLE_GENERATION_TIMEOUT_MS = 60_000;
 const MAX_TITLE_INPUT_CHARS = 1_200;
-const MAX_TITLE_CHARS = 100;
+const MAX_TITLE_CHARS = 30;
 
 // 标题 sidecar 的 user message 是原始 query，弱约束时模型可能把它当成对话请求直接回答。
 // system prompt 必须明确 query 只作为标题素材，并禁止回答或执行；首句保持稳定供旧 model-io 识别。

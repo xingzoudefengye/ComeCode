@@ -1,10 +1,14 @@
 import { createProjectId } from "../deps.js";
 import type { ProjectId } from "../deps.js";
 
+const SESSION_TITLE_MAX_CHARS = 30;
+
 export function titleFromInput(input: string): string {
   const compact = input.trim().replace(/\s+/g, " ");
   if (!compact) return "Untitled session";
-  return compact.length <= 60 ? compact : `${compact.slice(0, 57)}...`;
+  return compact.length <= SESSION_TITLE_MAX_CHARS
+    ? compact
+    : `${compact.slice(0, SESSION_TITLE_MAX_CHARS - 3)}...`;
 }
 
 export function slugify(value: string): string {

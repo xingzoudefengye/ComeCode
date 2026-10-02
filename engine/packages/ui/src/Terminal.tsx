@@ -7,7 +7,6 @@ import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { logger } from "@/logger.js";
 import { Button } from "@/components/ui/button.js";
 import { Tabs, TabsContent, TabsList } from "@/components/ui/tabs.js";
-import { getPathLeaf } from "@/lib/path.js";
 import { TerminalTabTrigger } from "@/terminal/TerminalTabTrigger.js";
 import { TerminalSession } from "@/terminal/TerminalSession.js";
 import {
@@ -311,9 +310,7 @@ export function Terminal({
           <div className="min-w-0 flex-1 overflow-x-auto !scrollbar-hide">
             <TabsList className="flex !h-7 w-max justify-start gap-1 rounded-none bg-transparent p-0">
               {currentSessions.map((session) => {
-                const projectName =
-                  getPathLeaf(session.cwd ?? "") || intl.formatMessage({ id: "terminal.title" });
-                const title = formatTerminalTabTitle(projectName, session.index);
+                const title = formatTerminalTabTitle(session.shellLabel);
                 return (
                   <TerminalTabTrigger
                     key={session.id}
