@@ -24,8 +24,10 @@ export function ContentPane({
   id,
   focused,
   messages,
+  model,
   now,
   terminalWidth = 100,
+  version,
   workflowCardsByToolCallId,
 }: {
   animateEmptyLogo?: boolean;
@@ -35,8 +37,10 @@ export function ContentPane({
   id?: string;
   focused: boolean;
   messages: Message[];
+  model?: string;
   now?: number;
   terminalWidth?: number;
+  version?: string;
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
 }): React.ReactElement {
   return h(
@@ -76,7 +80,7 @@ export function ContentPane({
       ? [
           emptyText
             ? h("text", { key: "empty", style: { fg: palette.muted } }, emptyText)
-            : h(EmptyTranscriptLogo, { animated: animateEmptyLogo, key: "empty-transcript-logo" }),
+            : h(EmptyTranscriptLogo, { animated: animateEmptyLogo, key: "empty-transcript-logo", model, version }),
         ]
       : messages.map((message, index) =>
           h(MessageRow, {

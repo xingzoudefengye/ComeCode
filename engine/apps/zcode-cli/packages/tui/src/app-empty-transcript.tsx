@@ -16,21 +16,39 @@ const EMPTY_TRANSCRIPT_LOGO_MIN_HEIGHT = LOGO_LINES.length;
 
 export function EmptyTranscriptLogo({
   animated = false,
+  model,
+  version,
 }: {
   animated?: boolean;
+  model?: string;
+  version?: string;
 } = {}): React.ReactElement {
   if (animated) {
-    return h(AnimatedEmptyTranscriptLogo);
+    return h(AnimatedEmptyTranscriptLogo, { model, version });
   }
-  return renderLogoContent({ animated: false });
+  return renderLogoContent({ animated: false, model, version });
 }
 
-function AnimatedEmptyTranscriptLogo(): React.ReactElement {
+function AnimatedEmptyTranscriptLogo({
+  model,
+  version,
+}: {
+  model?: string;
+  version?: string;
+}): React.ReactElement {
   const frameMs = useShimmerFrame(true);
-  return renderLogoContent({ animated: true, frameMs });
+  return renderLogoContent({ animated: true, frameMs, model, version });
 }
 
-function renderLogoContent(input: { animated: boolean; frameMs?: number }): React.ReactElement {
+function renderLogoContent(input: {
+  animated: boolean;
+  frameMs?: number;
+  model?: string;
+  version?: string;
+}): React.ReactElement {
+  const lines = [
+    [CLI_COMMAND, input.version ? `v${input.version}` : "", input.model ?? ""].filter(Boolean).join(" · "),
+  ];
   return h(
     "box",
     {
@@ -43,7 +61,7 @@ function renderLogoContent(input: { animated: boolean; frameMs?: number }): Reac
         width: "100%",
       },
     },
-    ...LOGO_LINES.map((line, index) =>
+    ...lines.map((line, index) =>
       renderLogoText({
         animated: input.animated,
         baseColor: palette.muted,
