@@ -15,7 +15,6 @@ import {
   createWorkspaceTerminalState,
   ensureWorkspaceTerminalState,
   exitTerminalSession,
-  formatTerminalTabTitle,
   getNextTerminalSessionIndex,
   getTerminalSessionCloseAction,
   type TerminalPanelState,
@@ -310,7 +309,7 @@ export function Terminal({
           <div className="min-w-0 flex-1 overflow-x-auto !scrollbar-hide">
             <TabsList className="flex !h-7 w-max justify-start gap-1 rounded-none bg-transparent p-0">
               {currentSessions.map((session) => {
-                const title = formatTerminalTabTitle(session.shellLabel);
+                const title = intl.formatMessage({ id: "terminal.title" });
                 return (
                   <TerminalTabTrigger
                     key={session.id}
