@@ -1,16 +1,16 @@
-const packageDirName = "zcode";
+const packageDirName = "comecode";
 
 export function installScriptSource(baseUrl) {
   return `#!/usr/bin/env sh
 set -eu
 
-BASE_URL="\${ZCODE_DIST_BASE_URL:-${baseUrl}}"
-INSTALL_DIR="\${ZCODE_DIST_HOME:-$HOME/.zcode/runtime}"
-BIN_DIR="\${ZCODE_DIST_BIN_DIR:-$HOME/.local/bin}"
+BASE_URL="\${COMECODE_DIST_BASE_URL:-\${ZCODE_DIST_BASE_URL:-${baseUrl}}}"
+INSTALL_DIR="\${COMECODE_DIST_HOME:-\${ZCODE_DIST_HOME:-$HOME/.comecode/runtime}}"
+BIN_DIR="\${COMECODE_DIST_BIN_DIR:-\${ZCODE_DIST_BIN_DIR:-$HOME/.local/bin}}"
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "zcode install requires $1" >&2
+    echo "comecode install requires $1" >&2
     exit 1
   fi
 }
@@ -42,14 +42,14 @@ mv "$TARGET.new/${packageDirName}" "$TARGET"
 rm -rf "$TARGET.new"
 ln -sfn "$TARGET" "$INSTALL_DIR/current"
 
-cat > "$BIN_DIR/zcode" <<SH
+cat > "$BIN_DIR/comecode" <<SH
 #!/usr/bin/env sh
 exec node "$INSTALL_DIR/current/bin/zcode.mjs" "\\$@"
 SH
-chmod +x "$BIN_DIR/zcode"
+chmod +x "$BIN_DIR/comecode"
 
-echo "ZCode $VERSION installed."
-echo "Run: zcode (TUI) or zcode --web (Web)"
+echo "ComeCode $VERSION installed."
+echo "Run: comecode (TUI) or comecode --web (Web)"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *) echo "Note: $BIN_DIR is not in PATH." ;;

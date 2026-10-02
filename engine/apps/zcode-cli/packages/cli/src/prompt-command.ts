@@ -643,7 +643,7 @@ function writeHeadlessWorkspaceHookTrustDiagnostic(
       ...status.items
         .filter((item) => item.configuredEnabled && item.trustState !== "trusted_persistent")
         .map((item) => `pending digest: ${item.hookDeclarationDigest}`),
-      `Review with: zcode hooks trust review --workspace ${JSON.stringify(status.workspaceIdentity)}`,
+      `Review with: comecode hooks trust review --workspace ${JSON.stringify(status.workspaceIdentity)}`,
     ].join("\n") + "\n",
   );
 }
