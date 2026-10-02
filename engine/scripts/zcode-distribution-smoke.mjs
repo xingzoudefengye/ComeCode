@@ -14,7 +14,7 @@ const exec = promisify(execFile);
 const archive = process.argv[2];
 assert.ok(archive, "Usage: node scripts/zcode-distribution-smoke.mjs <archive.tar.gz>");
 const directory = await realpath(await mkdtemp(join(tmpdir(), "zcode-release-smoke-")));
-const root = join(directory, "zcode");
+const root = join(directory, "comecode");
 const runner = join(root, "bin/zcode.mjs");
 const workspace = join(directory, "workspace");
 const env = {
@@ -56,7 +56,7 @@ try {
     }),
   );
   await until(
-    () => /ZCode/.test(screen) && /(?:登录|\/login|输入提示词|Type a prompt)/i.test(screen),
+    () => /ComeCode/.test(screen) && /(?:登录|\/login|输入提示词|Type a prompt)/i.test(screen),
     "TUI initialized render",
     () => screen,
   );

@@ -15,7 +15,7 @@ import { installScriptSource } from "./zcode-distribution/installer.mjs";
 const root = resolve(import.meta.dirname, "..");
 const defaultOutDir = resolve(root, "dist", "zcode");
 const defaultBaseUrl = (await loadEndpointEnv()).COMECODE_DIST_BASE_URL?.trim() || "https://localhost:3000/comecode/";
-const packageDirName = "zcode";
+const packageDirName = "comecode";
 const usage = `Usage:
   pnpm build:zcode
   node scripts/build-zcode.mjs --skip-build

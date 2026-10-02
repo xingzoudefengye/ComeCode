@@ -7,15 +7,16 @@ import type {
   inspectWorkspaceHookTrust,
   revokeWorkspaceHookTrustCli,
 } from "@zcode/bootstrap";
+import { CLI_COMMAND } from "@zcode/contracts";
 import type { RunContext } from "@zcode/shared-types";
 import type { RunDependencies } from "./cli-types.js";
 
 const USAGE = `Usage:
-  zcode hooks trust status [--workspace <path-or-identity>] [--json]
-  zcode hooks trust review [--workspace <path-or-identity>] [--json]
-  zcode hooks trust grant --workspace <path-or-identity> --hook-digest <sha256> [--hook-digest <sha256> ...]
-  zcode hooks trust grant --workspace <path-or-identity> --all-current --bundle-digest <sha256>
-  zcode hooks trust revoke --workspace <path-or-identity> [--hook-digest <sha256> ... | --all]
+  ${CLI_COMMAND} hooks trust status [--workspace <path-or-identity>] [--json]
+  ${CLI_COMMAND} hooks trust review [--workspace <path-or-identity>] [--json]
+  ${CLI_COMMAND} hooks trust grant --workspace <path-or-identity> --hook-digest <sha256> [--hook-digest <sha256> ...]
+  ${CLI_COMMAND} hooks trust grant --workspace <path-or-identity> --all-current --bundle-digest <sha256>
+  ${CLI_COMMAND} hooks trust revoke --workspace <path-or-identity> [--hook-digest <sha256> ... | --all]
 `;
 
 type Inspect = typeof inspectWorkspaceHookTrust;
@@ -148,9 +149,9 @@ function formatHuman(status: WorkspaceHookTrustCliStatus, action: string): strin
   if (status.reasonCode === "workspace_hooks_pending_trust" && status.bundleDigest) {
     lines.push(
       "Pretrust exact declarations with:",
-      `  zcode hooks trust grant --workspace ${quote(status.workspaceIdentity)} --hook-digest <sha256>`,
+      `  ${CLI_COMMAND} hooks trust grant --workspace ${quote(status.workspaceIdentity)} --hook-digest <sha256>`,
       "Or trust every currently enabled declaration in this exact bundle with:",
-      `  zcode hooks trust grant --workspace ${quote(status.workspaceIdentity)} --all-current --bundle-digest ${status.bundleDigest}`,
+      `  ${CLI_COMMAND} hooks trust grant --workspace ${quote(status.workspaceIdentity)} --all-current --bundle-digest ${status.bundleDigest}`,
     );
   }
   if (status.reasonCode === "workspace_hooks_trust_store_corrupt") {
