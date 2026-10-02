@@ -8,6 +8,17 @@ import { cacheStatsFromPayload, usageFromPayload } from "./app-event-data.js";
 import { projectedTranscriptHasResponse } from "./app-transcript-stream.js";
 import { asRecord, numberField, stringField } from "./state.js";
 
+export function appendTurnFinishMarker(
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>,
+  finishText: string,
+): void {
+  if (!finishText) return;
+  setMessages((current) => {
+    const last = current.at(-1);
+    if (last?.role === "system" && last.content === finishText) return current;
+    return [...current, { content: finishText, role: "system" }];
+  });
+}
 export function applyModelCacheAndBudgetEvent(
   payload: Record<string, unknown>,
   setCacheStats: React.Dispatch<React.SetStateAction<CacheStats | undefined>>,
