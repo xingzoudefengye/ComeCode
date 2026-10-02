@@ -1,4 +1,4 @@
-import type { TuiSubmitPromptResult } from "@zcode/tui";
+import type { TuiSelection, TuiSubmitPromptResult } from "@zcode/tui";
 import { thoughtLevelsToEffortOptions } from "../effort-options.js";
 import { rememberCurrentModelSelection } from "../model-selection.js";
 import type { CommandCenterDeps } from "../types.js";
@@ -34,20 +34,12 @@ export async function handleEffortCommand(
 
   const normalizedArgs = args.trim();
 
-  if (normalizedArgs.length === 0) {
+  if (normalizedArgs.length === 0 || normalizedArgs.toLowerCase() === "list") {
     return {
       effortOptions,
       mode: deps.getMode?.(),
       response: formatEffortList(current, levels),
-      thoughtLevel: current,
-    };
-  }
-
-  if (normalizedArgs.toLowerCase() === "list") {
-    return {
-      effortOptions,
-      mode: deps.getMode?.(),
-      response: formatEffortList(current, levels),
+      selection: buildEffortSelection(current, levels),
       thoughtLevel: current,
     };
   }
@@ -72,6 +64,28 @@ export async function handleEffortCommand(
       thoughtLevel: current,
     };
   }
+}
+
+function buildEffortSelection(
+  current: string | undefined,
+  levels: readonly string[],
+): TuiSelection {
+  const selectedIndex = Math.max(0, levels.findIndex((level) => level === current));
+  return {
+    emptyMessage: "No reasoning efforts available.",
+    filterable: false,
+    help: "Up/Down choose, Enter switches, Esc closes",
+    items: levels.map((level) => ({
+      command: `/effort ${level}`,
+      id: level,
+      meta: level === current ? "current" : undefined,
+      primary: level,
+    })),
+    placement: "composer",
+    prompt: "Select reasoning effort",
+    selectedIndex,
+    title: "Effort",
+  };
 }
 
 function formatEffortList(current: string | undefined, levels: readonly string[]): string {
