@@ -302,7 +302,7 @@ export function createCommandCenter(deps: CommandCenterDeps): TuiSubmitPrompt {
               restoredMessages,
             }
           : {}),
-        response: formatResumeResult(app.sessionId, result),
+        response: formatResumeResult(app.sessionId, result, app.getModel?.()),
         thoughtLevel: app.getThoughtLevel?.(),
         traceId: result.traceId ?? app.traceId,
       };
