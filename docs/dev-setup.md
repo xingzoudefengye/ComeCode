@@ -169,6 +169,21 @@ corepack pnpm@10.34.5 --filter "@zcode/cli" build
 corepack pnpm@10.34.5 --filter "@zcode/cli..." build
 ```
 
+### 内置 Provider 目录（模型档位、目录规则）
+
+模型档位（`optionSpecs.reasoningLevel.values`）、模型匹配规则这类数据都在 `engine/config/provider/zcode-builtin.json`，它是唯一的源。构建会先按运行时的 Release schema 完整校验，再复制一份到 `packages/cli/dist/provider/zcode-builtin.json`；运行中的 CLI 靠 `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` 定位的正是这份副本。
+
+所以改了目录规则要重建 **CLI**（不是 TUI）：
+
+```bash
+cd engine
+corepack pnpm@10.34.5 --filter "@zcode/cli" build
+cmp -s config/provider/zcode-builtin.json \
+  apps/zcode-cli/packages/cli/dist/provider/zcode-builtin.json && echo "产物与源一致"
+```
+
+历史坑已修：从正在运行的 comecode 派生的终端会继承 `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`（指向 dist 副本），而构建脚本过去把它当配置源，于是源与目标成了同一个文件——构建正常输出 `Done`，仓库里的改动却进不了产物。现在构建会忽略指向**仓库内 dist 产物**的取值（CLI 随包副本、`dist/zcode/.work` 里的 agent 包副本等），回退到仓库配置并在 stderr 打一行告警；**看到那行告警属于正常回退，不需要再手动 `env -u`**。指向仓库外部的备用源仍然生效。
+
 ### 验证产物确实包含改动
 
 ```bash
