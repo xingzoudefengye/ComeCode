@@ -67,6 +67,9 @@ type UseTuiKeyboardControlsOptions = {
   filteredModelOptions: readonly TuiModelOption[];
   filteredSlashCommands: readonly SlashCommand[];
   handleFileMentionKey: (key: KeyEvent) => boolean;
+  openModelSelection: () => boolean;
+  openEffortSelection: () => boolean;
+  openModeSelection: () => boolean;
   inputHistoryActive: boolean;
   messages: readonly Message[];
   effortSelection: EffortCommandSelectionState | undefined;
@@ -106,6 +109,9 @@ export function useTuiKeyboardControls({
   filteredModelOptions,
   filteredSlashCommands,
   handleFileMentionKey,
+  openModelSelection,
+  openEffortSelection,
+  openModeSelection,
   inputHistoryActive,
   messages,
   effortSelection,
@@ -230,6 +236,13 @@ export function useTuiKeyboardControls({
           consumeKey(key);
           if (!copyCurrentSelection()) setStatus("No selected text to copy.");
           return;
+        }
+
+        if (key.name === "return") {
+          if (openModelSelection() || openEffortSelection() || openModeSelection()) {
+            consumeKey(key);
+            return;
+          }
         }
 
         if (key.name === "r" && key.ctrl) {
@@ -394,6 +407,9 @@ export function useTuiKeyboardControls({
         filteredModelOptions,
         filteredSlashCommands,
         handleFileMentionKey,
+        openModelSelection,
+        openEffortSelection,
+        openModeSelection,
         inputHistoryActive,
         messages,
         modelSelection,
