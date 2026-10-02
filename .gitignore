@@ -9,3 +9,6 @@ tmp/
 /comecode终端会话界面右侧.png
 
 .idea/
+
+/.ai/
+/.zcode/

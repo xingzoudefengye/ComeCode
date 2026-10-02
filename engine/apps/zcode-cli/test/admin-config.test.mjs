@@ -97,6 +97,22 @@ test("网页模型配置支持同地址归类所需的多模型结构与供应�
   assert.deepEqual(saved.providers[0].models.map(model => typeof model === "string" ? model : model.id), ["model-a", "model-b", "model-c"]);
   assert.equal(after.config.providers[0].models.length, 3);
 });
+test("模型默认思考强度配置往返并物化为运行时默认档位", async t => {
+  const f = await fixture(t), doc = document();
+  doc.providers[0].models[0].reasoningLevel = "max";
+  await writeFile(join(f.dataRoot, "config.json"), JSON.stringify(doc));
+  const resolved = await resolveUnifiedConfig(f);
+  assert.equal(resolved.providers[0].modelConfigs[0].reasoningLevel, "max");
+  const editor = createProviderConfigEditor(f), before = await editor.read();
+  const after = await editor.save({ revision: before.revision, config: before.config });
+  assert.equal(after.saved, true);
+  const saved = JSON.parse(await readFile(join(f.dataRoot, "config.json"), "utf8"));
+  assert.equal(saved.providers[0].models[0].reasoningLevel, "max");
+  await materializeUnifiedConfig(f);
+  const runtime = JSON.parse(await readFile(f.targetProviderFile, "utf8"));
+  const rule = runtime.config.modelConfigRules.providerModelRules.find(r => r.modelId === "model-a");
+  assert.equal(rule.config.optionSpecs.reasoningLevel.default, "max");
+});
 test("停用默认模型时保留停用配置并自动切换默认模型", async t => {
   const f = await fixture(t), editor = createProviderConfigEditor(f);
   const before = await editor.read();

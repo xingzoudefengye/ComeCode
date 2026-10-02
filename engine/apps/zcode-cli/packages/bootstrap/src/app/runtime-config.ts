@@ -180,6 +180,7 @@ export function resolveAppRuntimeConfig(input: {
         ? {}
         : { extractionEnabled: options.runtimeConfig.memory.extractionEnabled }),
       ...(input.storageRoot ? { storageRoot: input.storageRoot } : {}),
+      scope: options.runtimeConfig?.memory?.scope ?? configResult.config.memory.scope,
       use: options.runtimeConfig?.memory?.use ?? configResult.config.memory.use,
       workspaceIdentity: workspaceIdentity?.trim() || undefined,
     },

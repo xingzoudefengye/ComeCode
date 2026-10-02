@@ -162,7 +162,7 @@ M0 基线
 > 2026-10-01 实现：ComeCode 默认从工作区 `.ai/` 按固定顺序加载五类文件，固定快照进入稳定 system section；新增 `comecode memory init/path/check`，并加入大小限制与 `.ai/.local/` 忽略规则。
 ### T3.2 记忆写入：压缩与会话结束时沉淀到 `.ai/`（部分完成）
 
-> 当前已完成：自动提取 scheduler、显式 `/memory save`、会话关闭时 drain、以及固定 `.ai/` 文件写入提示；尚未完成：压缩前强制沉淀、`memory.md` 滚动摘要和 `memory.scope` 配置。
+> 当前已完成：自动提取 scheduler、显式 `/memory save`、会话关闭时 drain、固定 `.ai/` 文件写入提示、压缩前强制沉淀、`memory.md` 滚动摘要和 `memory.scope` 配置。
 > 压缩后的摘要和干活指南由程序内部自动携带；用户不需要执行检索或管理压缩归档。
 - 依赖：T3.1
 - 做法：

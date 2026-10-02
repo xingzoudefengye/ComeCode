@@ -87,6 +87,26 @@ test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型�
   assert.equal(f.draft().providers[0].models[1].apiKey, undefined);
 });
 
+test("默认思考强度默认 high，使用默认值删除字段，可选 low/max 写入", async () => {
+  const f = form(providers());
+  select(f, "first");
+  assert.equal(f.get("model-reasoning").value, "high");
+  await add(f, "high-model");
+  assert.equal(f.draft().providers[0].models.at(-1).reasoningLevel, "high");
+
+  f.run("closeModelDialog(); openModelDialog(null);");
+  select(f, "first");
+  f.get("model-reasoning").value = "";
+  await add(f, "default-model");
+  assert.equal(f.draft().providers[0].models.at(-1).reasoningLevel, undefined);
+
+  f.run("closeModelDialog(); openModelDialog(null);");
+  select(f, "first");
+  f.get("model-reasoning").value = "max";
+  await add(f, "max-model");
+  assert.equal(f.draft().providers[0].models.at(-1).reasoningLevel, "max");
+});
+
 test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", async () => {
   const f = form(providers());
   select(f, "first"); f.get("model-key").value = "unsaved-key";

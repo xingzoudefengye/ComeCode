@@ -5,10 +5,10 @@
 ## 1. 工具版本
 
 - Node：>= 24（项目推荐 24.14.0，24.19.0 实测可用）。
-- pnpm：必须 10.33.2（`package.json` 的 `packageManager`）。全局装的 pnpm 版本不同也没关系，用 corepack 调用即可：
+- pnpm：使用 10.34.5 或更高版本。当前工作区的顶层工具链要求至少 10.34.5；全局安装的 pnpm 版本不同也没关系，用 corepack 调用即可：
 
 ```bash
-corepack pnpm@10.33.2 --version
+corepack pnpm@10.34.5 --version
 ```
 
 ## 2. 安装依赖
@@ -19,7 +19,7 @@ corepack pnpm@10.33.2 --version
 cd engine
 ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
 COREPACK_NPM_REGISTRY=https://registry.npmmirror.com \
-corepack pnpm@10.33.2 install --registry=https://registry.npmmirror.com
+corepack pnpm@10.34.5 install --registry=https://registry.npmmirror.com
 ```
 
 PowerShell 写法：
@@ -27,7 +27,7 @@ PowerShell 写法：
 ```powershell
 $env:ELECTRON_SKIP_BINARY_DOWNLOAD=1
 $env:COREPACK_NPM_REGISTRY="https://registry.npmmirror.com"
-corepack pnpm@10.33.2 install --registry=https://registry.npmmirror.com
+corepack pnpm@10.34.5 install --registry=https://registry.npmmirror.com
 ```
 
 耗时约 2~3 分钟。安装过程会用 node-gyp 编译 ssh2 等原生模块（需要 VS Build Tools，本机已有）；node-pty 在 Windows 使用预编译包。
@@ -40,8 +40,11 @@ node -e "require('esbuild'); require('koffi'); require('node:sqlite'); console.l
 
 ## 3. 只构建 CLI
 
+以下命令从 `engine` 目录执行：
+
 ```bash
-corepack pnpm@10.33.2 --filter "@zcode/cli..." build
+cd engine
+corepack pnpm@10.34.5 --filter "@zcode/cli..." build
 ```
 
 `...` 表示连同它依赖的 workspace 包一起构建（provider、shared、contracts、core、adapters、tui、bootstrap 等），不会构建 desktop/web。
@@ -64,7 +67,8 @@ node dist/zcode.cjs -p "列出当前目录文件" --mode plan   # 无头单次
 开发模式（不用构建，直接跑源码）：
 
 ```bash
-corepack pnpm@10.33.2 --dir apps/zcode-cli dev
+cd engine
+corepack pnpm@10.34.5 --dir apps/zcode-cli dev
 ```
 
 ## 5. 数据目录、Provider 与网络边界
@@ -153,16 +157,16 @@ cat /c/Users/ruogu/AppData/Roaming/npm/comecode
 ```bash
 cd engine
 # 重建 tui（tsc 声明 + esbuild 产出 dist/index.js）
-corepack pnpm@10.33.2 --filter "@zcode/tui" build
+corepack pnpm@10.34.5 --filter "@zcode/tui" build
 
 # 重建 cli（连带重建 contracts/core 等直接运行时依赖）
-corepack pnpm@10.33.2 --filter "@zcode/cli" build
+corepack pnpm@10.34.5 --filter "@zcode/cli" build
 ```
 
 改的是 `shared / core / contracts / adapters` 等被 CLI 内联或声明的包时，用带 `...` 的聚合构建一次性搞定依赖方：
 
 ```bash
-corepack pnpm@10.33.2 --filter "@zcode/cli..." build
+corepack pnpm@10.34.5 --filter "@zcode/cli..." build
 ```
 
 ### 验证产物确实包含改动

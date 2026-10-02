@@ -129,6 +129,8 @@ class ConfigStore {
     }
     if (config.memory) {
       if (config.memory.use !== undefined) this.set(ConfigKey.MemoryUse, config.memory.use, scope);
+      if (config.memory.scope !== undefined)
+        this.set(ConfigKey.MemoryScope, config.memory.scope, scope);
     }
     if (config.mcp) {
       if (config.mcp.servers !== undefined)
@@ -290,6 +292,7 @@ export class ConfigPortImpl implements ConfigPort {
       },
       memory: {
         use: this.store.get(ConfigKey.MemoryUse) ?? DefaultConfig.memory.use,
+        scope: this.store.get(ConfigKey.MemoryScope) ?? DefaultConfig.memory.scope,
       },
       mcp: {
         servers: this.store.get(ConfigKey.McpServers) ?? DefaultConfig.mcp.servers,

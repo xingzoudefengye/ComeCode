@@ -11,6 +11,7 @@ const connectionShape = {
   maxOutputTokens: z.number().int().positive().optional(),
   toolCalling: z.boolean().optional(),
   vision: z.boolean().optional(),
+  reasoningLevel: nonBlank.optional(),
 };
 const modelSchema = z
   .object({ id: nonBlank, name: nonBlank.optional(), enabled: z.boolean().optional(), ...connectionShape })

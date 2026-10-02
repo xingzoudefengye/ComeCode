@@ -31,6 +31,8 @@ export const completeEnumOptionSpecDataSchema = z
       .refine((values) => new Set(values).size === values.length, "reasoningLevel.values 不能重复")
       .readonly(),
     map: optionMapSchema("reasoningLevel"),
+    /** 该模型默认使用的档位；缺席时由调用方按 values 自行挑选。 */
+    default: z.string().optional(),
   })
   .strict();
 

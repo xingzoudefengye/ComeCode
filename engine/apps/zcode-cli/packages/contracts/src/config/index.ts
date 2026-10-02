@@ -39,6 +39,7 @@ export const ConfigKey = {
 
   // Memory
   MemoryUse: "memory.use",
+  MemoryScope: "memory.scope",
 
   // MCP
   McpServers: "mcp.servers",
@@ -114,6 +115,8 @@ export type ConfigValue<K extends ConfigKey> = K extends "modelStream.idleTimeou
               ? boolean
               : K extends "memory.use"
                 ? boolean
+                : K extends "memory.scope"
+                  ? "project" | "user" | "both"
                 : K extends "skills.metadataBudget"
                   ? number
                   : K extends "skills.roots"
@@ -228,6 +231,7 @@ export interface RuntimeConfig {
   };
   memory: {
     use: boolean;
+    scope: "project" | "user" | "both";
   };
   mcp: {
     servers: Record<string, McpServerConfig>;
@@ -315,6 +319,7 @@ export const DefaultRuntimeConfig: RuntimeConfig = {
   },
   memory: {
     use: true,
+    scope: "project",
   },
   mcp: {
     servers: {},

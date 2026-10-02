@@ -53,7 +53,10 @@ export function createModelCatalogPort(deps: ModelCatalogPortDeps): ModelCatalog
           // 不同的默认，就会出现「picker 里默认 high、`subagent_model` 不写档位时默认 low」
           // 这种只有用户会发现的偏差。没有档位的模型整个字段缺席（空数组 + 无默认）。
           // Modified by ComeCode：默认档位为 high（缺失时退回第一档），不再取最高档。
-          const defaultReasoningLevel = pickDefaultReasoningLevel(reasoning.values);
+          const defaultReasoningLevel = pickDefaultReasoningLevel(
+            reasoning.values,
+            reasoning.default,
+          );
           const contextWindow = model.config.properties.contextWindow;
           // `providerName` 在注册表里是 `string | null | undefined`（config-service.ts 把空串
           // 归一成 `null`），而端口契约上是 `string | undefined`。三种「没名字」在这里合成

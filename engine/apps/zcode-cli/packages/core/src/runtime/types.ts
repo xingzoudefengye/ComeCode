@@ -296,11 +296,14 @@ export interface EnqueueSubagentMessageInput {
   traceContext: TraceContext;
 }
 
+export type MemoryScope = "project" | "user" | "both";
+
 export interface MemoryRuntimeConfig {
   cliStorageRoot?: string;
   enabled?: boolean;
   /** 是否调度成功 Main turn 后的自动 Extraction；缺省按 true 处理。 */
   extractionEnabled?: boolean;
+  scope?: MemoryScope;
   storageRoot?: string;
   use?: boolean;
   workspaceIdentity?: string;

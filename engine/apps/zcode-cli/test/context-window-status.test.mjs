@@ -87,7 +87,7 @@ test("构建产物默认窗口和压缩阈值与源码一致", async () => {
   const { DEFAULT_COMPACT_CONTEXT_WINDOW, getAutoCompactThreshold } = await import("../packages/core/dist/compact/policy.js");
   assert.equal(compiledProjection.contextWindow, 512_000);
   assert.equal(DEFAULT_COMPACT_CONTEXT_WINDOW, 512_000);
-  assert.equal(getAutoCompactThreshold(), 307_200);
+  assert.equal(getAutoCompactThreshold(), 384_000);
 });
 
 test("CLI 构建前更新过期 contracts/core，不依赖旧 dist", async (t) => {
