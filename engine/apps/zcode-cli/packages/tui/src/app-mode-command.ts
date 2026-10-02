@@ -63,6 +63,7 @@ function selectedModeOption(
 
 export function useModeCommandController(draft: string): {
   filteredOptions: readonly TuiModeOption[];
+  openSelection: () => boolean;
   reconcileDraft: (value: string) => ModeCommandSelectionState | undefined;
   selectedOption: (submittedValue: string) => TuiModeOption | undefined;
   selection: ModeCommandSelectionState | undefined;
@@ -71,10 +72,14 @@ export function useModeCommandController(draft: string): {
   const [selection, setSelection] = React.useState<ModeCommandSelectionState | undefined>();
   const filteredOptions = React.useMemo(() => filterModeOptions(draft), [draft]);
   const reconcileDraft = React.useCallback((value: string) => {
-    const nextSelection = reconcileModeCommandSelection(value);
-    setSelection(nextSelection);
-    return nextSelection;
+    setSelection(undefined);
+    return undefined;
   }, []);
+  const openSelection = React.useCallback(() => {
+    if (selection || filteredOptions.length === 0) return false;
+    setSelection({ selectedIndex: 0 });
+    return true;
+  }, [filteredOptions.length, selection]);
   const selectedOption = React.useCallback(
     (submittedValue: string) => selectedModeOption(submittedValue, selection, filteredOptions),
     [filteredOptions, selection],
@@ -82,6 +87,7 @@ export function useModeCommandController(draft: string): {
 
   return {
     filteredOptions,
+    openSelection,
     reconcileDraft,
     selectedOption,
     selection,

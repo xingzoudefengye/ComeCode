@@ -13,9 +13,10 @@ export function useModelCommandController(
   options: Pick<TuiOptions, "modelOptions" | "initialResult" | "listModelOptions">,
 ): {
   filteredOptions: readonly TuiModelOption[];
-  reconcileDraft: (value: string) => ModelCommandSelectionState | undefined;
-  selectedOption: (submittedValue: string) => TuiModelOption | undefined;
-  selection: ModelCommandSelectionState | undefined;
+    reconcileDraft: (value: string) => ModelCommandSelectionState | undefined;
+    openSelection: () => boolean;
+    selectedOption: (submittedValue: string) => TuiModelOption | undefined;
+    selection: ModelCommandSelectionState | undefined;
   setSelection: React.Dispatch<React.SetStateAction<ModelCommandSelectionState | undefined>>;
   setModelOptions: React.Dispatch<React.SetStateAction<readonly TuiModelOption[]>>;
 } {
@@ -37,24 +38,22 @@ export function useModelCommandController(
       cancelled = true;
     };
   }, [active, listModelOptions]);
-  // Opening from an empty catalog must admit selection when the fresh catalog arrives.
-  React.useEffect(() => {
-    setSelection((current) =>
-      active && modelOptions.length > 0 ? (current ?? { selectedIndex: 0 }) : undefined,
-    );
-  }, [active, modelOptions]);
   const filteredOptions = React.useMemo(
     () => filterModelOptions(draft, modelOptions),
     [draft, modelOptions],
   );
   const reconcileDraft = React.useCallback(
     (value: string) => {
-      const nextSelection = reconcileModelCommandSelection(value, modelOptions);
-      setSelection(nextSelection);
-      return nextSelection;
+      setSelection(undefined);
+      return undefined;
     },
-    [modelOptions],
+    [],
   );
+  const openSelection = React.useCallback(() => {
+    if (selection || !active || filteredOptions.length === 0) return false;
+    setSelection({ selectedIndex: 0 });
+    return true;
+  }, [active, filteredOptions.length, selection]);
   const selectedOption = React.useCallback(
     (submittedValue: string) => selectedModelOption(submittedValue, selection, filteredOptions),
     [filteredOptions, selection],
@@ -62,6 +61,7 @@ export function useModelCommandController(
 
   return {
     filteredOptions,
+    openSelection,
     reconcileDraft,
     selectedOption,
     selection,

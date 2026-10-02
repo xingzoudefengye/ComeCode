@@ -11,8 +11,9 @@ export function useEffortCommandController(
   draft: string,
   effortOptions: readonly TuiEffortOption[],
 ): {
-  filteredOptions: readonly TuiEffortOption[];
-  reconcileDraft: (value: string) => EffortCommandSelectionState | undefined;
+    filteredOptions: readonly TuiEffortOption[];
+    openSelection: () => boolean;
+    reconcileDraft: (value: string) => EffortCommandSelectionState | undefined;
   selectedOption: (submittedValue: string) => TuiEffortOption | undefined;
   selection: EffortCommandSelectionState | undefined;
   setSelection: React.Dispatch<React.SetStateAction<EffortCommandSelectionState | undefined>>;
@@ -24,12 +25,16 @@ export function useEffortCommandController(
   );
   const reconcileDraft = React.useCallback(
     (value: string) => {
-      const nextSelection = reconcileEffortCommandSelection(value, effortOptions);
-      setSelection(nextSelection);
-      return nextSelection;
+      setSelection(undefined);
+      return undefined;
     },
-    [effortOptions],
+    [],
   );
+  const openSelection = React.useCallback(() => {
+    if (selection || filteredOptions.length === 0) return false;
+    setSelection({ selectedIndex: 0 });
+    return true;
+  }, [filteredOptions.length, selection]);
   const selectedOption = React.useCallback(
     (submittedValue: string) => selectedEffortOption(submittedValue, selection, filteredOptions),
     [filteredOptions, selection],
@@ -37,6 +42,7 @@ export function useEffortCommandController(
 
   return {
     filteredOptions,
+    openSelection,
     reconcileDraft,
     selectedOption,
     selection,

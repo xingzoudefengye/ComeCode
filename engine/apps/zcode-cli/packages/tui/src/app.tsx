@@ -145,11 +145,8 @@ export function TuiApp({
       inputHistoryDraftAttachmentsRef.current = undefined;
       inputHistoryDraftRef.current = undefined;
       const nextModelSelection = modelCommand.reconcileDraft(value);
-      const nextEffortSelection = nextModelSelection
-        ? undefined
-        : effortCommand.reconcileDraft(value);
-      const nextModeSelection =
-        nextModelSelection || nextEffortSelection ? undefined : modeCommand.reconcileDraft(value);
+      const nextEffortSelection = effortCommand.reconcileDraft(value);
+      const nextModeSelection = modeCommand.reconcileDraft(value);
       if (nextModelSelection) {
         effortCommand.setSelection(undefined);
         modeCommand.setSelection(undefined);
@@ -351,6 +348,9 @@ export function TuiApp({
     filteredModeOptions: modeCommand.filteredOptions,
     filteredModelOptions: modelCommand.filteredOptions,
     handleFileMentionKey: fileMentions.handleKey,
+    openModelSelection: modelCommand.openSelection,
+    openEffortSelection: effortCommand.openSelection,
+    openModeSelection: modeCommand.openSelection,
     onExit,
     pasteClipboardImage,
     recallNextInput,
