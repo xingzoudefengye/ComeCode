@@ -142,6 +142,7 @@ export function MessageRow({
   }
   // speaker labels were visually noisy; only user prompts carry row chrome.
   const isUserMessage = message.role === "user";
+  const isFinishMarker = message.role === "system" && message.content === copy.transcript.finish;
   const rowBackground = isUserMessage ? palette.userMessageBackground : palette.background;
   const assistantText = message.role === "agent";
   const plainTextColor =
@@ -156,7 +157,11 @@ export function MessageRow({
         backgroundColor: rowBackground,
         flexDirection: "column",
         // 按消息边界留白，不能按流式碎片重复添加间隔。
-        marginTop: index > 0 && (isUserMessage || previousRole === "user") ? 1 : 0,
+        marginTop: isFinishMarker
+          ? 1
+          : index > 0 && (isUserMessage || previousRole === "user")
+            ? 1
+            : 0,
         marginBottom: 0,
         minHeight: 1,
         paddingLeft: isUserMessage ? 1 : 0,

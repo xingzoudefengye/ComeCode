@@ -335,6 +335,7 @@ Slash Commands:
         thinking: "Thinking...",
       },
       title: "Transcript",
+      finish: "※ Completed",
       status: {
         completed: "+",
         failed: "x",

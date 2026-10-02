@@ -27,6 +27,7 @@ import {
   applyModelCacheAndBudgetEvent,
   applyTurnCompleteEvent,
   applyTurnCompleteFallbackResponse,
+  appendTurnFinishMarker,
 } from "./app-turn-complete.js";
 import { applyToolTranscriptEvent } from "./app-tool-transcript.js";
 import { DEFAULT_TUI_COPY } from "./app-locale.js";
@@ -75,6 +76,7 @@ export function applySessionEventToState(
     case SessionEventType.TurnComplete:
       applyTurnCompleteEvent(payload, handlers.setUsage, handlers.setCacheStats);
       applyTurnCompleteFallbackResponse(payload, handlers.setMessages);
+      appendTurnFinishMarker(handlers.setMessages, copy.transcript.finish);
       handlers.setStatus(copy.status.ready);
       handlers.setActiveTurnId(undefined);
       handlers.setQueuedInputs?.([]);

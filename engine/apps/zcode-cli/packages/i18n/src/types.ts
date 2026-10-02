@@ -269,6 +269,7 @@ export interface TuiCopy {
       thinking: string;
     };
     title: string;
+    finish: string;
     status: {
       completed: string;
       failed: string;

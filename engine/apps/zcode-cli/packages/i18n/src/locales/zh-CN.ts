@@ -332,6 +332,7 @@ Slash Commands:
         thinking: "思考中...",
       },
       title: "对话",
+      finish: "※ Completed",
       status: {
         completed: "+",
         failed: "x",
