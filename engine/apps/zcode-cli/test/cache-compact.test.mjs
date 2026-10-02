@@ -143,7 +143,13 @@ const makeTools = (reverse = false) => {
 const options = (providerKind = "openai", sessionId = "parent", providerOptions) => ({
   includeModelIO: false,
   request: { messages, tools: makeTools(), providerOptions },
-  resolved: { model: {}, modelId: "example", providerKind, properties: {} },
+  resolved: {
+    model: {},
+    modelId: "example",
+    providerId: "provider",
+    providerKind,
+    properties: {},
+  },
   statusContext: { sessionId },
 });
 
@@ -165,7 +171,17 @@ test("流式与非流式缓存键按会话稳定、子会话隔离、显式值�
     ).providerOptions.openai.promptCacheKey,
     "custom",
   );
-  for (const providerKind of ["anthropic", "openai-compatible", "custom"]) {
+  assert.equal(
+    createStreamTextOptions(options("openai-compatible")).providerOptions?.provider?.prompt_cache_key,
+    "comecode:parent",
+  );
+  assert.equal(
+    createGenerateTextOptions(
+      options("openai-compatible", "parent", { provider: { prompt_cache_key: "custom" } }),
+    ).providerOptions?.provider?.prompt_cache_key,
+    "custom",
+  );
+  for (const providerKind of ["anthropic", "custom"]) {
     assert.equal(
       createStreamTextOptions(options(providerKind)).providerOptions?.openai?.promptCacheKey,
       undefined,

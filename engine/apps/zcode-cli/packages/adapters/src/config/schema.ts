@@ -41,6 +41,7 @@ const featuresSchema = z.object({
 
 const memorySchema = z.object({
   use: z.boolean().optional(),
+  scope: z.enum(["project", "user", "both"]).optional(),
 });
 
 const mcpServerBaseSchema = {

@@ -43,6 +43,7 @@ export type EnumOptionSpecConfigInput = Readonly<z.infer<typeof enumOptionSpecDa
 export class EnumOptionSpecConfig extends ConfigOverlay<EnumOptionSpecConfig> {
   readonly values?: EnumOptionSpecConfigInput["values"];
   readonly map?: EnumOptionSpecConfigInput["map"];
+  readonly default?: EnumOptionSpecConfigInput["default"];
 
   constructor(input: EnumOptionSpecConfigInput = {}) {
     super();
@@ -53,6 +54,7 @@ export class EnumOptionSpecConfig extends ConfigOverlay<EnumOptionSpecConfig> {
           ? null
           : Object.freeze([...input.values]);
     this.map = input.map;
+    this.default = input.default;
     Object.freeze(this);
   }
 
@@ -60,6 +62,7 @@ export class EnumOptionSpecConfig extends ConfigOverlay<EnumOptionSpecConfig> {
     return new EnumOptionSpecConfig({
       values: this.overlayValue(this.values, next.values),
       map: this.overlayValue(this.map, next.map),
+      default: this.overlayValue(this.default, next.default),
     });
   }
 
@@ -71,6 +74,7 @@ export class EnumOptionSpecConfig extends ConfigOverlay<EnumOptionSpecConfig> {
     return objectWithoutUndefined({
       values: this.values,
       map: this.map,
+      default: this.default,
     });
   }
 }

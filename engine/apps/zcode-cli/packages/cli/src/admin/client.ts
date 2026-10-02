@@ -57,6 +57,7 @@ function editableDraftFromEffective() {
         ...(model.maxOutputTokens !== undefined ? { maxOutputTokens: model.maxOutputTokens } : {}),
         ...(model.toolCalling !== undefined ? { toolCalling: model.toolCalling } : {}),
         ...(model.vision !== undefined ? { vision: model.vision } : {}),
+        ...(model.reasoningLevel !== undefined ? { reasoningLevel: model.reasoningLevel } : {}),
         ...(model.apiKey || model.apiKeySource ? { hasApiKey: true } : {}),
       })),
     })),
@@ -188,6 +189,7 @@ function openModelDialog(entry) {
   $('model-output').value = model && model.maxOutputTokens ? String(model.maxOutputTokens) : '';
   $('model-tool').value = model && model.toolCalling !== undefined ? String(model.toolCalling) : '';
   $('model-vision').value = model && model.vision !== undefined ? String(model.vision) : '';
+  $('model-reasoning').value = model && model.reasoningLevel ? model.reasoningLevel : 'high';
   $('clear-key').checked = false;
   $('model-more').open = false;
   invalidateModelTest();
@@ -237,6 +239,7 @@ function modelDialogFingerprint() {
     $('model-id').value.trim(), $('model-url').value.trim(), $('model-key').value,
     $('model-type').value, $('model-name').value.trim(), $('model-context').value.trim(),
     $('model-output').value.trim(), $('model-tool').value, $('model-vision').value,
+    $('model-reasoning').value,
     $('clear-key').checked,
   ]);
 }
@@ -276,6 +279,7 @@ function applyModelDialogDraft(candidateDraft) {
   assignOptional(model, 'maxOutputTokens', readOptionalNumber('model-output'));
   const tool = $('model-tool').value; assignOptional(model, 'toolCalling', tool === '' ? undefined : tool === 'true');
   const vision = $('model-vision').value; assignOptional(model, 'vision', vision === '' ? undefined : vision === 'true');
+  assignOptional(model, 'reasoningLevel', $('model-reasoning').value);
   if ($('clear-key').checked) { provider.clearApiKey = true; delete provider.apiKey; model.clearApiKey = true; delete model.apiKey; }
   if (key) {
     if (!isNewProvider) { model.apiKey = key; delete model.apiKeyEnv; delete model.clearApiKey; }
@@ -404,7 +408,7 @@ function render() {
       if (model.enabled === false) { testButton.disabled = true; testButton.title = '请先启用模型再测试连接'; }
       actions.append(modelSwitch(entry), button('编辑', () => openModelDialog(entry)), testButton, button('删除', () => deleteModel(entry), 'danger'));
       rowHeading.append(title, actions); row.append(rowHeading);
-      const meta = node('div', undefined, 'model-meta'); meta.append(node('span', model.contextWindow ? Math.round(model.contextWindow / 1000) + 'K 上下文' : '默认上下文'), node('span', model.vision === true ? '支持图片' : model.vision === false ? '不支持图片' : '图片能力默认'), node('span', model.toolCalling === true ? '支持工具' : model.toolCalling === false ? '不支持工具' : '工具能力默认')); row.append(meta);
+      const meta = node('div', undefined, 'model-meta'); meta.append(node('span', model.contextWindow ? Math.round(model.contextWindow / 1000) + 'K 上下文' : '默认上下文'), node('span', model.vision === true ? '支持图片' : model.vision === false ? '不支持图片' : '图片能力默认'), node('span', model.toolCalling === true ? '支持工具' : model.toolCalling === false ? '不支持工具' : '工具能力默认'), node('span', model.reasoningLevel ? '思考强度 ' + model.reasoningLevel : '思考强度默认')); row.append(meta);
       const url = node('p', model.baseUrl || provider.baseUrl || '未设置接口地址', 'model-url'); row.append(url); group.append(row);
     });
     container.append(group);

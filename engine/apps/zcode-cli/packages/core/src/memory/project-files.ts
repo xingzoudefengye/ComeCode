@@ -26,6 +26,25 @@ export function resolveWorkspaceProjectMemoryRoot(workspacePath: string): string
   return join(workspacePath, ".ai");
 }
 
+export function rollMemoryMarkdown(content: string, maxChars = PROJECT_MEMORY_MAX_FILE_CHARS): string {
+  const normalized = content.replace(/\r\n/gu, "\n");
+  if (normalized.length <= maxChars) return normalized;
+  const sections = normalized.split(/\n## /u);
+  const heading = sections[0] ?? "# 项目记忆\n";
+  const dated = sections.slice(1).map((section) => `## ${section.trim()}`);
+  const kept: string[] = [];
+  let size = heading.length + "\n\n## 滚动摘要\n\n".length;
+  for (let index = dated.length - 1; index >= 0; index -= 1) {
+    const section = dated[index]!;
+    if (size + section.length + 2 > maxChars) break;
+    kept.unshift(section);
+    size += section.length + 2;
+  }
+  const omitted = dated.length - kept.length;
+  const summary = `最早 ${omitted} 条记录已滚动压缩，保留最近 ${kept.length} 条。\n`;
+  return `${heading.trimEnd()}\n\n## 滚动摘要\n\n${summary}\n${kept.join("\n\n")}\n`;
+}
+
 export function projectMemoryFilePath(rootDir: string, fileName: ProjectMemoryFileName): string {
   return join(rootDir, fileName);
 }

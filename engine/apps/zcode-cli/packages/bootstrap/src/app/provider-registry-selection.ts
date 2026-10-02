@@ -48,6 +48,7 @@ export function completeAuxiliaryRegistryModelSelection(
   const model = registry.getModel(selection.providerId, selection.modelId);
   const reasoningLevel = pickDefaultReasoningLevel(
     model?.config.optionSpecs.reasoningLevel.values ?? [],
+    model?.config.optionSpecs.reasoningLevel.default,
   );
   if (!reasoningLevel) return selection;
   return {
@@ -196,7 +197,7 @@ function toModelOption(provider: Provider, model: ProviderModel): ZCodeModelOpti
     maxOutputTokens: optionSpecs.maxOutputTokens.max,
     reasoning: {
       levels: reasoning.values.map((level) => ({ value: level, label: level })),
-      defaultLevel: pickDefaultReasoningLevel(reasoning.values),
+      defaultLevel: pickDefaultReasoningLevel(reasoning.values, reasoning.default),
     },
     properties: {
       inputFormat: properties.inputFormat,

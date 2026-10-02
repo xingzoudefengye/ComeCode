@@ -52,6 +52,7 @@ export function createGenerateTextOptions(input: {
       providerOptions,
     }),
     input.resolved.providerKind,
+    input.resolved.providerId,
     input.statusContext.sessionId,
   );
   const requestProviderOptions = withNativeGenerateOutputFormat({
@@ -122,6 +123,7 @@ export function createStreamTextOptions(input: {
       providerOptions,
     }),
     input.resolved.providerKind,
+    input.resolved.providerId,
     input.statusContext.sessionId,
   );
   return removeUndefined({
@@ -186,18 +188,36 @@ function toAiSdkToolChoice(
 function mergeSessionPromptCacheKey(
   providerOptions: Record<string, unknown> | undefined,
   providerKind: ResolvedAiSdkModel["providerKind"],
+  providerId: string,
   sessionId?: string,
 ): Record<string, unknown> | undefined {
-  if (providerKind !== "openai" || !sessionId) return providerOptions;
-  const openai = providerOptions?.openai;
+  if (!sessionId) return providerOptions;
+
+  if (providerKind === "openai") {
+    const openai = providerOptions?.openai;
+    if (
+      openai !== undefined &&
+      (openai === null || typeof openai !== "object" || Array.isArray(openai))
+    )
+      return providerOptions;
+    const options = (openai ?? {}) as Record<string, unknown>;
+    if (Object.hasOwn(options, "promptCacheKey")) return providerOptions;
+    return { ...providerOptions, openai: { ...options, promptCacheKey: `comecode:${sessionId}` } };
+  }
+
+  if (providerKind !== "openai-compatible") return providerOptions;
+  const compatible = providerOptions?.[providerId];
   if (
-    openai !== undefined &&
-    (openai === null || typeof openai !== "object" || Array.isArray(openai))
+    compatible !== undefined &&
+    (compatible === null || typeof compatible !== "object" || Array.isArray(compatible))
   )
     return providerOptions;
-  const options = (openai ?? {}) as Record<string, unknown>;
-  if (Object.hasOwn(options, "promptCacheKey")) return providerOptions;
-  return { ...providerOptions, openai: { ...options, promptCacheKey: `comecode:${sessionId}` } };
+  const options = (compatible ?? {}) as Record<string, unknown>;
+  if (Object.hasOwn(options, "prompt_cache_key")) return providerOptions;
+  return {
+    ...providerOptions,
+    [providerId]: { ...options, prompt_cache_key: `comecode:${sessionId}` },
+  };
 }
 
 function mergeProviderOptions(

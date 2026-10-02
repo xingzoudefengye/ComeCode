@@ -92,6 +92,9 @@ export async function materializeUnifiedConfig(
             ...(model.toolCalling !== undefined ? { supportsToolCall: model.toolCalling } : {}),
             ...(model.vision !== undefined ? { inputFormat: { supportsImage: model.vision } } : {}),
           },
+          ...(model.reasoningLevel !== undefined
+            ? { optionSpecs: { reasoningLevel: { default: model.reasoningLevel } } }
+            : {}),
           ...(model.maxOutputTokens !== undefined
             ? { optionSpecs: { maxOutputTokens: { max: model.maxOutputTokens } } }
             : {}),
@@ -189,10 +192,22 @@ function mergeModelRules(
           ? {
               optionSpecs: {
                 ...previous.optionSpecs,
-                maxOutputTokens: {
-                  ...previous.optionSpecs?.maxOutputTokens,
-                  ...next.config.optionSpecs.maxOutputTokens,
-                },
+                ...(next.config.optionSpecs.reasoningLevel
+                  ? {
+                      reasoningLevel: {
+                        ...previous.optionSpecs?.reasoningLevel,
+                        ...next.config.optionSpecs.reasoningLevel,
+                      },
+                    }
+                  : {}),
+                ...(next.config.optionSpecs.maxOutputTokens
+                  ? {
+                      maxOutputTokens: {
+                        ...previous.optionSpecs?.maxOutputTokens,
+                        ...next.config.optionSpecs.maxOutputTokens,
+                      },
+                    }
+                  : {}),
               },
             }
           : {}),

@@ -5,10 +5,14 @@ import {
 } from "./registry.js";
 
 // Modified by ComeCode：默认推理档位从「最高档」改为优先 high，其次 balanced/medium，
-// 都没有才退回 index 0；用户仍可用 /effort 自行调整。
+// 都没有才退回 index 0；用户仍可用 /effort 自行调整。配置了模型级默认档位时优先使用它。
 const PREFERRED_DEFAULT_REASONING_LEVELS = ["high", "balanced", "medium"] as const;
 
-export function pickDefaultReasoningLevel(values: readonly string[]): string | undefined {
+export function pickDefaultReasoningLevel(
+  values: readonly string[],
+  defaultValue?: string,
+): string | undefined {
+  if (defaultValue !== undefined && values.includes(defaultValue)) return defaultValue;
   for (const preferred of PREFERRED_DEFAULT_REASONING_LEVELS) {
     const matched = values.find((value) => value === preferred);
     if (matched) return matched;
@@ -32,7 +36,7 @@ interface ModelSelectionCompletionView {
       readonly modelId: string;
       readonly config: {
         readonly optionSpecs: {
-          readonly reasoningLevel: { readonly values: readonly string[] };
+          readonly reasoningLevel: { readonly values: readonly string[]; readonly default?: string };
         };
       };
     }[];
@@ -78,6 +82,7 @@ export function completeNewModelSelection(
     ?.models.find((candidate) => candidate.modelId === selection.modelId);
   const reasoningLevel = pickDefaultReasoningLevel(
     model?.config.optionSpecs.reasoningLevel.values ?? [],
+    model?.config.optionSpecs.reasoningLevel.default,
   );
   if (!reasoningLevel) return undefined;
   return {

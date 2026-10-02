@@ -26,6 +26,8 @@ export interface UnifiedModelDefinition {
   readonly maxOutputTokens?: number;
   readonly toolCalling?: boolean;
   readonly vision?: boolean;
+  /** 该模型默认的思考强度档位（如 low / high / max）。 */
+  readonly reasoningLevel?: string;
   /** false 表示保留配置但不参与默认选择和 Registry 候选。 */
   readonly enabled?: boolean;
 }
@@ -377,7 +379,7 @@ function resolveProvider(id: string, definition: UnifiedProviderDefinition, sele
     const effective = mergeProviderDefinition(definition, model);
     const enabled = model.enabled !== false;
     const connection = resolveConnection(effective, `Provider ${id} 模型 ${model.id}`, enabled);
-    return Object.freeze({ id: model.id, name: model.name, enabled, contextWindow: effective.contextWindow, maxOutputTokens: effective.maxOutputTokens, toolCalling: effective.toolCalling, vision: effective.vision, ...connection, executable: enabled && connection.executable });
+    return Object.freeze({ id: model.id, name: model.name, enabled, contextWindow: effective.contextWindow, maxOutputTokens: effective.maxOutputTokens, toolCalling: effective.toolCalling, vision: effective.vision, reasoningLevel: effective.reasoningLevel, ...connection, executable: enabled && connection.executable });
   });
   const connection = modelConfigs.length ? { type: definition.type, apiType: definition.type ? TYPE_TO_API[definition.type] : undefined, baseUrl: definition.baseUrl ?? (definition.type ? DEFAULT_BASE_URL[definition.type] : undefined), apiKey: definition.apiKey || (definition.apiKeyEnv ? env[definition.apiKeyEnv]?.trim() : undefined), apiKeySource: definition.apiKey ? "config.api_key" : definition.apiKeyEnv ? `env:${definition.apiKeyEnv}` : undefined } : resolveConnection(definition, `Provider ${id}`);
   if (!modelConfigs.length) diagnostics.warnings.push(`Provider ${id}: 没有模型，需设置 model 或 models`);

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { test } from "node:test";
-import { formatProjectMemorySnapshot, resolveWorkspaceProjectMemoryRoot } from "../packages/core/src/memory/project-files.ts";
+import { formatProjectMemorySnapshot, resolveWorkspaceProjectMemoryRoot, rollMemoryMarkdown } from "../packages/core/src/memory/project-files.ts";
 import { buildMemorySection } from "../packages/core/src/context/sections/memory.ts";
 import { runMemoryCommand } from "../packages/cli/src/memory-command.ts";
 
@@ -19,6 +19,16 @@ test("项目记忆根目录位于工作区 .ai，快照按固定顺序并限制�
   assert.ok(snapshot);
   assert.ok(snapshot.content.indexOf("project.md") < snapshot.content.indexOf("decisions.md"));
   assert.ok(snapshot.content.indexOf("decisions.md") < snapshot.content.indexOf("tasks.md"));
+});
+
+test("memory.md 超过上限时滚动压缩最旧记录", () => {
+  const oldEntry = `## 2026-01-01\n\n${"旧记录".repeat(3_000)}\n`;
+  const recent = "## 2026-10-02\n\n保留最近决策。\n";
+  const rolled = rollMemoryMarkdown(`# 项目记忆\n\n${oldEntry}\n${recent}`, 1_000);
+  assert.match(rolled, /滚动摘要/u);
+  assert.match(rolled, /保留最近决策/u);
+  assert.equal(rolled.includes("旧记录".repeat(100)), false);
+  assert.ok(rolled.length <= 1_000);
 });
 
 test("项目记忆注入稳定 system section，不重复放进 meta user", () => {

@@ -14,7 +14,8 @@ import {
   createProjectMemoryAgentToolExecutor,
   type ProjectMemoryAgentContext,
 } from "./project-memory-agent.js";
-import { resolveEnabledProjectMemoryRoot } from "./project-memory.js";
+import { resolveEnabledProjectMemoryRoot, resolveMemoryExtractionRoots } from "./project-memory.js";
+import { projectMemoryFilePath, rollMemoryMarkdown } from "../../memory/project-files.js";
 import { createRuntimeModel } from "../methods/runtime-model.js";
 
 const EXTRACTION_MAX_TURNS = 5;
@@ -42,7 +43,8 @@ export function scheduleProjectMemoryExtraction(
   // 自动提取可以关闭；显式 /memory save 仍允许用户主动保存。
   if (runtime.config.memory?.extractionEnabled === false && input.force !== true) return false;
   // Bash cd 只改变执行 cwd，project Memory 身份必须继续使用会话 workspace root。
-  const memoryRoot = resolveEnabledProjectMemoryRoot(runtime.config, runtime.workspaceRoot);
+  const memoryRoots = resolveMemoryExtractionRoots(runtime.config, runtime.workspaceRoot);
+  const memoryRoot = memoryRoots[0];
   if (!memoryRoot) return false;
   if (runtime.isRemoteWorkspace()) return false;
   if (!runtime.sessionStore || !runtime.fileSystemPort) return false;
@@ -184,6 +186,9 @@ async function executeProjectMemoryExtraction(
         workingDirectory: input.snapshot.workingDirectory,
         workspaceRoot: input.snapshot.workspaceRoot,
       });
+      for (const root of resolveMemoryExtractionRoots(runtime.config, runtime.workspaceRoot)) {
+        await rollProjectMemoryFile(runtime, root, input.abortSignal);
+      }
       telemetry.finishCompleted();
       return "success" as const;
     } catch (error) {
@@ -195,6 +200,19 @@ async function executeProjectMemoryExtraction(
       return "error" as const;
     }
   });
+}
+
+async function rollProjectMemoryFile(
+  runtime: AgentRuntimeInternal,
+  root: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const path = projectMemoryFilePath(root, "memory.md");
+  const current = await runtime.fileSystemPort?.readTextFile({ path }, { signal }).catch(() => undefined);
+  if (!current) return;
+  const rolled = rollMemoryMarkdown(current.content);
+  if (rolled === current.content) return;
+  await runtime.fileSystemPort?.writeTextFile({ path, content: rolled, createParents: true });
 }
 
 function isAbortError(error: unknown): boolean {

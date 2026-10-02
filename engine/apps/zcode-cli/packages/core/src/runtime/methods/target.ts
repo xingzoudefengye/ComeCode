@@ -129,9 +129,13 @@ export async function executeTargetContinuationCommand(
   // 目标校验请求可能在用户点击 Stop 后才返回；队列会保持 stopRequested，
   // 但 verifier 拿到的是校验开始前的 active target。这里必须重读目标状态，避免用旧对象继续续跑。
   if (
-    !latestTarget ||
-    latestTarget.status !== "active" ||
-    latestTarget.targetID !== target.targetID
+    !canContinueAfterTargetVerification({
+      initialTarget: target,
+      latestTarget,
+      hasPendingUserCommand: this.runtimeCommandQueue.snapshot().some(
+        (command) => command.mode === "prompt",
+      ),
+    })
   ) {
     this.logger?.info("Goal continuation skipped after target changed during verification", {
       ...traceContextToLogContext(traceContext),
@@ -144,6 +148,7 @@ export async function executeTargetContinuationCommand(
     return null;
   }
   const continuationTarget = latestTarget;
+  if (!continuationTarget) return null;
   const prompt = wrapSystemReminderForSource(
     "target_continuation",
     formatGoalContinuationPrompt(continuationTarget, verificationResult?.verification),
@@ -176,6 +181,22 @@ export async function executeTargetContinuationCommand(
     targetId: continuationTarget.targetID,
     traceContext: continuationTrace,
   });
+}
+
+
+export function canContinueAfterTargetVerification(input: {
+  initialTarget: SessionGoal;
+  latestTarget: SessionGoal | null;
+  hasPendingUserCommand: boolean;
+}): boolean {
+  const latest = input.latestTarget;
+  // completion verifier 是只读裁判；任何暂停、替换或并发用户命令都使旧裁判结果失效。
+  return Boolean(
+    latest &&
+      latest.status === "active" &&
+      latest.targetID === input.initialTarget.targetID &&
+      !input.hasPendingUserCommand,
+  );
 }
 
 export async function targetContinuationCandidate(
