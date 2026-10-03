@@ -238,7 +238,7 @@ export function useTuiKeyboardControls({
           return;
         }
 
-        if (key.name === "return") {
+        if (key.name === "return" && !key.shift) {
           if (openModelSelection() || openEffortSelection() || openModeSelection()) {
             consumeKey(key);
             return;

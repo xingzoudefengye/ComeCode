@@ -11,6 +11,7 @@ import { loadTuiRuntime } from "./tui-runtime-loader.js";
 import { resolveTuiStartupLocale } from "./tui-startup-locale.js";
 import { createWorkspacePathSuggestionProvider } from "./tui-workspace-paths.js";
 import { resolveWorkspaceGitBranch } from "./tui-workspace-git.js";
+import { loadWindowsShiftState } from "./windows-keyboard-state.js";
 import { createCliModeState, currentCliMode } from "./tui-command-state.js";
 import type { CliPermissionMode, CliResumeRequest, RunDependencies } from "./cli-types.js";
 
@@ -29,6 +30,7 @@ export const runTuiCommand = async (
     const runTui = deps.runTui ?? (await loadTuiRuntime()).runTui;
     const workspaceDirectory = (deps.cwd ?? process.cwd)();
     const env = deps.env ?? process.env;
+    const isShiftPressed = await loadWindowsShiftState();
     const developerMode = resolveZCodeRuntimeEnv(env) === "development";
     const startupLocale = resolveTuiStartupLocale({
       deps,
@@ -109,7 +111,7 @@ export const runTuiCommand = async (
         stderr: ctx.stderr,
         stdin: ctx.stdin,
         stdout: ctx.stdout,
-        recallPreviousInput: promptHandler.recallPreviousInput,
+        isShiftPressed,
         sendInput: promptHandler.sendInput,
         setMode: promptHandler.setMode,
         submitPrompt: promptHandler,

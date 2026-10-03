@@ -17,6 +17,14 @@
 
 验收场景：在深色、浅色主题中打开 TUI，输入和换行后边框保持低对比；打开弹窗使输入框失焦时轮廓融入背景，关闭弹窗后恢复弱轮廓，文字和光标仍可辨认。
 
+## 回车与换行输入（2026-10-03）
+
+- 普通 Enter 提交当前草稿，Shift+Enter 在当前光标位置插入换行；小键盘 Enter 采用同一语义。
+- 支持 Kitty/modifyOtherKeys 的终端沿用 OpenTUI 解析出的修饰键；Windows 终端将裸 CR/LF 发送给 OpenTUI 时，CLI 通过 Windows modifier 能力查询当前 Shift 状态并转换为同一换行事件。
+- 非 Windows、非 TTY、Windows 原生能力不可用或查询失败时，回退 OpenTUI 原有按键解析，不改变普通 Enter 提交语义。
+- 粘贴事件和已编码的 Kitty/modifyOtherKeys 按键不经过 Windows fallback，避免重复插入或重复提交；审批、选择面板和运行中输入仍由现有全局键盘路由处理。
+- Windows modifier 查询不读取控制台输入队列，不与 OpenTUI 竞争 stdin 所有权；退出时恢复终端键盘协议状态。
+
 ## 本次验证（2026-09-30）
 
 - engine 根 typecheck、lint 通过，lint 有 70 项既有警告。
