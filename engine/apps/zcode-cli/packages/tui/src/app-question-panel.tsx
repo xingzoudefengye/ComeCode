@@ -1,4 +1,5 @@
 import React from "react";
+import type { TextareaRenderable } from "@mbears/opentui-core";
 import type { QuestionPromptState } from "./app-model.js";
 import { palette } from "./app-model.js";
 
@@ -40,7 +41,7 @@ export function QuestionPanel({ state }: { state: QuestionPromptState }): React.
         style: questionPanelStyle(),
       },
       h("text", { style: { fg: palette.text } }, question.question),
-      h("text", { style: { fg: palette.accent } }, `Other: ${state.otherBuffer}`),
+      h(OtherAnswerEditor, { value: state.otherBuffer }),
       h(
         "text",
         { style: { fg: palette.muted } },
@@ -97,6 +98,36 @@ export function QuestionPanel({ state }: { state: QuestionPromptState }): React.
         ? "Space toggles, Enter reviews, s skips, o edits Other, Esc declines"
         : "Enter answers, s skips, o edits Other, Esc declines",
     ),
+  );
+}
+
+function OtherAnswerEditor({ value }: { value: string }): React.ReactElement {
+  const editor = React.useRef<TextareaRenderable | null>(null);
+  React.useLayoutEffect(() => {
+    if (!editor.current) return;
+    // 提问状态机拥有回答，原生编辑器只镜像内容并提供正确位置的终端光标。
+    editor.current.setText(value);
+    editor.current.gotoBufferEnd();
+  }, [value]);
+  return h(
+    "box",
+    { style: { flexDirection: "row", width: "100%", height: 2 } },
+    h("text", { style: { fg: palette.accent, flexShrink: 0 } }, "Other: "),
+    h("textarea", {
+      id: "question-other-editor",
+      focused: true,
+      initialValue: value,
+      ref: editor,
+      style: {
+        height: 2,
+        flexGrow: 1,
+        wrapMode: "word",
+        textColor: palette.accent,
+        focusedTextColor: palette.accent,
+        backgroundColor: palette.panel,
+        focusedBackgroundColor: palette.panel,
+      },
+    }),
   );
 }
 

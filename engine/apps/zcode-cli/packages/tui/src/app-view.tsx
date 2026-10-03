@@ -361,7 +361,7 @@ function ComposerInputArea(props: {
       contentWidth: props.contentWidth,
       copy: props.copy,
       editorRef: props.editorRef,
-      focused: props.focused ?? true,
+      focused: !props.approval && (props.focused ?? true),
       onInput: props.setDraftValue,
       onSubmit: props.submitValue,
       resetCursorToEndVersion: props.inputCursorToEndVersion,

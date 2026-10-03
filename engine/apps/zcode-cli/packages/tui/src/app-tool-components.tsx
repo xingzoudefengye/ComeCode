@@ -33,7 +33,10 @@ export function ToolTranscriptPartView({
   const statusColor = colorForStatus(part.status);
   const theme = activeTuiTheme();
   const title = buildToolTitleLine(part, now, copy);
-  const outputLines = part.output ? restoredOutputLines(part.output, terminalWidth) : [];
+  const questionAnswer = part.toolName.toLowerCase() === "askuserquestion";
+  const outputLines = part.output
+    ? questionAnswer ? part.output.split(/\r?\n/u) : restoredOutputLines(part.output, terminalWidth)
+    : [];
   // tool rows should align with assistant text; child detail rows carry their own indent.
   return h(
     "box",
@@ -77,7 +80,10 @@ export function ToolTranscriptPartView({
           ...outputLines.map((line, index) =>
             h(
               "text",
-              { key: `output-${index}`, style: { fg: theme.textMuted } },
+              {
+                key: `output-${index}`,
+                style: { fg: theme.textMuted, ...(questionAnswer ? { wrapMode: "word" } : {}) },
+              },
               `${TOOL_OUTPUT_LINE_INDENT}${line}`,
             ),
           ),
