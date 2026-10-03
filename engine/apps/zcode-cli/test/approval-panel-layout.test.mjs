@@ -144,7 +144,7 @@ async function render(t, approval, outcomes) {
   let view;
   await React.act(async () => {
     view = await testRender(React.createElement(Harness, { approval, drafts }), {
-      height: 40,
+      height: 80,
       width: 100,
     });
   });

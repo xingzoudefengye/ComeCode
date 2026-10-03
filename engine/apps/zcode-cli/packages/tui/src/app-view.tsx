@@ -212,8 +212,13 @@ export function AppView(props: {
             copy: props.copy,
             selection: actionSelection,
           })
-        : h(ComposerInputArea, {
-            approval: props.approvalQueue[0],
+        : h(
+            "box",
+            {
+              style: { flexDirection: "column", flexShrink: 0, marginTop: 1 },
+            },
+            h(ComposerInputArea, {
+              approval: props.approvalQueue[0],
             runtimeActivity: props.runtimeActivity,
             backgroundCount: props.subagents?.directory.running.length ?? 0,
             cacheHitRate: props.cacheStats?.hitRate,
@@ -244,8 +249,9 @@ export function AppView(props: {
             slashCommands: props.slashCommands,
             slashSelection: props.slashSelection,
             submitValue: readOnly ? () => {} : props.submitValue,
-            thoughtLevel: props.thoughtLevel,
-          }),
+              thoughtLevel: props.thoughtLevel,
+            }),
+          ),
     ),
   );
 }
