@@ -263,12 +263,15 @@ function panelStyle({
   height: number;
 }): Record<string, unknown> {
   return {
-    backgroundColor: palette.panel,
+    // 用主背景色而非面板色，与下方的输入框（palette.panel）从颜色上区分，
+    // 让选择面板看起来是独立浮在输入框之外的卡片，而不是输入框的一部分。
+    backgroundColor: palette.background,
     border: true,
     borderColor,
     flexDirection: "column",
     height,
-    marginBottom: 1,
+    // 选择面板与下方输入框之间保持明显间隔，避免视觉上黏进输入框。
+    marginBottom: 2,
     padding: 1,
     width: "100%",
   };
