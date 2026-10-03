@@ -9,7 +9,8 @@
 - 复用现有系统提示词稳定/动态分区和 Anthropic cache breakpoint，不新增重复断点，不重排历史消息或有因果关系的附件。
 - adapter 发送工具时按名称的确定性顺序排列，JSON schema 对象键递归排序，数组顺序和校验语义不变；不修改注册表与调用方对象。
 - OpenAI SDK 请求缺少显式 `openai.promptCacheKey` 时使用 `comecode:<sessionId>`；流式、非流式、重试、压缩请求共享同一会话键，子会话隔离。无会话身份则不补键，显式配置优先。
-- 不默认给 OpenAI 兼容、Anthropic 或其他未知接口发送额外缓存键，避免接口拒绝或计费行为改变。
+- 缓存亲和按协议发送：OpenAI Responses 使用 body `prompt_cache_key`，OpenAI Chat 兼容使用对应 Provider 的 body `prompt_cache_key`，Anthropic 使用 `metadata.user_id` 并沿用 `cache_control`。不把一种协议的 body 字段注入其他协议；请求体亲和字段不等于上游一定支持缓存。
+- 随归一化会话身份补发 Codex CLI 标准 header `session-id` / `thread-id`，保留现有归因头；无会话时不发送，子会话隔离。Codex/Plus 兼容后端可能读取 header 做缓存亲和，仅检查 body key 或中转渠道数量不能排除客户端问题。标准头改动已提交为 `a489da8`（2026-10-03），生产效果仍需重启后验收。
 - SDK 统一 usage 为主要事实；当 raw usage 包含各厂商缓存字段时补齐缓存统计。不把未知用量当成命中，不重复计入总输入。部分 OpenAI 兼容 SDK 会剥离非标准字段，仅返回 `prompt_cache_hit_tokens` 的端点尚不能保证统计，后续需要专门的 wire 适配；本轮不声称已支持所有 DeepSeek 端点。
 - TUI 展示 runtime 下发的实际压缩阈值和已有 provider 用量的缓存比例；不在 UI 复刻模型预算公式。
 - 主请求 ModelComplete 的有效正整数 contextWindow 同步进入权威会话投影及 TUI；回合结果不能再用初始化/恢复的旧窗口覆盖它。title/compact/subagent/tool_internal 等辅助请求不得改写主窗口或阈值。旧主事件缺少 querySource 时兼容读取窗口，但不以缺失字段清除当前值。
@@ -23,6 +24,7 @@
 - 大上下文且本轮增量较小的连续请求，以实际读取命中率至少 95% 为目标；短上下文、首次冷请求、缓存过期、切模型与压缩后的冷启动必须保留真实数值，不强制达到该比例。大上下文只是更容易使增量占比小，不能保证回答准确或服务商缓存命中。
 - 全会话累计口径包含首次冷请求；若另行报告预热后命中率，必须同时报告含冷启动的累计值、样本请求数、输入 token、缓存读取和写入 token。当前 TUI 统计仅针对主会话，不得当作所有后台调用的整体指标。
 - 未报告缓存用量的接口标为未知，不能把未知认作 95% 或 0%。禁止通过增大重复内容、额外付费预热/保活、修改返回 usage 或只选高命中样本达标。
+- 真实诊断需同一足够长前缀连续多次采样，单一一次或两次 A/B 不能给出可靠稳态命中率。「出现缓存读取的请求数 / 请求数」与「缓存读取 token / 总输入 token」是不同指标，报告时不得互换。
 - 本地回归使用真实 SDK 序列化和 mock fetch 捕获最终 JSON，覆盖 Responses、Chat Completions、Anthropic Messages 的流式与非流式缓存参数及历史稳定性。mock 返回 95% 用量样例只验证映射，不能证明服务商实际命中。
 - 真实验收需要用户授权的 Provider、模型、请求样本和费用预算。未获得这些输入时只运行本地测试，不读取或发送用户历史和凭据。没有真实 usage 证据时，95% 目标状态为未验证。
 
