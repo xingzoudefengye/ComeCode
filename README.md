@@ -1,6 +1,8 @@
 # ComeCode
 
-一个不绑定厂商、CLI 优先、带本地网页管理后台、拥有长期项目记忆的开源 AI Coding Agent。
+一个不绑定厂商的开源 Coding Agent：以 CLI 为当前入口，规划提供共享会话的桌面版、本地管理后台和受控插件扩展。
+
+**当前状态（2026-10-03）：** CLI、多模型配置、项目记忆基础与本地模型管理页已有实现；尚未正式发布 npm 包/安装器。ComeCode 桌面改造、跨端会话共享、完整后台页面和自定义工具插件仍在路线中。实现与验收范围见 [实施计划](docs/PLAN.md)，不要把上游已有能力或目标功能当作已交付版本。
 
 基于 [ZCode](https://github.com/zai-org/ZCode)（Apache-2.0，代码位于 [engine/](./engine)）二次开发，借鉴 [Codex](https://github.com/openai/codex)（Apache-2.0）的部分设计。许可与署名见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE)。
 
@@ -9,6 +11,8 @@
 ---
 
 ## 1. 用户体验目标
+
+以下是**发布后的目标安装方式**，目前从源码运行请看 [开发指南](docs/dev-setup.md)。
 
 ```bash
 npm install -g comecode
@@ -21,48 +25,43 @@ comecode
 - 桌面：基于上游 Electron 桌面端改造的 ComeCode Desktop，复用同一套 CLI Agent，与 CLI/Web 后台会话共享（见 [docs/PLAN.md](docs/PLAN.md) M6）。
 - 不需要额外启动 server，不需要登录任何账号，填好 API Key 就能用。
 
-管理后台提供：Provider / 模型配置、会话列表、项目记忆查看与编辑、Agent 实时状态、日志与模型调用记录。
+管理后台目前提供 Provider / 模型配置与连接测试；会话、记忆、状态和日志页面是规划功能。
 
-它不是另一个聊天界面，聊天和干活都在终端里进行。
+浏览器后台只做管理；对话和任务执行在 CLI 或规划中的桌面版完成。桌面将复用同一套 Agent、配置和会话存储，并支持跨端恢复及单执行所有者，不是另一套独立聊天系统。
 
 ## 2. 现状评估（基于源码核对）
 
 ZCode 已经具备 Coding Agent 的大部分能力，ComeCode 的主要工作是：**去厂商化、补兼容、做轻量后台、做项目内记忆**。
 
-| 能力 | ZCode 现状 | ComeCode 要做的 |
-| --- | --- | --- |
-| Agent 循环 / 规划 | 已有（turn-machine、TodoWrite、plan 模式、子 Agent） | 复用 |
-| 工具 | Read/Write/Edit/Bash/Glob/Grep/WebFetch/WebSearch/MCP/Skill 等 | 复用；可选增加 Codex 风格 `apply_patch` |
-| 目标模式 `/goal` | 已有（设定目标后自动续跑，完成校验器判断是否达成，可暂停/恢复） | 复用；补预算上限（轮数/token/时间）与后台展示 |
-| 权限 | plan / build / edit / yolo / auto + hooks | 复用 |
-| Provider | Anthropic Messages、OpenAI Responses、OpenAI Chat 兼容；内置 GLM/DeepSeek/Qwen/Moonshot/OpenAI/Anthropic 等 | 去掉 z.ai 登录、网关、CDN 依赖；仅三种执行协议；读取标准环境变量 |
-| 上下文压缩 | 已有自动 / 手动 / micro compact | 复用，调整总结写入 `.ai/` |
-| 长期记忆 | 已有，但存在用户目录 `~/.zcode/cli/memories/...` | 改为项目内 `.ai/`，可提交到 git |
-| Prompt Cache | 已有 stable / dynamic 分层与 cache breakpoint | 补命中率统计与展示 |
-| Web | 完整的 ZCode 工作台（很重，含 OAuth、计费） | 新写轻量管理后台 |
-| 一键启动 | CLI 和 server 分离，CLI 没有开浏览器的命令 | CLI 内嵌 HTTP server |
+| 能力              | ZCode 现状                                                                                                  | ComeCode 要做的                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Agent 循环 / 规划 | 已有（turn-machine、TodoWrite、plan 模式、子 Agent）                                                        | 复用                                                             |
+| 工具              | Read/Write/Edit/Bash/Glob/Grep/WebFetch/WebSearch/MCP/Skill 等                                              | 复用；可选增加 Codex 风格 `apply_patch`                          |
+| 目标模式 `/goal`  | 已有（设定目标后自动续跑，完成校验器判断是否达成，可暂停/恢复）                                             | 复用；补预算上限（轮数/token/时间）与后台展示                    |
+| 权限              | plan / build / edit / yolo / auto + hooks                                                                   | 复用                                                             |
+| Provider          | Anthropic Messages、OpenAI Responses、OpenAI Chat 兼容；内置 GLM/DeepSeek/Qwen/Moonshot/OpenAI/Anthropic 等 | 去掉 z.ai 登录、网关、CDN 依赖；仅三种执行协议；读取标准环境变量 |
+| 上下文压缩        | 已有自动 / 手动 / micro compact                                                                             | 复用，调整总结写入 `.ai/`                                        |
+| 长期记忆          | 已有，但存在用户目录 `~/.zcode/cli/memories/...`                                                            | 改为项目内 `.ai/`，可提交到 git                                  |
+| Prompt Cache      | 已有 stable / dynamic 分层与 cache breakpoint                                                               | 补命中率统计与展示                                               |
+| Web               | 完整的 ZCode 工作台（很重，含 OAuth、计费）                                                                 | 新写轻量管理后台                                                 |
+| 一键启动          | CLI 和 server 分离，CLI 没有开浏览器的命令                                                                  | CLI 内嵌 HTTP server                                             |
 
 说明：Codex 的 Agent 核心是 Rust，无法直接移植到 TS。我们只借鉴其设计和文本资产（系统提示词、`apply_patch` 语法、压缩提示词、AGENTS.md 规则），并按 Apache-2.0 保留署名。
 
 ## 3. 总体架构
 
-```
-                    comecode (单进程)
-          ┌─────────────┴──────────────┐
-      TUI 终端                 Admin HTTP + WS (127.0.0.1)
-          └─────────────┬──────────────┘
-                 Session Manager
-                        │
-                  Agent Runtime（ZCode core）
-       ┌────────────────┼────────────────┐
-  Context/Cache     Provider Layer     Memory (.ai/)
-       └────────────────┼────────────────┘
-                        │
-        OpenAI 兼容接口 / Anthropic
-        / DeepSeek / GLM / Qwen / ...
+```text
+当前入口：CLI TUI + 本地 Admin（同进程）
+规划入口：ComeCode Desktop Renderer → Host → CLI app-server
+                         │
+                同一套 Agent Runtime / SessionStore
+                         │
+      配置/Provider ─ 工具与权限 ─ Context/Cache ─ 项目记忆
+                         │
+          OpenAI Chat / OpenAI Responses / Anthropic Messages
 ```
 
-原则：尽量不改 ZCode `core` 的内部结构，把改动集中在 `adapters`（Provider、配置、存储）、`bootstrap`（启动编排）和新增的 `admin` 包里，方便以后同步上游。
+原则：复用现有 CLI/protocol、存储及桌面组件，不另建 Agent、权限链或插件框架。改动优先落在 `adapters`、`bootstrap`、CLI admin 与桌面必要的适配层；桌面与 CLI 会话共享是待验收目标，不把当前上游任务索引当作共享已经完成。
 
 ## 4. Provider 系统
 
@@ -114,6 +113,8 @@ ZCode 已经具备 Coding Agent 的大部分能力，ComeCode 的主要工作是
 
 `comecode config path` 查看实际路径；`comecode config show` 查看脱敏有效配置；`comecode config check` 做本地结构校验，不验证密钥远端是否有效。`--model <model>`、`--provider <id>` 临时覆盖默认选择。
 
+**当前开发版安全边界：** 项目配置会覆盖用户配置，仍需补齐凭据目标授权、项目执行信任和派生配置隔离（见 [T2.6](docs/PLAN.md)）。在此完成前，不应直接在未审查的第三方仓库中使用真实密钥；先检查其 `.comecode/`、兼容 `.zcode/` 配置及 MCP/hooks/插件声明。工具审批与日志脱敏不能代替项目配置的信任校验。
+
 没有有效配置文件时可通过环境变量启动。仅设置凭据也可使用固定默认模型：OpenAI `gpt-4.1-mini`、Anthropic `claude-sonnet-4-5`；Gemini `gemini-2.5-flash` 暂时仅检查、不执行。多种凭据同时存在时按 OpenAI → Anthropic → Gemini 选择；可用 `COMECODE_PROVIDER` 指定（`--provider` 更优先）。有有效配置文件时不自动覆盖其中的 Provider 选择。
 
 PowerShell 示例（Key 使用自己的凭据，不要提交到 Git）：
@@ -152,7 +153,7 @@ cc-switch ──> Codex / Claude Code 配置 ──(导入或读取)──> Come
 ├── tasks.md       当前任务、TODO
 ├── bugs.md        已知问题
 ├── memory.md      历史压缩摘要（AI 维护，按日期分段）
-└── .local/        不提交：会话原始记录、索引、缓存（自动加入 .gitignore）
+└── .local/        本地辅助文件预留目录，不提交（memory init 自动加入 .gitignore）
 ```
 
 同时兼容读取 `AGENTS.md`、`CLAUDE.md`，作为项目规则。
@@ -172,9 +173,9 @@ comecode memory check
 
 - 短期记忆：最近若干轮对话原文直接进入上下文。
 - 中期记忆：超过阈值的旧对话自动压缩为摘要（复用 ZCode compact）。
-- 长期记忆：会话结束或压缩时，把决定、任务、问题提炼写入 `.ai/`；下次启动时按固定顺序加载。
+- 长期记忆：提炼决定、任务、问题写入 `.ai/`；下次启动时按固定顺序加载。压缩前已调用保存，但失败反馈、等待上限与并发写入仍需补齐。
 
-写入规则：AI 对 `.ai/` 的修改走 Edit 工具，受权限控制，终端里可见 diff；单个文件有大小上限，超出后再做一次摘要。
+正常提取通过工具权限链写入。当前自动滚动处理仍需补权限与冲突控制，且只是丢弃旧段落，并非语义摘要；`memory.scope` 配置已存在，但 `both` 尚未完整双读写。以上作为明确未完成项列入 [T3.2/T3.7](docs/PLAN.md)，不承诺全部历史自动保留。
 
 ## 7. 目标模式与永续会话
 
@@ -204,11 +205,12 @@ comecode memory check
 - 工具列表按名称固定排序，会话中途不增减（MCP 变化延后到下次会话或压缩时生效）。
 - `.ai/` 在会话内修改后，不立即刷新到前缀里，压缩或新会话时再刷新。
 - 时间、cwd、git 状态等易变信息放在最后一条消息里，不放进系统提示词。
-- 后台展示每次请求的 cache 命中 token 数和命中率，用数据验证效果。
+- 后台完整用量展示仍待实现。缓存效果依赖供应商及工作负载，首次请求、短上下文、压缩后不承诺命中率。
+- 95% 仅针对稳定大前缀的热请求目标，有限样本不代表所有模型达标；不填充无用上下文或付费保活。省费用还需统计主对话、子代理、压缩、记忆和重试的全部调用，未知 usage/单价必须标为未知。
 
 ## 9. Web 管理后台
 
-轻量单页应用，由 CLI 进程直接托管静态文件，通过 WebSocket 订阅 Agent 事件。
+当前是 CLI 内嵌 server 与静态管理页；后续按需扩展已有接口与事件，不重建完整 Web 工作台。下列只有配置页已交付，其余是目标功能。
 
 1. 配置：Provider 增删改、测试连通性、选择默认模型。
 2. 会话：列出各项目会话（运行中 / 空闲 / 已结束），查看历史，恢复会话。
@@ -220,17 +222,17 @@ comecode memory check
 
 ## 10. 版本路线
 
-| 版本 | 目标 | 关键内容 |
-| --- | --- | --- |
-| V0.1 | 本地跑通 | 构建 ZCode CLI；对外改名为 `comecode`；数据目录改为 `~/.comecode`；去掉必须登录 |
-| V0.2 | 多模型 | 标准环境变量；JSON/JSONC（兼容 TOML）；三种执行协议；cc-switch 导入；去掉 z.ai 网关和 CDN 依赖 |
-| V0.3 | 长期会话 | `.ai/` 目录；永续会话分层压缩；目标模式预算；压缩摘要写入记忆；兼容 CLAUDE.md；cache 命中统计 |
-| V0.4 | Web 后台 | CLI 内嵌 server；配置、会话、记忆、状态、日志页面 |
-| V0.5 | 开源发布 | npm 发布、安装脚本、文档、Docker、CI 与自动打包、多渠道安装、插件安装 CLI |
-| V0.6 | 桌面版 | 基于上游 Electron 桌面端改造，品牌去耦、复用 CLI Agent、与后台打通、三平台打包与自动更新 |
-| V0.7 | 插件/harness 自由度 | 插件加载、自定义工具、自定义策略/循环、Provider 适配器扩展（关闭默认远程市场） |
+| 版本 | 目标                | 关键内容                                                                                       |
+| ---- | ------------------- | ---------------------------------------------------------------------------------------------- |
+| V0.1 | 本地跑通            | 构建 ZCode CLI；对外改名为 `comecode`；数据目录改为 `~/.comecode`；去掉必须登录                |
+| V0.2 | 多模型              | 标准环境变量；JSON/JSONC（兼容 TOML）；三种执行协议；cc-switch 导入；去掉 z.ai 网关和 CDN 依赖 |
+| V0.3 | 长期会话            | `.ai/` 目录；永续会话分层压缩；目标模式预算；压缩摘要写入记忆；兼容 CLAUDE.md；cache 命中统计  |
+| V0.4 | Web 后台            | CLI 内嵌 server；配置、会话、记忆、状态、日志页面                                              |
+| V0.5 | 开源发布            | 先 npm + GitHub Release + 三平台 CI/干净安装；再安装脚本、可选 Docker/包管理器                 |
+| V0.6 | 桌面版              | 复用上游桌面与 CLI 执行链，共享会话、权限确认、diff/终端、三平台安装包与受控更新               |
+| V0.7 | 插件/harness 自由度 | 复用加载安装基础，先开放自定义工具；策略/循环和 Provider 扩展留后，默认关闭远程市场            |
 
-每个版本结束都要满足：能构建、能在 Windows / macOS / Linux 启动、核心流程有测试。
+这些是能力路线，不是已发布版本。GitHub Actions 可以在 tag 后自动构建并上传 Release，但需要本项目的根目录工作流、发布授权及可运行的打包资产；目前还没有 ComeCode 工作流。CLI 先发布，不等待桌面或所有后台页面；桌面研发也不等待所有分发渠道完成。每个公布支持的平台都要用实际安装包验证，而不只验证源码能构建。
 
 ### 在终端会话中添加截图
 
@@ -246,13 +248,13 @@ comecode memory check
 
 ## 12. 支持与捐赠
 
-ComeCode 由个人自费开发维护，完全免费、无广告、无边界限制。如果你觉得它有用，欢迎自愿支持——支持与否都不影响任何功能，也不会被打扰：
+ComeCode 由个人自费开发维护，项目采用 Apache-2.0 开源许可。用户自行配置模型供应商并承担 API 费用；开源免费不等于模型调用免费。计划提供自愿赞助入口，支持与否不影响功能，不在会话中弹窗、追踪或拦截操作。
 
-- GitHub Sponsors（国际/信用卡）：[链接]
-- 爱发电 afdian（中国大陆，微信/支付宝）：[链接]
+- 中国大陆：优先爱发电，核实支付/提现规则后公布微信、支付宝可用入口。
+- 国际：优先 GitHub Sponsors，但先核实维护者所在地区与收款资格；不假定中国大陆可直接开通，也不承诺支付宝支持。其他渠道同样要验证实际收款条件。
 
-终端里随时可用 `comecode sponsor` 查看捐赠入口；`--version`/`--help` 也只会显示一行极简提示，可在配置里关闭。
+目前赞助账户、链接和 `comecode sponsor` 命令尚未交付，因此不展示占位支付链接。落地后只在 README/帮助页及用户主动调用的命令中提供入口，不在版本或机器可读输出里加提示。
 
 ## 最终定位
 
-不是「另一个 Codex」，而是一个不绑定任何厂商、支持所有主流模型、CLI 优先、网页管理、拥有长期项目记忆的开源 AI 软件工程师。
+一个不绑定厂商、兼容主流模型协议、提供 CLI 和共享会话桌面版、重视长期项目记忆与可控成本的开源 Coding Agent。通过小步开放插件增强能力，而不是为自由度另造一套难以维护的内核。
