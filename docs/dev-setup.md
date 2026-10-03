@@ -5,32 +5,29 @@
 ## 1. 工具版本
 
 - Node：>= 24（项目推荐 24.14.0，24.19.0 实测可用）。
-- pnpm：使用 10.34.5 或更高版本。当前工作区的顶层工具链要求至少 10.34.5；全局安装的 pnpm 版本不同也没关系，用 corepack 调用即可：
+- pnpm：以 `engine/package.json` 的 `packageManager` 为准，当前锁定 10.33.2。以下命令从 `engine/` 执行；Corepack 不可用时，先自行安装相同版本的 pnpm。不要用「或更高版本」替代锁定工具链。
 
 ```bash
-corepack pnpm@10.34.5 --version
+corepack pnpm@10.33.2 --version
 ```
 
 ## 2. 安装依赖
 
-官方源在国内很慢（5~20 KiB/s，偶发 ECONNRESET），建议用 npmmirror。不需要桌面版时跳过 Electron 二进制下载：
+仅开发 CLI 时可以跳过 Electron 二进制下载；桌面开发则不要设置此变量。默认使用 npm 官方源；遇到网络限制可自行选择可信镜像，镜像不是运行或构建的强制依赖：
 
 ```bash
-cd engine
-ELECTRON_SKIP_BINARY_DOWNLOAD=1 \
-COREPACK_NPM_REGISTRY=https://registry.npmmirror.com \
-corepack pnpm@10.34.5 install --registry=https://registry.npmmirror.com
+# 从仓库根目录进入 engine 后执行
+ELECTRON_SKIP_BINARY_DOWNLOAD=1 corepack pnpm@10.33.2 install --frozen-lockfile
 ```
 
 PowerShell 写法：
 
 ```powershell
 $env:ELECTRON_SKIP_BINARY_DOWNLOAD=1
-$env:COREPACK_NPM_REGISTRY="https://registry.npmmirror.com"
-corepack pnpm@10.34.5 install --registry=https://registry.npmmirror.com
+corepack pnpm@10.33.2 install --frozen-lockfile
 ```
 
-耗时约 2~3 分钟。安装过程会用 node-gyp 编译 ssh2 等原生模块（需要 VS Build Tools，本机已有）；node-pty 在 Windows 使用预编译包。
+如需自选镜像可加 `--registry=<可信镜像地址>`；安装耗时依网络与平台而异。原生模块可能需要 C++ 构建工具，是否使用预编译包应以当前平台安装结果为准。
 
 检查原生依赖：
 
@@ -44,7 +41,7 @@ node -e "require('esbuild'); require('koffi'); require('node:sqlite'); console.l
 
 ```bash
 cd engine
-corepack pnpm@10.34.5 --filter "@zcode/cli..." build
+corepack pnpm@10.33.2 --filter "@zcode/cli..." build
 ```
 
 `...` 表示连同它依赖的 workspace 包一起构建（provider、shared、contracts、core、adapters、tui、bootstrap 等），不会构建 desktop/web。
@@ -68,18 +65,18 @@ node dist/zcode.cjs -p "列出当前目录文件" --mode plan   # 无头单次
 
 ```bash
 cd engine
-corepack pnpm@10.34.5 --dir apps/zcode-cli dev
+corepack pnpm@10.33.2 --dir apps/zcode-cli dev
 ```
 
 ## 5. 数据目录、Provider 与网络边界
 
 ComeCode CLI 默认把用户数据写入 `~/.comecode`，项目级 `.zcode` 配置目录保持兼容。环境变量按新前缀优先、旧前缀回退读取：
 
-| 用途 | 首选变量 | 兼容变量 |
-| --- | --- | --- |
-| 数据父目录（最终追加 `.comecode`） | `COMECODE_DATA_BASE_DIR` | `ZCODE_DATA_BASE_DIR` |
-| CLI 存储目录 | `COMECODE_STORAGE_DIR` | `ZCODE_STORAGE_DIR` |
-| Provider Personal JSON | `COMECODE_PERSONAL_PROVIDER_CONFIG_FILE` | `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE` |
+| 用途                               | 首选变量                                 | 兼容变量                              |
+| ---------------------------------- | ---------------------------------------- | ------------------------------------- |
+| 数据父目录（最终追加 `.comecode`） | `COMECODE_DATA_BASE_DIR`                 | `ZCODE_DATA_BASE_DIR`                 |
+| CLI 存储目录                       | `COMECODE_STORAGE_DIR`                   | `ZCODE_STORAGE_DIR`                   |
+| Provider Personal JSON             | `COMECODE_PERSONAL_PROVIDER_CONFIG_FILE` | `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE` |
 
 例如，下面的配置会使用 `D:\ComeCodeData\.comecode`，而不会写入默认用户目录：
 
@@ -90,30 +87,9 @@ node dist/zcode.cjs --help
 
 如果检测到旧的 `~/.zcode` 而新的 `~/.comecode` 尚不存在，首次启动会询问是否复制旧数据；复制不会删除旧目录。非交互模式只提示迁移，不会自动复制。内部配置和历史路径仍接受 `ZCODE_*`，以便逐步迁移脚本。
 
-CLI 不要求厂商登录。请在 `COMECODE_PERSONAL_PROVIDER_CONFIG_FILE` 指向的 `provider_config.json`（或兼容的旧 `~/.comecode/cli/config.json`）中配置一个 Provider；缺少可用模型时会显示配置引导。`/login` 和 `login` 子命令保留兼容入口，但只显示同一份配置引导，不会启动 OAuth。
+ComeCode CLI 不要求厂商登录。首选直接运行 `comecode` 完成首次模型引导，或执行 `comecode config setup`；公开配置使用 `~/.comecode/config.json` / JSONC，兼容 TOML 与旧 Provider JSON，详见 [README](../README.md)。也可仅设置 `OPENAI_API_KEY` 或 Anthropic 凭据零配置启动；使用兼容网关时显式指定地址和模型。T2.2 已实现，不再要求先手写旧版配置。
 
-全新数据目录可以先写入下面的 `~/.comecode/cli/config.json`，将地址、Key、模型名替换为自己的值。首次加载会把这些旧格式字段导入 `~/.comecode/v2/provider_config.json`，之后修改 Provider 请编辑 v2 文件；已存在的 v2 文件不会被重复导入覆盖。
-
-```json
-{
-  "provider": {
-    "example": {
-      "source": "custom",
-      "kind": "openai-compatible",
-      "options": {
-        "apiKey": "YOUR_API_KEY",
-        "baseURL": "https://your-model-host.example/v1"
-      },
-      "models": {
-        "your-model": { "contextWindow": 32000 }
-      }
-    }
-  },
-  "model": { "main": "example/your-model" }
-}
-```
-
-仅凭 `OPENAI_API_KEY` 自动生成 Provider 的功能计划在 T2.2 实现，本阶段仍需上述配置文件。
+`config check` 只做本地检查；连接测试或实际对话会调用供应商，费用由用户承担。`/login` 等仅保留兼容引导，不启动 OAuth。
 
 默认启动不会刷新远程 Provider 目录、调用官方 Coding Plan 网关或注册官方远程插件市场。Provider 目录使用随包的 `engine/config/provider/zcode-builtin.json`；插件市场需在配置中显式声明，例如：
 
@@ -139,35 +115,26 @@ CLI 不要求厂商登录。请在 `COMECODE_PERSONAL_PROVIDER_CONFIG_FILE` 指�
 改 TUI/CLI 源码后运行 comecode 没反应，几乎都是同一个原因：**只改了源码、没重建对应包的 dist 产物，而运行中的进程还在用旧代码**。先看本机 comecode 到底跑的是什么：
 
 ```bash
-cat /c/Users/ruogu/AppData/Roaming/npm/comecode
-# #!/bin/sh
-# exec node "/e/Projects/ComeCode/engine/apps/zcode-cli/packages/cli/dist/zcode.cjs" "$@"
+# 查询命令位置，再检查该脚本内容或实际进程参数
+command -v comecode
 ```
 
-即全局 `comecode` 只是 dev shim，真正执行的是 `packages/cli/dist/zcode.cjs`（打包产物），不是源码。
+Windows PowerShell 可用 `Get-Command comecode` 定位；检查结果应以自己的安装环境为准。如果它是开发 shim，通常会启动仓库中的 `engine/apps/zcode-cli/packages/cli/dist/zcode.cjs`，而不是源码。正式发布后的安装路径可能不同。
 
 ### 构建链与包间关系
 
 - CLI bundle 把 `@zcode/tui`、`playwright-core`、`koffi` 设成 **external**（`cli/scripts/build.mjs` 的 `resolveBuildExternal`），所以 TUI 没有打进 `zcode.cjs`。
 - `zcode.cjs` 运行时通过 `import("@zcode/tui")` 动态加载 TUI；该包在 `packages/cli/node_modules/@zcode/tui` 是指向 `packages/tui` 的**软链**，实际读取的是 `packages/tui/dist/index.js`。
-- 因此：**改 TUI 源码只重建 tui 包即可生效，不用重建 cli bundle**；改 CLI 源码才需要重建 cli。
+- TUI-only 快速调试可单独重建该包，但正常验证和交付统一使用依赖优先的 CLI 聚合构建，避免其它依赖或 bundle 留在旧版本。
 
 ### 重建命令
 
 ```bash
 cd engine
-# 重建 tui（tsc 声明 + esbuild 产出 dist/index.js）
-corepack pnpm@10.34.5 --filter "@zcode/tui" build
-
-# 重建 cli（连带重建 contracts/core 等直接运行时依赖）
-corepack pnpm@10.34.5 --filter "@zcode/cli" build
+corepack pnpm@10.33.2 --filter "@zcode/cli..." build
 ```
 
-改的是 `shared / core / contracts / adapters` 等被 CLI 内联或声明的包时，用带 `...` 的聚合构建一次性搞定依赖方：
-
-```bash
-corepack pnpm@10.34.5 --filter "@zcode/cli..." build
-```
+该命令只构建 CLI 及其依赖，不构建整个桌面。
 
 ### 内置 Provider 目录（模型档位、目录规则）
 
@@ -177,7 +144,7 @@ corepack pnpm@10.34.5 --filter "@zcode/cli..." build
 
 ```bash
 cd engine
-corepack pnpm@10.34.5 --filter "@zcode/cli" build
+corepack pnpm@10.33.2 --filter "@zcode/cli..." build
 cmp -s config/provider/zcode-builtin.json \
   apps/zcode-cli/packages/cli/dist/provider/zcode-builtin.json && echo "产物与源一致"
 ```
