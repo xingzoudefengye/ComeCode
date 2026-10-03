@@ -16,6 +16,10 @@ import type { ModelStatusContext } from "./runner-status.js";
 const MODEL_TRACE_HEADER = "x-zcode-trace-id";
 const MODEL_REQUEST_HEADER = "x-request-id";
 const MODEL_SESSION_HEADER = "x-session-id";
+// ChatGPT/Codex 后端从请求头取缓存亲和（官方 Codex CLI 约定），不认 body 的 prompt_cache_key。
+// 头名固定为小写连字符，标准 relay 会忽略不认识的头，因此与 x-session-id 并列发送以兼容 Codex 生态。
+const MODEL_CODEX_SESSION_HEADER = "session-id";
+const MODEL_CODEX_THREAD_HEADER = "thread-id";
 const MODEL_QUERY_HEADER = "x-query-id";
 // Coding Plan 服务端使用该请求级 Header 区分 main/subagent/other 来源。
 // 它不是 Provider 静态能力或鉴权材料，必须由调用上下文生成并覆盖同名静态 Header。
@@ -40,7 +44,13 @@ export function createModelRequestAttributionHeaders(
       : ModelRequestSessionType.Other,
     [MODEL_TRACE_HEADER]: statusContext.traceId,
     ...(queryHeaderValue ? { [MODEL_QUERY_HEADER]: queryHeaderValue } : {}),
-    ...(sessionHeaderValue ? { [MODEL_SESSION_HEADER]: sessionHeaderValue } : {}),
+    ...(sessionHeaderValue
+      ? {
+          [MODEL_SESSION_HEADER]: sessionHeaderValue,
+          [MODEL_CODEX_SESSION_HEADER]: sessionHeaderValue,
+          [MODEL_CODEX_THREAD_HEADER]: sessionHeaderValue,
+        }
+      : {}),
     ...(openCodeSessionHeaderValue ? { "x-opencode-session": openCodeSessionHeaderValue } : {}),
   };
 }
