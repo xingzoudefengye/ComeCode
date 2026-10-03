@@ -106,7 +106,7 @@ export function handleQuestionKey(
     return;
   }
   if (key.name === "return") {
-    submitQuestionAnswer(state, update, setStatus);
+    submitQuestionAnswer(state, update, setApprovalQueue, setStatus);
   }
 }
 
@@ -207,6 +207,7 @@ function handleOtherAnswerKey(
 function submitQuestionAnswer(
   state: QuestionPromptState,
   update: (recipe: (draft: QuestionPromptState) => void) => void,
+  setApprovalQueue: React.Dispatch<React.SetStateAction<ApprovalPrompt[]>>,
   setStatus: (status: string) => void,
 ): void {
   const question = state.input.questions[state.currentQuestionIndex];
@@ -239,14 +240,45 @@ function submitQuestionAnswer(
     } else {
       delete draft.annotations[target.question];
     }
-    if (draft.currentQuestionIndex >= draft.input.questions.length - 1) {
-      draft.reviewing = true;
-    } else {
+    if (draft.currentQuestionIndex < draft.input.questions.length - 1) {
       draft.currentQuestionIndex += 1;
       draft.selectedOptionIndex = 0;
     }
   });
-  setStatus("Review answers, then press Enter to submit.");
+
+  if (state.currentQuestionIndex >= state.input.questions.length - 1) {
+    submitQuestionAnswers(state, answer, setApprovalQueue, setStatus);
+  } else {
+    setStatus("Answer the next clarification question.");
+  }
+}
+
+function submitQuestionAnswers(
+  state: QuestionPromptState,
+  finalAnswer: { annotation?: AskUserQuestionAnnotation; answer: string },
+  setApprovalQueue: React.Dispatch<React.SetStateAction<ApprovalPrompt[]>>,
+  setStatus: (status: string) => void,
+): void {
+  const question = state.input.questions[state.currentQuestionIndex];
+  if (!question) return;
+  const answers = { ...state.answers, [question.question]: finalAnswer.answer };
+  const annotations = { ...state.annotations };
+  if (finalAnswer.annotation) annotations[question.question] = finalAnswer.annotation;
+  else delete annotations[question.question];
+
+  setApprovalQueue((current) => {
+    const approval = current[0];
+    if (!approval) return current;
+    approval.cleanup();
+    approval.resolve({
+      decision: "modify",
+      modifiedInput: { annotations, answers, questions: state.input.questions },
+      reason: "Answered in TUI",
+      resolvedAt: new Date(),
+    });
+    return current.filter((item) => item !== approval);
+  });
+  setStatus(`Answered ${Object.keys(answers).length} clarification questions.`);
 }
 
 function skipQuestionAnswer(

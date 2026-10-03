@@ -206,55 +206,52 @@ export function AppView(props: {
         workflowCardsByToolCallId: props.workflowCardsByToolCallId,
         expandedWorkflowRunIds: props.expandedWorkflowRunIds,
       }),
-      props.approvalQueue[0]
-        ? h(ApprovalPanel, {
-            approval: props.approvalQueue[0],
+      actionSelection && !props.approvalQueue[0]
+        ? h(SelectionPanel, {
             contentWidth: actionPanelContentWidth,
+            copy: props.copy,
+            selection: actionSelection,
           })
-        : actionSelection
-          ? h(SelectionPanel, {
-              contentWidth: actionPanelContentWidth,
-              copy: props.copy,
-              selection: actionSelection,
-            })
-          : h(ComposerInputArea, {
-              runtimeActivity: props.runtimeActivity,
-              backgroundCount: props.subagents?.directory.running.length ?? 0,
-              cacheHitRate: props.cacheStats?.hitRate,
-              focused: !readOnly,
-              busy: props.busy,
-              clipboardStatus: props.status?.startsWith("图片：") ? props.status : undefined,
-              imagePasteAvailable: Boolean(props.options.readClipboardImage),
-              contentWidth: actionPanelContentWidth,
-              contextUsage: props.contextUsage,
-              copy: props.copy,
-              draft: props.draft,
-              editorRef: props.editorRef,
-              effortOptions: props.effortOptions,
-              effortSelection: props.effortSelection,
-              fileMention: props.fileMention,
-              inputCursorToEndVersion: props.inputCursorToEndVersion,
-              loginRequired: props.loginRequired,
-              mode: props.mode,
-              modeOptions: props.modeOptions,
-              modeSelection: props.modeSelection,
-              model: props.model,
-              sessionId: props.sessionId,
-              modelOptions: props.modelOptions,
-              modelSelection: props.modelSelection,
-              queuedInputs,
-              selection: composerSelection,
-              setDraftValue: readOnly ? () => {} : props.setDraftValue,
-              slashCommands: props.slashCommands,
-              slashSelection: props.slashSelection,
-              submitValue: readOnly ? () => {} : props.submitValue,
-              thoughtLevel: props.thoughtLevel,
-            }),
+        : h(ComposerInputArea, {
+            approval: props.approvalQueue[0],
+            runtimeActivity: props.runtimeActivity,
+            backgroundCount: props.subagents?.directory.running.length ?? 0,
+            cacheHitRate: props.cacheStats?.hitRate,
+            focused: !readOnly,
+            busy: props.busy,
+            clipboardStatus: props.status?.startsWith("图片：") ? props.status : undefined,
+            imagePasteAvailable: Boolean(props.options.readClipboardImage),
+            contentWidth: actionPanelContentWidth,
+            contextUsage: props.contextUsage,
+            copy: props.copy,
+            draft: props.draft,
+            editorRef: props.editorRef,
+            effortOptions: props.effortOptions,
+            effortSelection: props.effortSelection,
+            fileMention: props.fileMention,
+            inputCursorToEndVersion: props.inputCursorToEndVersion,
+            loginRequired: props.loginRequired,
+            mode: props.mode,
+            modeOptions: props.modeOptions,
+            modeSelection: props.modeSelection,
+            model: props.model,
+            sessionId: props.sessionId,
+            modelOptions: props.modelOptions,
+            modelSelection: props.modelSelection,
+            queuedInputs,
+            selection: composerSelection,
+            setDraftValue: readOnly ? () => {} : props.setDraftValue,
+            slashCommands: props.slashCommands,
+            slashSelection: props.slashSelection,
+            submitValue: readOnly ? () => {} : props.submitValue,
+            thoughtLevel: props.thoughtLevel,
+          }),
     ),
   );
 }
 
 function ComposerInputArea(props: {
+  approval?: ApprovalPrompt;
   clipboardStatus?: string;
   imagePasteAvailable?: boolean;
   runtimeActivity?: RuntimeActivity;
@@ -291,6 +288,11 @@ function ComposerInputArea(props: {
     React.Fragment,
     null,
     props.loginRequired ? h(LoginRequiredPanel, { copy: props.copy }) : null,
+    // 审批/提问面板排在输入框上方而不是顶替输入框；按键仍由审批逻辑独占，
+    // 输入框保持可见只是为了不让人误以为界面丢了输入区。
+    props.approval
+      ? h(ApprovalPanel, { approval: props.approval, contentWidth: props.contentWidth })
+      : null,
     props.fileMention
       ? h(FileMentionPanel, {
           contentWidth: props.contentWidth,
