@@ -19,6 +19,8 @@ const h = React.createElement as (
 export function ContentPane({
   animateEmptyLogo = false,
   copy = DEFAULT_TUI_COPY,
+  cwd,
+  effort,
   expandedWorkflowRunIds,
   emptyText,
   id,
@@ -32,6 +34,8 @@ export function ContentPane({
 }: {
   animateEmptyLogo?: boolean;
   copy?: TuiCopy;
+  cwd?: string;
+  effort?: string;
   expandedWorkflowRunIds?: ReadonlySet<string>;
   emptyText?: string;
   id?: string;
@@ -80,7 +84,7 @@ export function ContentPane({
       ? [
           emptyText
             ? h("text", { key: "empty", style: { fg: palette.muted } }, emptyText)
-            : h(EmptyTranscriptLogo, { animated: animateEmptyLogo, key: "empty-transcript-logo", model, version }),
+            : h(EmptyTranscriptLogo, { animated: animateEmptyLogo, cwd, effort, key: "empty-transcript-logo", model, version }),
         ]
       : messages.map((message, index) =>
           h(MessageRow, {

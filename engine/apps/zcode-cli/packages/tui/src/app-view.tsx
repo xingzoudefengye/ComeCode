@@ -197,6 +197,8 @@ export function AppView(props: {
         id: "main-transcript",
         animateEmptyLogo: !props.options.noColor,
         copy: props.copy,
+        cwd: props.options.workspaceDirectory,
+        effort: props.thoughtLevel,
         focused: false,
         messages: transcriptMessages,
         model: props.model,
