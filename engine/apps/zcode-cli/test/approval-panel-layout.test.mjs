@@ -167,7 +167,7 @@ async function render(t, approval, outcomes) {
     await flush();
   };
   await flush();
-  return { drafts, frame: () => view.captureCharFrame(), outcomes, press };
+  return { drafts, frame: () => view.captureCharFrame(), outcomes, press, renderer: view.renderer };
 }
 
 test("提问面板渲染在输入框上方，输入框保持可见", { timeout: 15000 }, async (t) => {
@@ -206,4 +206,45 @@ test("没有待处理提问时行为不变，仅显示输入框", { timeout: 150
   const frame = f.frame();
   assert.doesNotMatch(frame, /Question 1\/1/u);
   assert.match(frame, new RegExp(INPUT_PLACEHOLDER, "u"));
+});
+
+
+test("Other 编辑光标归提问面板，接受提交后恢复普通输入焦点", { timeout: 15000 }, async (t) => {
+  const outcomes = [];
+  const f = await render(t, questionApproval(outcomes), outcomes);
+  assert.equal(f.renderer.currentFocusedEditor, null);
+  await f.press("o");
+  const editor = f.renderer.root.findDescendantById("question-other-editor");
+  assert.ok(editor);
+  assert.equal(f.renderer.currentFocusedEditor, editor);
+  await f.press("x");
+  await f.press("y");
+  assert.equal(editor.plainText, "xy");
+  assert.equal(editor.cursorOffset, 2);
+  assert.deepEqual(f.drafts, []);
+  await f.press("BACKSPACE");
+  assert.equal(editor.plainText, "x");
+  await f.press("RETURN");
+  assert.equal(f.renderer.currentFocusedEditor, null);
+  assert.deepEqual(outcomes, []);
+  await f.press("RETURN");
+  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes[0].modifiedInput.answers[question.question], "x");
+  assert.ok(f.renderer.currentFocusedEditor);
+  assert.notEqual(f.renderer.currentFocusedEditor.id, "question-other-editor");
+  await f.press("z");
+  assert.deepEqual(f.drafts, ["z"]);
+});
+
+test("取消 Other 后保留提问但不显示普通输入光标，退出提问恢复焦点", { timeout: 15000 }, async (t) => {
+  const outcomes = [];
+  const f = await render(t, questionApproval(outcomes), outcomes);
+  await f.press("o");
+  await f.press("x");
+  await f.press("escape");
+  assert.equal(f.renderer.currentFocusedEditor, null);
+  assert.match(f.frame(), /Question 1\/1/u);
+  await f.press("escape");
+  assert.ok(f.renderer.currentFocusedEditor);
+  assert.equal(outcomes[0].decision, "deny");
 });

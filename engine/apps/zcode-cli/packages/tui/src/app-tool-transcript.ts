@@ -79,6 +79,9 @@ export function applyToolTranscriptEvent(
         {
           finishedAt: event.timestamp.getTime(),
           resultDisplay: resultDisplayFromPayload(payload),
+          ...(toolName.toLowerCase() === "askuserquestion"
+            ? { output: stringField(asRecord(payload.result), "content") }
+            : {}),
           status: "completed",
         },
         assistantMessageId,
