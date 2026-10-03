@@ -175,9 +175,9 @@ test("同回合工具与回答续段不叠加间隔，换行与 Markdown 硬换�
   const before = JSON.stringify(messages);
   const view = await render(t, React.createElement(ContentPane, { focused: false, messages }));
   const lines = view.captureCharFrame().split("\n");
-  assert.equal(row(lines, "WebFetch") - row(lines, "tool-intro"), 1);
-  assert.equal(row(lines, "tool-result") - row(lines, "tool-output"), 1);
-  assert.equal(row(lines, "continuation-one") - row(lines, "tool-result"), 1);
+  assert.equal(row(lines, "WebFetch") - row(lines, "tool-intro"), 2);
+  assert.equal(row(lines, "tool-result") - row(lines, "tool-output"), 2);
+  assert.equal(row(lines, "continuation-one") - row(lines, "tool-result"), 2);
   assert.equal(row(lines, "continuation-two") - row(lines, "continuation-one"), 1);
   assert.equal(row(lines, "continuation-three") - row(lines, "continuation-two"), 1);
   assert.equal(row(lines, "last-paragraph") - row(lines, "continuation-three"), 2);

@@ -91,7 +91,7 @@ export function ContentPane({
             message,
             now,
             previousRole: messages[index - 1]?.role,
-            terminalWidth,
+            previousHadTool: messages[index - 1]?.parts?.some((part) => part.type === "tool") ?? false,
             workflowCardsByToolCallId,
           }),
         )),
@@ -124,6 +124,7 @@ export function MessageRow({
   message,
   now,
   previousRole,
+  previousHadTool,
   terminalWidth = 100,
   workflowCardsByToolCallId,
 }: {
@@ -133,6 +134,7 @@ export function MessageRow({
   message: Message;
   now?: number;
   previousRole?: Message["role"];
+  previousHadTool?: boolean;
   terminalWidth?: number;
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
 }): React.ReactElement {
@@ -145,6 +147,7 @@ export function MessageRow({
   const isFinishMarker = message.role === "system" && message.content === copy.transcript.finish;
   const rowBackground = isUserMessage ? palette.userMessageBackground : palette.background;
   const assistantText = message.role === "agent";
+  const displayContent = stripInternalThinkingTags(message.content);
   const plainTextColor =
     message.role === "system"
       ? palette.warning
@@ -157,9 +160,10 @@ export function MessageRow({
         backgroundColor: rowBackground,
         flexDirection: "column",
         // 按消息边界留白，不能按流式碎片重复添加间隔。
-        marginTop: isFinishMarker
-          ? 1
-          : index > 0 && (isUserMessage || previousRole === "user")
+        marginTop:
+          isFinishMarker ||
+          (index > 0 &&
+            (isUserMessage || previousRole === "user" || previousHadTool || parts.some((part) => part.type === "tool")))
             ? 1
             : 0,
         marginBottom: 0,
@@ -175,15 +179,15 @@ export function MessageRow({
       ? [
           h(MarkdownText, {
             backgroundColor: rowBackground,
-            content: message.content,
+            content: displayContent,
             key: "content",
             streaming: message.streaming,
           }),
         ]
       : parts.length === 0
-        ? [isUserMessage
-          ? h(UserMessageView, { content: message.content, key: "user-content" })
-          : h("text", { key: "content", style: { fg: plainTextColor } }, message.content)]
+          ? [isUserMessage
+          ? h(UserMessageView, { content: displayContent, key: "user-content" })
+          : h("text", { key: "content", style: { fg: plainTextColor } }, displayContent)]
         : []),
     ...parts.map((part, partIndex) => {
       if (part.type === "tool") {
@@ -201,12 +205,26 @@ export function MessageRow({
           });
         }
         // 无命中就回落今日的文本投影（编过但没有 run、或镜像尚未补种）。
-        return h(ToolTranscriptPartView, {
-          key: `tool-${part.toolCallId}`,
+        const toolView = h(ToolTranscriptPartView, {
+          copy,
           part,
           now,
           terminalWidth,
         });
+        return partIndex > 0
+          ? h(
+              React.Fragment,
+              { key: `tool-${part.toolCallId}` },
+              h("box", {
+                style: {
+                  backgroundColor: palette.background,
+                  height: 1,
+                  width: "100%",
+                },
+              }),
+              toolView,
+            )
+          : toolView;
       }
       if (part.type === "thought") {
         return h(ThoughtTranscriptPartView, {
@@ -224,11 +242,22 @@ export function MessageRow({
           })
         : h("text", { key: `text-${partIndex}`, style: { fg: plainTextColor } }, part.text);
       // 思考标签与正文的间隔只归消息容器，避免与 Thought 外边距叠加。
-      return parts[partIndex - 1]?.type === "thought"
-        ? h("box", { key: `after-thought-${partIndex}`, style: { marginTop: 1, flexDirection: "column" } }, textView)
-        : textView;
+      return parts[partIndex - 1]?.type === "tool"
+        ? h(
+            "box",
+            { key: `after-tool-${partIndex}`, style: { flexDirection: "column" } },
+            h("box", { style: { backgroundColor: palette.background, height: 1, width: "100%" } }),
+            textView,
+          )
+        : parts[partIndex - 1]?.type === "thought"
+          ? h("box", { key: `after-thought-${partIndex}`, style: { marginTop: 1, flexDirection: "column" } }, textView)
+          : textView;
     }),
   );
+}
+
+function stripInternalThinkingTags(content: string): string {
+  return content.replace(/<thinking>[^]*?<\/thinking>/giu, "").trim();
 }
 
 function CompactTimelineRow({
