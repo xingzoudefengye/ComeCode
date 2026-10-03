@@ -90,11 +90,13 @@ export function SlashSuggestionPanel({
   commands,
   contentWidth,
   copy = DEFAULT_TUI_COPY,
+  currentModel,
   selectedIndex,
 }: {
   commands: readonly SlashCommand[];
   contentWidth?: number;
   copy?: TuiCopy;
+  currentModel?: string;
   selectedIndex: number;
 }): React.ReactElement | null {
   if (commands.length === 0) return null;
@@ -103,7 +105,7 @@ export function SlashSuggestionPanel({
   // Fixed one-row heights let wrapped text draw over later commands in narrow terminals.
   const rows = visible.commands.map((command, index) => {
     const selected = index === visible.selectedIndex;
-    const parts = slashCommandRowParts(command, selected);
+    const parts = slashCommandRowParts(command, selected, currentModel);
     return {
       command,
       parts,
@@ -225,15 +227,20 @@ export function LoginRequiredPanel({
 function slashCommandRowParts(
   command: SlashCommand,
   selected: boolean,
+  currentModel?: string,
 ): {
   command: string;
   selector: string;
   summary: string;
 } {
+  const model = currentModel?.trim();
   return {
     command: `/${command.name}`,
     selector: `${selected ? ">" : " "} `,
-    summary: command.summary,
+    summary:
+      command.name === "model" && model
+        ? `${command.summary} Current: ${model}`
+        : command.summary,
   };
 }
 
