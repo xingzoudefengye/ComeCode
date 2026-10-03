@@ -12,6 +12,7 @@ import {
   traceContextToLogContext,
   buildCompactPrompt,
   buildCompactSummaryMessage,
+  buildLocalCompactHandoff,
   buildManualCompactBoundary,
   createCompactBoundaryId,
   getUsageTotalTokens,
@@ -246,25 +247,30 @@ async function compactActiveConversationImpl(
     turnTraceContext,
     events,
   );
-  // 止血原因：massive MCP 工具会把 compact summary request 的 provider context 撑爆。
-  // ToolSearch/deferred tools 完成前，仅在工具数超过阈值时让 compact summary 保持无工具。
-  await this.initializeMcp(turnTraceContext);
-  throwIfTurnAborted(options.abortSignal);
-  const runtimeCompactTools = this.getTools(compactModel);
-  const compactTools =
-    runtimeCompactTools.length > COMPACT_TOOL_KEEP_MAX_COUNT ? [] : runtimeCompactTools;
+  // 本地交接不需要初始化 MCP、工具 schema 或媒体投影，也不会发起模型请求。
+  const compactTools: never[] = [];
+  const useLocalHandoff = true;
 
   while (true) {
     try {
-      const lastSummarizedMessageId = this.latestConversationMessageId;
       const modelTraceContext = createChildTraceContext(turnTraceContext, {
         attributes: {
           model: `${compactModel.providerId}/${compactModel.modelId}`,
           querySource: "compact",
         },
       });
+      const lastSummarizedMessageId = this.latestConversationMessageId;
       const compactPrompt = buildCompactPrompt(customInstructions);
-      let result: RuntimeModelTextResult;
+      const handoff = buildLocalCompactHandoff({
+        entries: [...entriesForSummary, ...preservedEntries],
+        preservedEntries,
+        customInstructions,
+      });
+      let result: RuntimeModelTextResult = {
+        finishReason: "stop",
+        text: `<work_guide>\n${handoff.guide}\n</work_guide>\n<summary>\n${handoff.summary}\n</summary>`,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+      };
       let compactPromptTooLongAttempts = 0;
       let stripMediaForSummary = false;
       const reselectEntriesAfterPromptTooLong = (cause: unknown): boolean => {
@@ -276,7 +282,6 @@ async function compactActiveConversationImpl(
           useMidConversationSystem,
         });
         if (!reselected) return false;
-
         compactPromptTooLongAttempts += 1;
         currentSelection = reselected;
         preservedEntries = reselected.preservedEntries;
@@ -286,7 +291,6 @@ async function compactActiveConversationImpl(
       };
       const truncateEntriesAfterPromptTooLong = (cause: unknown): boolean => {
         if (!canUseCompactSummaryTruncationFallback(trigger)) return false;
-
         const truncated = truncateCompactSummaryRequestEntriesAfterPromptTooLong({
           attempt: compactPromptTooLongAttempts,
           cause,
@@ -296,17 +300,17 @@ async function compactActiveConversationImpl(
           useMidConversationSystem,
         });
         if (!truncated) return false;
-
         compactPromptTooLongAttempts += 1;
         entriesForSummary = truncated;
         entriesToSummarize = getRuntimeEntriesToSummarize(entriesForSummary);
         return true;
       };
 
-      while (true) {
-        const requestMessages = buildCompactSummaryRequestMessages(
-          entriesForSummary,
-          compactPrompt,
+      if (!useLocalHandoff) {
+        while (true) {
+          const requestMessages = buildCompactSummaryRequestMessages(
+            entriesForSummary,
+            compactPrompt,
           { useMidConversationSystem },
         );
         const recordableEntries = filterOutputTokenContinuationEntries(entriesForSummary);
@@ -477,6 +481,7 @@ async function compactActiveConversationImpl(
           });
         }
         break;
+        }
       }
 
       const compactResult = formatCompactResultOrThrow(this, result);
@@ -517,18 +522,15 @@ async function compactActiveConversationImpl(
         suppressFollowup: true,
         workGuide: compactResult.guide,
       });
-      // Continue 没有对应 Session message；无 store 的统计也不能把它计入保留记录。
-      // 压缩后的 Provider 请求只使用摘要、指南、稳定前缀和必要提醒；
-      // 最近原始对话已经被摘要覆盖，不再作为隐式尾部带回。
-      const postCompactPreservedEntries: readonly RuntimeMessageEntry[] = [];
+      const postCompactPreservedEntries: readonly RuntimeMessageEntry[] = preservedEntries;
       const preservation = this.sessionStore
         ? await selectPersistedCompactTail({
             sessionStore: this.sessionStore,
             sessionId: this.sessionId,
-            groupsPreserved: 0,
+            groupsPreserved: currentSelection.groupsPreserved,
             summaryMessageId,
           })
-        : { keptMessageCount: 0 };
+        : { keptMessageCount: postCompactPreservedEntries.length };
       const postCompactEntries = buildPostCompactRuntimeEntries(
         activeEntries,
         {
@@ -558,6 +560,7 @@ async function compactActiveConversationImpl(
         preCompactTokenCount,
         summarizedMessageCount: entriesToSummarize.length,
         summaryMessageId,
+        summarySource: "session_memory",
         traceContext: turnTraceContext,
         trigger,
         ...(postCompactPreservedEntries.length > 0

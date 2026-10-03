@@ -48,6 +48,7 @@ export interface BuildManualCompactBoundaryInput {
   summaryMessageId: MessageId;
   traceContext: TraceContext;
   trigger?: CompactTriggerValue;
+  summarySource?: "model" | "session_memory";
   truePostCompactTokenCount?: number;
   willRetriggerNextTurn?: boolean;
 }
@@ -82,7 +83,7 @@ export function buildManualCompactBoundary(
     trigger: input.trigger ?? CompactTrigger.Manual,
     phase: input.phase,
     compactReason: input.compactReason,
-    summarySource: "model",
+    summarySource: input.summarySource ?? "model",
     preCompactTokenCount: input.preCompactTokenCount,
     postCompactTokenCount: input.postCompactTokenCount,
     truePostCompactTokenCount: input.truePostCompactTokenCount,
