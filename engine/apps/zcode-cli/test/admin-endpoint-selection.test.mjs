@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { createProviderConfigEditor } from "../packages/adapters/dist/config/provider-config-editor.js";
 import { testProviderConnection } from "../packages/cli/src/admin/test-connection.ts";
 import { ADMIN_SCRIPT } from "../packages/cli/src/admin/client.ts";
-import { ADMIN_STYLE } from "../packages/cli/src/admin/assets.ts";
+import { ADMIN_HTML, ADMIN_STYLE } from "../packages/cli/src/admin/assets.ts";
 
 // 最小 DOM 覆盖表单事件与草稿，不向模型服务发起请求。
 function form(config, renderPage = false, fetchImpl) {
@@ -105,6 +105,27 @@ test("默认思考强度默认 high，使用默认值删除字段，可选 low/m
   f.get("model-reasoning").value = "max";
   await add(f, "max-model");
   assert.equal(f.draft().providers[0].models.at(-1).reasoningLevel, "max");
+});
+
+test("默认思考强度提供五个英文档位，编辑与保存保留 medium/xhigh", async () => {
+  const selectHtml = ADMIN_HTML.match(/<select id="model-reasoning">(.*?)<\/select>/su)[1];
+  const options = [...selectHtml.matchAll(/<option value="([^"]*)">([^<]*)<\/option>/gu)];
+  assert.deepEqual(options.map(option => option[1]), ["", "low", "medium", "high", "xhigh", "max"]);
+  assert.deepEqual(options.slice(1).map(option => option[2]), ["low", "medium", "high", "xhigh", "max"]);
+  for (const level of ["medium", "xhigh"]) {
+    const config = providers();
+    config.providers[1].models[0].reasoningLevel = level;
+    const f = form(config);
+    f.run('openModelDialog({ provider: draft.providers[1], model: draft.providers[1].models[0] });');
+    assert.equal(f.get("model-reasoning").value, level);
+    f.get("model-output").value = "64000";
+    await f.run("testModelDialog();");
+    await f.run("saveModelDialog({ preventDefault() {} });");
+    assert.equal(f.draft().providers[1].models[0].reasoningLevel, level);
+    assert.equal(f.draft().providers[1].models[0].maxOutputTokens, 64000);
+    f.run('openModelDialog({ provider: draft.providers[1], model: draft.providers[1].models[0] });');
+    assert.equal(f.get("model-reasoning").value, level);
+  }
 });
 
 test("切换供应商与手填新地址不串 Key，协议可以单独覆盖", async () => {

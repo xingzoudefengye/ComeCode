@@ -92,11 +92,17 @@ export async function materializeUnifiedConfig(
             ...(model.toolCalling !== undefined ? { supportsToolCall: model.toolCalling } : {}),
             ...(model.vision !== undefined ? { inputFormat: { supportsImage: model.vision } } : {}),
           },
-          ...(model.reasoningLevel !== undefined
-            ? { optionSpecs: { reasoningLevel: { default: model.reasoningLevel } } }
-            : {}),
-          ...(model.maxOutputTokens !== undefined
-            ? { optionSpecs: { maxOutputTokens: { max: model.maxOutputTokens } } }
+          ...(model.reasoningLevel !== undefined || model.maxOutputTokens !== undefined
+            ? {
+                optionSpecs: {
+                  ...(model.reasoningLevel !== undefined
+                    ? { reasoningLevel: { default: model.reasoningLevel } }
+                    : {}),
+                  ...(model.maxOutputTokens !== undefined
+                    ? { maxOutputTokens: { max: model.maxOutputTokens } }
+                    : {}),
+                },
+              }
             : {}),
         },
       })),
