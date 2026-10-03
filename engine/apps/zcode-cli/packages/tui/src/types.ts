@@ -319,6 +319,8 @@ export type TuiOptions = {
   stderr: NodeJS.WriteStream;
   stdin: NodeJS.ReadStream;
   stdout: NodeJS.WriteStream;
+  /** Windows-only fallback for terminals that erase Shift from a bare Enter sequence. */
+  isShiftPressed?: () => boolean;
   cancelBackgroundTask?: TuiCancelBackgroundTask;
   readSubagents?: TuiReadSubagents;
   readSubagentTranscript?: TuiReadSubagentTranscript;

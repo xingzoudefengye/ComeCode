@@ -1,4 +1,9 @@
-import { CliRenderEvents, createCliRenderer, type CliRenderer } from "@mbears/opentui-core";
+import {
+  CliRenderEvents,
+  buildKittyKeyboardFlags,
+  createCliRenderer,
+  type CliRenderer,
+} from "@mbears/opentui-core";
 import type { UiThemeMode } from "@zcode/contracts";
 import { createRoot } from "@mbears/opentui-react";
 import { getZCodeCopy } from "@zcode/i18n";
@@ -7,6 +12,7 @@ import { TuiApp } from "./app.js";
 import { TuiStartupScreen } from "./app-startup.js";
 import { createSelectionCopyHandler, hasCopyableSelectionText } from "./app-copy.js";
 import { activeTuiTheme, resolveTuiThemeMode, setActiveTuiThemeMode } from "./theme/index.js";
+import { createShiftEnterFallbackHandler } from "./tui-keyboard-fallback.js";
 import { resolveInitialTerminalThemeMode } from "./theme/terminal.js";
 import type { TuiOptions } from "./types.js";
 
@@ -26,6 +32,11 @@ export const runTui = async (options: TuiOptions): Promise<number> => {
     consoleMode: "disabled",
     enableMouseMovement: true,
     exitOnCtrlC: false,
+    // 显式请求 Kitty 键盘协议，让 Windows Terminal 等终端保留 Shift+Enter 的修饰键。
+    useKittyKeyboard: {
+      alternateKeys: true,
+      disambiguate: true,
+    },
     // Session replacement can raise SIGPIPE while closing MCP pipes. OpenTUI's
     // default exit signals include it and would destroy the entire TUI.
     exitSignals: ["SIGTERM", "SIGQUIT", "SIGABRT", "SIGHUP", "SIGBREAK", "SIGBUS"],
@@ -49,7 +60,21 @@ export const runTui = async (options: TuiOptions): Promise<number> => {
     targetFps: 30,
     useMouse: true,
   });
-  return runTuiWithRenderer(options, renderer);
+  renderer.prependInputHandler(createShiftEnterFallbackHandler(renderer, options.isShiftPressed));
+  // OpenTUI 的配置只准备解析器；必须显式向终端推送增强键盘协议，
+  // 否则 Windows Terminal 会把 Shift+Enter 当成普通 Enter 发送。
+  renderer.enableKittyKeyboard(
+    buildKittyKeyboardFlags({
+      alternateKeys: true,
+      disambiguate: true,
+      events: true,
+    }),
+  );
+  try {
+    return await runTuiWithRenderer(options, renderer);
+  } finally {
+    renderer.disableKittyKeyboard();
+  }
 };
 
 /** Renderer lifecycle shared by the interactive entrypoint and native terminal tests. */

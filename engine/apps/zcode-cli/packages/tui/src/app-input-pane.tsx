@@ -29,6 +29,7 @@ const PROMPT_TEXTAREA_KEY_BINDINGS = [
   { name: "return", action: "submit" },
   { name: "linefeed", action: "submit" },
   { name: "return", shift: true, action: "newline" },
+  { name: "kpenter", shift: true, action: "newline" },
   { name: "linefeed", shift: true, action: "newline" },
 ] as const;
 
