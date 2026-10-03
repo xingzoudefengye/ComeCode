@@ -232,6 +232,19 @@ test("三种协议连接测试沿用有效模型与凭据，失败不回显正�
   const failed=await testProviderConnection({provider:'api',model:'model-a',confirm:true},config,async()=>{throw new Error('private-key');});assert.doesNotMatch(JSON.stringify(failed),/private-key/u);
 });
 
+test("openai-responses 测试用数组 input + 流式请求，并接受 SSE 或 JSON 响应", async t=>{
+  const f=await fixture(t),doc=document();doc.providers[0].models.push({id:'responses',type:'openai-responses'});await writeFile(join(f.dataRoot,'config.json'),JSON.stringify(doc));const config=await resolveUnifiedConfig(f);
+  let body;
+  const sse=await testProviderConnection({provider:'api',model:'responses',confirm:true},config,async(url,options)=>{body=JSON.parse(options.body);return new Response('event: response.created\ndata: {"type":"response.created","response":{"id":"resp_1","output":[]}}\n\n',{status:200,headers:{'content-type':'text/event-stream'}});});
+  assert.equal(sse.ok,true);
+  assert.deepEqual(body.input,[{role:'user',content:[{type:'input_text',text:'Reply OK'}]}]);
+  assert.equal(body.stream,true);
+  const jsonOk=await testProviderConnection({provider:'api',model:'responses',confirm:true},config,async()=>new Response(JSON.stringify({id:'resp_2',output:[]}),{status:200}));
+  assert.equal(jsonOk.ok,true);
+  const error=await testProviderConnection({provider:'api',model:'responses',confirm:true},config,async()=>new Response('event: response.error\ndata: {"type":"response.error","message":"boom"}\n\n',{status:200}));
+  assert.equal(error.ok,false);
+});
+
 
 test("编辑协议时保留供应商和模型原有的明文或环境变量 Key", async t => {
   const f = await fixture(t);

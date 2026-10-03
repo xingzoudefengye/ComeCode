@@ -38,6 +38,25 @@ function protocolResponseFailure(apiType: ApiType): string {
   return `连接失败：服务返回的不是有效的 ${protocol} 响应，请检查协议和接口地址（兼容接口通常需要填写 /v1）`;
 }
 
+/** OpenAI Responses 测试响应可能是纯 JSON，也可能是流式 SSE；收到有效的 response 即视为连接成功。 */
+function isResponsesTestSuccess(text: string): boolean {
+  const json = parseJson(text);
+  if (json && isRecord(json)) {
+    return typeof json.id === "string" && !json.error && (Array.isArray(json.output) || typeof json.output_text === "string");
+  }
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line.startsWith("data:")) continue;
+    const event = parseJson(line.slice(5).trim());
+    if (!isRecord(event)) continue;
+    const eventResponse = isRecord(event.response) ? event.response : undefined;
+    if (event.type === "response.error" || (eventResponse && Boolean(eventResponse.error))) return false;
+    if (event.type === "response.created" && eventResponse && typeof eventResponse.id === "string") return true;
+    if (event.type === "response.completed") return true;
+  }
+  return false;
+}
+
 /** 只测试统一解析后的有效连接；不给网页任意 URL 代理能力，不回传服务商响应正文。 */
 export async function testProviderConnection(input: unknown, config: ResolvedUnifiedConfig, request: typeof fetch = fetch, timeoutMs = 15000) {
   const parsed = inputSchema.safeParse(input);
@@ -52,7 +71,13 @@ export async function testProviderConnection(input: unknown, config: ResolvedUni
     body = { model: model.id, max_tokens: 16, messages: [{ role: "user", content: "Reply OK" }] };
   } else if (model.apiType === "openai-responses") {
     suffix = "/responses"; headers.Authorization = `Bearer ${model.apiKey}`;
-    body = { model: model.id, max_output_tokens: 16, input: "Reply OK" };
+    // 部分网关（codex 渠道，如 gpt-6.1-sol）要求 input 为数组且必须流式。
+    body = {
+      model: model.id,
+      max_output_tokens: 16,
+      stream: true,
+      input: [{ role: "user", content: [{ type: "input_text", text: "Reply OK" }] }],
+    };
   } else {
     suffix = "/chat/completions"; headers.Authorization = `Bearer ${model.apiKey}`;
     body = { model: model.id, max_completion_tokens: 16, messages: [{ role: "user", content: "Reply OK" }] };
@@ -61,7 +86,10 @@ export async function testProviderConnection(input: unknown, config: ResolvedUni
     const response = await request(`${base}${suffix}`, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs), redirect: "error" });
     const responseText = await response.text();
     if (!response.ok) return { ok: false, status: response.status, message: `连接失败（HTTP ${response.status}），请检查协议、地址、模型和密钥` };
-    if (!isValidProtocolResponse(model.apiType, parseJson(responseText))) return { ok: false, status: response.status, message: protocolResponseFailure(model.apiType) };
+    const valid = model.apiType === "openai-responses"
+      ? isResponsesTestSuccess(responseText)
+      : isValidProtocolResponse(model.apiType, parseJson(responseText));
+    if (!valid) return { ok: false, status: response.status, message: protocolResponseFailure(model.apiType) };
     return { ok: true, status: response.status, message: "连接成功，服务商已返回有效的模型响应" };
   } catch { return { ok: false, message: "连接失败或超时，请检查接口地址、网络和凭据" }; }
 }
