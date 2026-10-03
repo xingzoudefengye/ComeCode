@@ -1,4 +1,8 @@
 export {
+  buildLocalCompactHandoff,
+} from "./local-handoff.js";
+export type { LocalCompactHandoff } from "./local-handoff.js";
+export {
   buildCompactPrompt,
   buildCompactSummaryMessage,
   formatCompactSummary,
