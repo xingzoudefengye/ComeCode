@@ -344,6 +344,7 @@ function ComposerInputArea(props: {
           contentWidth: props.contentWidth,
           commands: props.slashCommands,
           copy: props.copy,
+          currentModel: props.model,
           selectedIndex: props.slashSelection.selectedIndex,
         })
       : null,
