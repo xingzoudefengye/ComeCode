@@ -10,11 +10,11 @@
 
 1. 开发仓库：ComeCode 仓库（`origin` = github.com/xingzoudefengye/ComeCode），`main` 为主分支，功能在 `feat/<任务号>` 分支开发后合并。ZCode 代码在 `engine/`，同步上游时另开 `upstream-sync` 分支执行 `git subtree pull --prefix=engine upstream-zcode main`，解决冲突后再合回 `main`。`codex/` 只作参考，不改、不入库。
 2. 改名分层，控制和上游的差异：
-   - 必须改：npm 包名、`bin` 命令名、数据目录（`~/.comecode`）、用户可见文案、系统提示词中的产品身份。
-   - 不改：内部 `@zcode/*` 包 scope、源码标识符、目录名。避免上万处无意义 diff，导致无法合并上游。
+   - 必须改：npm 包名与对外 `bin`、数据目录（`~/.comecode`）、用户可见文案、系统提示词中的产品身份，以及所有「操作/打包」资产——桌面 `productName`、electron-builder 配置与产物名、安装器脚本、Docker 镜像与 CI 文件名，一律用 `comecode`，不沿用 `zcode` 命名。
+   - 不改：内部 `@zcode/*` 包 scope、源码标识符、目录名。避免上万处无意义 diff，导致无法合并上游；改名后的外部资产在 `upstream-sync` 冲突清单里单独维护。
    - 环境变量：新增 `COMECODE_*`，读取时回退到对应的 `ZCODE_*`，旧变量不删。
 3. 改动集中在 `CLI/adapters`、`CLI/bootstrap`、`CLI/cli` 和新增包；`CLI/core` 尽量只加扩展点，不改内部逻辑。
-4. 不动 `packages/desktop`、`packages/web`、`packages/ui`，也不让 ComeCode 的构建依赖它们。
+4. 不动 `packages/web`、`packages/ui`，也不让 ComeCode 的构建依赖它们；`packages/desktop` 只在 M6 的认可范围内改动（品牌去耦、复用 CLI Agent、会话共享、打包改名），不顺手重构整块 desktop。
 5. 环境：Node 24.14.0，pnpm 10.33.2（见 `engine/mise.toml`）。每个任务完成后至少运行：相关包的 `typecheck`、`lint`、单测，以及 `comecode --help` 冒烟测试。
 6. 从 `codex/` 复制的文本或移植的代码：文件头注明来源和 "Modified by ComeCode"，并在 `NOTICE` 中登记。
 7. 每个任务单独提交一个 PR，PR 描述写清：改了什么、如何验证、已知风险。
@@ -38,10 +38,17 @@ M0 基线
                             T4.1 内嵌 server ─ T4.2 事件总线 ─ T4.3 前端骨架
                             ─ T4.4~T4.8 各页面
                                  └─ M5 发布
-                                     T5.1 npm 包 ─ T5.2 安装脚本 ─ T5.3 文档 ─ T5.4 Docker ─ T5.5 CI
+                                     T5.1 npm 包 ─ T5.2 安装脚本 ─ T5.3 文档 ─ T5.4 Docker
+                                     ─ T5.5 CI 与自动打包 ─ T5.8 多渠道发布 ─ T5.9 插件安装 CLI
+                                         └─ M6 桌面版（复用 CLI Agent，见 M5 发布依赖）
+                                             T6.1 品牌与去耦 ─ T6.2 复用 CLI Agent
+                                             ─ T6.3 与 Web 后台打通 ─ T6.4 打包与自动更新
+                                         └─ M7 插件与 harness 自由度（可与 M6 并行）
+                                             T7.1 加载与安装 ─ T7.2 自定义工具
+                                             ─ T7.3 自定义策略/循环 ─ T7.4 Provider 适配器扩展
 ```
 
-可并行的组合：T2.2/T2.4 互不依赖；M3 与 M4 互不依赖；T4.4~T4.8 互不依赖。
+可并行的组合：T2.2/T2.4 互不依赖；M3 与 M4 互不依赖；T4.4~T4.8 互不依赖；M6 与 M7 互不依赖（M6 复用 CLI Agent，M7 只扩展点）。
 
 ## 当前实现状态（2026-10-01）
 
@@ -52,7 +59,9 @@ M0 基线
 | M2 Provider | 核心已完成 | 统一配置、标准环境变量、三种协议、配置导入已完成；Gemini 原生执行和内置目录本地化不纳入 ComeCode 计划。 |
 | M3 记忆与缓存 | 部分完成 | 512K 上下文、缓存统计、压缩后短上下文、压缩干活指南、工作区 `.ai/` 基础加载和显式保存已完成；不新增压缩原文归档或用户检索入口；`memory.md` 滚动摘要等剩余边界见 T3.2。 |
 | M4 Web 后台 | 部分完成 | 本地管理页、Provider/模型列表、编辑、归类、连接测试已完成；会话、记忆、状态、日志页面仍未完成。 |
-| M5 发布 | 未开始 | npm、安装脚本、Docker、CI 和发布流程尚未进入实现。 |
+| M5 发布 | 未开始 | npm、安装脚本、Docker、CI 和发布流程尚未进入实现；仓库尚无 `.github/`，自动打包与多渠道发布待补。 |
+| M6 桌面版 | 未开始 | 现有 `@zcode/desktop` 是完整 Electron 应用，但被本规划「不维护」排除；需翻转为专用里程碑，改造为 ComeCode Desktop 并复用 CLI Agent。 |
+| M7 插件/harness 自由度 | 未开始 | ZCode 已有 plugins/skills/MCP 机制；本规划只留了「写文档」的 T5.7，需升级为实际扩展能力里程碑（自定义工具、策略、Provider 适配器）。 |
 
 ---
 
@@ -275,14 +284,115 @@ M0 基线
 ### T5.4 Docker
 - 内容：参考 `engine/harness/remote/Dockerfile`；提供镜像，挂载项目目录运行，Web 端口映射；文档说明容器内的安全边界。
 
-### T5.5 CI 与发布流程
-- 内容：GitHub Actions 三平台构建和测试、tag 触发 npm 发布、CHANGELOG。
+### T5.5 CI 与自动打包
+- 依赖：T0.1、T5.1
+- 内容：新增 `.github/workflows/ci.yml`（push/PR 触发）与 `release.yml`（tag 触发）：
+  - ci：三平台（ubuntu / macos / windows）分别安装 Node 24 + pnpm，跑 `pnpm install`、CLI typecheck/lint、CLI 全量回归测试、`comecode --help` 冒烟。
+  - release：三平台构建 CLI（SEA 单文件）与桌面（electron-builder，见 T6.4），生成 Checksums，把产物与 CHANGELOG 一并上传到 GitHub Release。
+- 验收：推 tag 后 Actions 自动产出三平台 CLI + 桌面安装包并挂在 Release 页，人工可下载安装。
 
 ### T5.6 许可证合规
 - 内容：`LICENSE`（Apache-2.0）、`NOTICE` 中写明派生自 ZCode 与 Codex、检查 `THIRD-PARTY-NOTICES.md` 是否需要更新；确认产品名、Logo 不使用上游商标。
 
-### T5.7 插件机制说明
-- 内容：ZCode 已有 plugins/skills/MCP 机制，本任务只做梳理和文档，关闭默认的远程插件市场，支持从本地目录或 git 地址安装。
+### T5.8 多渠道发布
+- 依赖：T5.5
+- 内容：在 GitHub Release 之外，补充便于分发的渠道，供不同用户安装：
+  - `install.sh` / `install.ps1`：检测 Node，调用 `npm i -g` 或下载对应平台 CLI 单文件（离 Node 也可用的 SEA 或独立二进制）。
+  - 包管理器：`winget`（Windows）、`brew`（macOS）清单，指向 GitHub Release；Docker 镜像（T5.4）挂项目目录运行。
+  - 桌面：electron-updater 自动更新指向同一 Release。
+- 验收：在干净的 Windows / macOS / Linux 上，用至少两种方式（命令安装、包安装）各跑通一次 `comecode --help` 与桌面启动。
+
+### T5.9 插件安装 CLI
+- 依赖：M7 的 T7.1
+- 内容：`comecode plugin add <local|git|registry>` / `list` / `remove`；默认关闭远程市场，仅支持本地目录或 git 地址安装；安装后校验目录约定并登记进配置。
+- 验收：从本地目录与 git 地址各安装一个示例插件并能加载（配合 T7.1）。
+
+### T5.10 自愿捐赠（不打扰用户）
+- 依赖：T5.5、M1
+- 原则：**自愿、不打扰**——不在 TUI 会话里弹窗、不拦截任何操作，不强制、不反复。
+- 内容：
+  - `comecode sponsor` 子命令：展示捐赠入口与一句说明，用户主动调用才显示。
+  - `--version`/`--help` 输出里可放一行极简提示（可配置关闭）。
+  - 捐赠信息写进 `README` 与项目主页；TUI 不主动展示。
+  - 可配置项 `donation.remind = off`（默认 off，永不提示），避免打扰。
+- 支付渠道（中美双通道，建议组合）：
+  - **美/国际**：GitHub Sponsors（README 徽章，面向全球、抽成低、开发者为先）；可选 Ko-fi / Buy Me a Coffee（小额、无需公司资质）；不首选 Stripe/PayPal（Stripe 需要公司或受支持国家主体、PayPal 中国个人收款受限）。
+  - **中国大陆**：爱发电（afdian.net，支持微信/支付宝、适合开源个人）、或 GitHub Sponsors 走支付宝通道；可选 B 站工房/公众号赞赏作为补充。
+  - 落地方式：README 与 `comecode sponsor` 列出 GitHub Sponsors + 爱发电两个主入口，其余按需补充。
+- 验收：`comecode sponsor` 输出去渠道链接且不触发外呼之外的副作用；无任何付费拦截；有配置开关可彻底关闭提示。
+
+> T5.7（插件机制说明）已并入 M7，不再单列为纯文档任务，见 M7 依赖关系。
+
+---
+
+## M6 桌面版（V0.6）
+
+目标：把现有 `@zcode/desktop`（Electron，已含 main/preload/renderer/scheduler、remote 远程开发、CUA 浏览器自动化、electron-builder 三平台配置）改造为 ComeCode Desktop，复用同一套 CLI Agent 能力，并与 CLI「会话共享」——做到「桌面像 Codex Desktop 一样可用，但不是一个独立 agent、也不是第二套 core」。
+
+> 前置约定：M6 依赖 CLI Agent（M0~M3）与发布（M5）的产物，因此放到 M6 而不是更早；它与 M7 并行开展（M6 复用 CLI Agent，M7 只动扩展点，互不干扰）。改造时仍遵循 M6.2 的「复用」原则。**命名**：桌面的 `productName`、electron-builder 配置与产物名、安装器、目录一律用 `comecode`，不沿用 `zcode`（见全局约定第 2 条）。
+
+### T6.0 桌面现状盘点
+- 依赖：T0.1
+- 做法：核对 `@zcode/desktop` 的构建入口、登录、遥测、外连（z.ai/CDN）、与 CLI/agent 的边界；列出要移除/改写/保留的三张清单。
+- 交付：`docs/desktop-internals.md`。
+- 验收：文档说清桌面版对上游的差异范围，改动只落在 M6 认可范围内，不顺手重构无关的 desktop 子模块。
+
+### T6.1 品牌与去耦（完整 comecode 命名）
+- 依赖：T6.0
+- 做法：
+  - 身份与文案：`productName`、窗口标题、用户可见文案、系统提示词身份、数据目录（对齐 `~/.comecode`）。
+  - 打包资产改名：electron-builder 配置、产物命名（NSIS/dmg/AppImage 安装器文件名）、应用图标资源、更新 feed 路径，一律 `comecode`，不沿用 `zcode`。
+  - 去耦：去掉强制登录、默认遥测与 z.ai/CDN 外连，规则对齐 M1 的 T1.3/T1.4。
+- 验收：桌面启动即用，配置任一可执行 Provider 即可对话，全程不访问 z.ai/CDN；产物与配置以 `comecode` 命名；`git diff --stat` 受控、可回合上游。
+
+### T6.2 复用 CLI Agent 作为执行内核（会话共享）
+- 依赖：T6.1、M3
+- 做法：
+  - 桌面进程通过本地 RPC/子进程调用同一套 CLI agent（Provider 配置、`.ai/` 记忆、工具、权限模式、压缩），桌面只承担 UI 与文件/终端宿主；`@zcode/desktop` 现有 remote/CUA 等重能力保留并按需开关。
+  - **会话共享**：CLI、桌面、Web 后台读写同一份会话与配置存储；桌面可恢复 CLI 的会话、CLI 可 `comecode --resume` 桌面建的会话，不出现两套记忆/状态分叉。
+- 验收：桌面发起的一次完整对话（含工具调用、记忆写入、权限确认）在 CLI 侧等价复现；同一会话可跨 CLI/桌面/后台查看与恢复。
+
+### T6.3 与 Web 管理后台打通
+- 依赖：T6.2、M4
+- 做法：桌面内嵌或复用 admin server/WS，把会话、Agent 状态、cache 命中率、日志直接呈现在桌面面板，接口与 CLI 的 admin API 一致。
+- 验收：浏览器里看到的会话/状态在桌面内同样可见且一致。
+
+### T6.4 桌面打包与自动更新
+- 依赖：T6.1、T5.5
+- 做法：electron-builder 三平台安装包（win NSIS / mac dmg / linux AppImage.deb），接 `release.yml` 自动上传，electron-updater 从同一 Release 拉取更新；暂不签名也可先出未签名包。
+- 验收：推 tag 后三平台桌面包自动生成并能安装启动。
+
+---
+
+## M7 插件与 harness 自由度（V0.7，先小步开放）
+
+目标：让 ComeCode 具备可扩展能力，但**先小步开放、不追求完整**。本里程碑只开放「插件加载 + 自定义工具」，命名/策略/Provider 等更深的 harness 自由度留到后续；默认关闭远程市场、保持简洁。ZCode 已有 plugins / skills / MCP 机制，本里程碑是把「仅文档」升级为「可落地的插件加载与自定义工具」，并以示例插件验收。
+
+### T7.0 扩展点盘点
+- 依赖：T0.1
+- 做法：梳理 ZCode 现有 plugins、skills、MCP、tool registry 里哪些点已经可以被第三方覆盖、哪些需要新增开放接口；本里程碑只关注「插件发现/加载」与「工具注册」两点，其余只记录不实现。
+- 交付：`docs/extensibility.md`（含插件目录约定、生命周期、权限边界，以及暂缓的能力清单）。
+- 验收：文档能回答「第三方插件现在能做什么、不能做什么、安不安全」，并明确后续开放路线。
+
+### T7.1 插件加载与安装
+- 依赖：T7.0、T5.9
+- 做法：实现本地目录 + git 地址的插件发现/加载、插件清单校验、失败的友好报错；默认关闭远程插件市场。
+- 验收：从本地目录和 git 地址各加载一个空插件，能识别、能卸载，加载失败有明确提示。
+
+### T7.2 自定义工具（本里程碑的交付核心）
+- 依赖：T7.1
+- 做法：插件声明式注册工具（schema + 实现 + 展示说明），复用 tool registry 的校验与权限链路；内置工具与插件工具统一排序以稳定 prompt cache 前缀（对齐 T3.4）。
+- 验收：一个示例插件注册的自定义工具能在对话中启用、受权限模式约束，并出现在后台工具记录里。
+
+### T7.3 自定义策略/循环（暂缓，后续再开）
+- 依赖：T7.2
+- 状态：本里程碑**不做**。等插件加载与自定义工具稳定后，再开放 turn 策略覆盖点（规划/执行/校验、重试、压缩、目标续跑预算）。届时默认仍用内置循环，插件未覆盖时不破坏默认行为。
+- 验收：作为后续任务，不列入 V0.7 验收。
+
+### T7.4 Provider 适配器扩展（暂缓，后续再开）
+- 依赖：T7.2、M2
+- 状态：本里程碑**不做**。后续开放插件注册新的 wire 协议/模型映射，沿用现有 Provider Registry 校验，不要求插件动 core。
+- 验收：作为后续任务，不列入 V0.7 验收。
 
 ---
 
@@ -298,12 +408,26 @@ M0 基线
 要求：只做本任务范围内的改动；按验收标准自测；最后汇报改动文件、验证方式、遗留风险。
 ```
 
-## 3. 待确认事项
+## 3. 已确认事项（2026-10-03）
+
+- 桌面版（M6）：**要做**，目标类似 Codex Desktop。边界已定：保留 `@zcode/desktop` 的 remote/CUA 等重能力并按需开关、**复用 CLI Agent 并会话共享**（CLI/桌面/后台读写同一份会话与配置，可互相恢复）。
+- 插件（M7）：**先小步开放**，本里程碑只做「插件加载 + 自定义工具」，策略/循环与 Provider 适配器留到后续。
+- 命名：对外与操作资产（bin、数据目录、桌面 productName、electron-builder 配置与产物名、安装器、Docker、CI 文件）一律用 `comecode`，不沿用 `zcode`；内部 `@zcode/*` scope 与源码标识符保留以便同步上游。
+- 捐赠（T5.10）：做，且为自愿、不打扰；中美双通道（GitHub Sponsors + 爱发电）。
+- 仓库精简：已删除 `README.orig.md`，一次性验收 spec 已归档到 `docs/archive/`；`codex/`、`ZCode/` 参考克隆**保留**（对照阅读与移植用，不提交）。
+
+## 4. 仍待确认
 
 - npm 包名 `comecode` 是否可用（T5.1 之前确认）。
 - Web 后台是否需要支持从浏览器发起对话（目前的设计是不支持，只做管理）。
 - 记忆写入是否默认需要用户确认（目前的设计是跟随权限模式）。
-- 是否保留 ZCode 的 desktop 应用（目前的设计是不维护）。
+
+## 5. 冗余精简（保持简洁可维护）
+
+目标：在「基于上游改、便于同步」的前提下，减少仓库里失效或重复的资产。原则：可提交的内容才精简，参考克隆与个人文件只标记、不越权删除。
+
+- 已完成：删除 `README.orig.md`（被 `README.md` 取代）；`docs/specs/` 里的一次性验收/状态记录（`CLI-RUNTIME-STATUS.md`、`CLI-OPTIMIZATION-VALIDATION.md`、`CACHE-LIVE-ACCEPTANCE.md`、`M1.md`、`M2.1.md`、`T2.4.md`）归档到 `docs/archive/`；行为规则 spec（`T2.2.md`、`PROVIDER-ONBOARDING.md`、`CLI-UI.md`、`ADMIN-CONFIG.md`、`CLI-CACHE-COMPACT.md`、`GUIDE-HISTORY-PRESENTATION.md`）保留原位。
+- 保留：`codex/`、`ZCode/` 是被 .gitignore 忽略的参考克隆（不提交、占磁盘大），仅供对照阅读与移植引用，不删除。
 
 ## 2026-10-01：统一配置易用性补充
 

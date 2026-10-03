@@ -4,7 +4,7 @@
 
 基于 [ZCode](https://github.com/zai-org/ZCode)（Apache-2.0，代码位于 [engine/](./engine)）二次开发，借鉴 [Codex](https://github.com/openai/codex)（Apache-2.0）的部分设计。许可与署名见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE)。
 
-> 原始构想见 [README.orig.md](./README.orig.md)，实施计划见 [docs/PLAN.md](./docs/PLAN.md)。
+> 实施计划见 [docs/PLAN.md](./docs/PLAN.md)。
 
 ---
 
@@ -18,6 +18,7 @@ comecode
 
 - 终端：进入 TUI，正常对话式 Coding（读文件、改代码、跑测试、修 Bug）。
 - 浏览器：同一进程内启动本地管理后台 `http://127.0.0.1:<port>`，默认只监听本机并带随机 token。
+- 桌面：基于上游 Electron 桌面端改造的 ComeCode Desktop，复用同一套 CLI Agent，与 CLI/Web 后台会话共享（见 [docs/PLAN.md](docs/PLAN.md) M6）。
 - 不需要额外启动 server，不需要登录任何账号，填好 API Key 就能用。
 
 管理后台提供：Provider / 模型配置、会话列表、项目记忆查看与编辑、Agent 实时状态、日志与模型调用记录。
@@ -225,7 +226,9 @@ comecode memory check
 | V0.2 | 多模型 | 标准环境变量；JSON/JSONC（兼容 TOML）；三种执行协议；cc-switch 导入；去掉 z.ai 网关和 CDN 依赖 |
 | V0.3 | 长期会话 | `.ai/` 目录；永续会话分层压缩；目标模式预算；压缩摘要写入记忆；兼容 CLAUDE.md；cache 命中统计 |
 | V0.4 | Web 后台 | CLI 内嵌 server；配置、会话、记忆、状态、日志页面 |
-| V0.5 | 开源发布 | npm 发布、安装脚本、文档、Docker、插件机制说明、上游同步流程 |
+| V0.5 | 开源发布 | npm 发布、安装脚本、文档、Docker、CI 与自动打包、多渠道安装、插件安装 CLI |
+| V0.6 | 桌面版 | 基于上游 Electron 桌面端改造，品牌去耦、复用 CLI Agent、与后台打通、三平台打包与自动更新 |
+| V0.7 | 插件/harness 自由度 | 插件加载、自定义工具、自定义策略/循环、Provider 适配器扩展（关闭默认远程市场） |
 
 每个版本结束都要满足：能构建、能在 Windows / macOS / Linux 启动、核心流程有测试。
 
@@ -240,6 +243,15 @@ comecode memory check
 - ZCode 与 Codex 均为 Apache-2.0。ComeCode 同样使用 Apache-2.0。
 - 保留两个上游的 LICENSE 与 NOTICE，在 NOTICE 中说明派生关系；修改过的文件注明已修改。
 - 不使用 "ZCode"、"Codex"、"Claude" 作为产品名或 Logo。
+
+## 12. 支持与捐赠
+
+ComeCode 由个人自费开发维护，完全免费、无广告、无边界限制。如果你觉得它有用，欢迎自愿支持——支持与否都不影响任何功能，也不会被打扰：
+
+- GitHub Sponsors（国际/信用卡）：[链接]
+- 爱发电 afdian（中国大陆，微信/支付宝）：[链接]
+
+终端里随时可用 `comecode sponsor` 查看捐赠入口；`--version`/`--help` 也只会显示一行极简提示，可在配置里关闭。
 
 ## 最终定位
 
