@@ -8,25 +8,25 @@ const SESSION_LEASE_WAIT_MS = 500;
 const SESSION_LEASE_RETRY_MS = [25, 50];
 const SESSION_LEASE_OWNERLESS_GRACE_MS = 250;
 
-/** 同一 SQLite 会话的可写 Runtime 跨 CLI/Host 独占；活进程不会因超时被偷锁。 */
+/** 占用仅作提醒；释放函数只操作本次取得的锁，未取得时为空操作。 */
 export async function acquireSessionWriterLease(options: {
   dbPath: string;
   sessionId: string;
-}): Promise<() => Promise<void>> {
+}): Promise<(() => Promise<void>) & { acquired: boolean }> {
   const root = `${resolve(options.dbPath)}.writers`;
   await mkdir(root, { recursive: true });
   const key = createHash("sha256").update(options.sessionId).digest("hex");
   try {
-    return await acquireFileLock(
+    const release = await acquireFileLock(
       join(root, key),
       SESSION_LEASE_RETRY_MS,
       SESSION_LEASE_OWNERLESS_GRACE_MS,
       SESSION_LEASE_WAIT_MS,
     );
+    return Object.assign(release, { acquired: true });
   } catch (cause) {
     if ((cause as NodeJS.ErrnoException).code !== ZCODE_FILE_LOCK_TIMEOUT_ERROR_CODE) throw cause;
-    throw Object.assign(new Error("会话正在由另一 CLI 或桌面进程使用，请先关闭该会话后恢复", { cause }), {
-      code: "COMECODE_SESSION_WRITER_BUSY",
-    });
+    // 活进程占用不阻断同会话恢复，也不能释放其他进程的锁。
+    return Object.assign(async () => {}, { acquired: false });
   }
 }

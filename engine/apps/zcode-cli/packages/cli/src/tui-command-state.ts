@@ -18,6 +18,7 @@ import type { CliModeState, CliPermissionMode, CliRuntimeMode } from "./cli-type
 export type TuiPromptHandler = TuiSubmitPrompt & {
   close?: () => Promise<void>;
   getSessionMetadata?: () => Promise<TuiSessionMetadata>;
+  resumeSession?: () => ReturnType<TuiSubmitPrompt>;
   listEffortOptions?: () => Promise<readonly TuiEffortOption[]>;
   listMcpServers?: TuiListMcpServers;
   readSubagents?: import("@zcode/tui").TuiReadSubagents;

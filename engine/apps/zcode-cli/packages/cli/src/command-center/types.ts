@@ -257,6 +257,7 @@ export type CommandCenterApp = {
     interruptedToolCount: number;
     messageCount: number;
     partCount: number;
+    warnings?: string[];
     traceId?: string;
   }>;
   resumeExpertWorkflow?(options?: {

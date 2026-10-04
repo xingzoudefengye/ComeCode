@@ -6,6 +6,7 @@ export function formatResumeResult(
   model?: string,
 ): string {
   return [
+    ...(result.warnings ?? []),
     `Resumed session ${sessionId}.`,
     `Directory: ${result.directory}`,
     ...(model?.trim() ? [`Model: ${model.trim()}`] : []),

@@ -250,16 +250,20 @@ test(
     }
   },
 );
-test("会话 writer lease 拒绝并发写入、隔离会话并在释放后接管", async () => {
+test("会话 writer lease 仅提示占用、隔离会话并在释放后接管", async () => {
   const base = await mkdtemp(join(tmpdir(), "comecode-writer-lease-"));
   let release;
   let other;
   try {
     const dbPath = join(base, "db.sqlite");
     release = await acquireSessionWriterLease({ dbPath, sessionId: "session-a" });
-    await assert.rejects(acquireSessionWriterLease({ dbPath, sessionId: "session-a" }), {
-      code: "COMECODE_SESSION_WRITER_BUSY",
-    });
+    assert.equal(release.acquired, true);
+    const observer = await acquireSessionWriterLease({ dbPath, sessionId: "session-a" });
+    assert.equal(observer.acquired, false);
+    await observer();
+    const stillBusy = await acquireSessionWriterLease({ dbPath, sessionId: "session-a" });
+    assert.equal(stillBusy.acquired, false);
+    await stillBusy();
     other = await acquireSessionWriterLease({ dbPath, sessionId: "session-b" });
     await release();
     release = await acquireSessionWriterLease({ dbPath, sessionId: "session-a" });
