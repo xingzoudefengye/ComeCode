@@ -122,8 +122,9 @@ test("真实 Provider runtime 入口将统一配置 materialize 为旧 JSON 协�
     });
 
     assert.equal(runtimeEnv.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE, builtinFile);
-    assert.equal(runtimeEnv.ZCODE_PERSONAL_PROVIDER_CONFIG_FILE, personalFile);
-    const document = JSON.parse(await readFile(personalFile, "utf8"));
+    assert.notEqual(runtimeEnv.ZCODE_PERSONAL_PROVIDER_CONFIG_FILE, personalFile);
+    await assert.rejects(readFile(personalFile), { code: "ENOENT" });
+    const document = JSON.parse(await readFile(runtimeEnv.ZCODE_PERSONAL_PROVIDER_CONFIG_FILE, "utf8"));
     const decoded = decodeProviderConfigFile(document);
     const provider = decoded.providers.get("runtime-provider");
     assert.equal(provider?.api?.type, "openai-responses");
