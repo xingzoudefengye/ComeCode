@@ -5,7 +5,7 @@ export const ADMIN_SCRIPT = String.raw`
 const fragment = new URLSearchParams(location.hash.slice(1));
 let token = fragment.get('token') || sessionStorage.getItem('comecode-admin-token');
 if (fragment.has('token')) { sessionStorage.setItem('comecode-admin-token', token); history.replaceState(null, '', location.pathname); }
-let snapshot, draft, busy = false, editing = null, modelTestCandidate = null, modelTestFingerprint = "";
+let snapshot, draft, busy = false, editing = null;
 const $ = id => document.getElementById(id);
 const status = (text, error = false) => { $('status').textContent = text; $('status').className = error ? 'error' : ''; };
 const node = (tag, text, className) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (className) element.className = className; return element; };
@@ -143,7 +143,7 @@ function renderModelTypeMenu() {
   const select = $('model-type'), menu = $('model-type-menu');
   menu.replaceChildren();
   modelTypeOptions().forEach(option => {
-    const item = button(option.textContent, () => { $('model-type').value = option.value; syncModelTypeDisplay(); invalidateModelTest(); closeModelTypeMenu(); renderModelTypeMenu(); }, 'protocol-picker-option');
+    const item = button(option.textContent, () => { $('model-type').value = option.value; syncModelTypeDisplay(); closeModelTypeMenu(); renderModelTypeMenu(); }, 'protocol-picker-option');
     item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.value === select.value));
     menu.append(item);
   });
@@ -168,7 +168,7 @@ function selectModelEndpoint() {
   // 换地址时清空新输入的 Key，防止跨供应商误用；存量 Key 不进入表单。
   $('model-key').value = ''; $('clear-key').checked = false;
   $('model-type').value = provider && provider.type ? provider.type : 'openai-chat';
-  syncModelTypeDisplay(); invalidateModelTest(); closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
+  syncModelTypeDisplay(); closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
   if (!provider) $('model-url').focus();
 }
 function openModelDialog(entry) {
@@ -192,10 +192,9 @@ function openModelDialog(entry) {
   $('model-reasoning').value = model && model.reasoningLevel ? model.reasoningLevel : 'high';
   $('clear-key').checked = false;
   $('model-more').open = false;
-  invalidateModelTest();
   $('model-dialog').showModal();
 }
-function closeModelDialog() { editing = null; invalidateModelTest(); $('model-dialog').close(); }
+function closeModelDialog() { editing = null; $('model-dialog').close(); }
 function openProviderDialog(provider) {
   editing = { provider };
   $('provider-dialog-title').textContent = '编辑供应商';
@@ -234,21 +233,6 @@ async function saveProviderDialog(event) {
 }
 function readOptionalNumber(id) { const value = $(id).value.trim(); return value ? Number(value) : undefined; }
 function assignOptional(object, key, value) { if (value === undefined || value === '') delete object[key]; else object[key] = value; }
-function modelDialogFingerprint() {
-  return JSON.stringify([
-    $('model-id').value.trim(), $('model-url').value.trim(), $('model-key').value,
-    $('model-type').value, $('model-name').value.trim(), $('model-context').value.trim(),
-    $('model-output').value.trim(), $('model-tool').value, $('model-vision').value,
-    $('model-reasoning').value,
-    $('clear-key').checked,
-  ]);
-}
-function invalidateModelTest() {
-  modelTestCandidate = null;
-  modelTestFingerprint = '';
-  const submit = $('model-submit');
-  if (submit) submit.disabled = true;
-}
 function applyModelDialogDraft(candidateDraft) {
   const modelId = $('model-id').value.trim(), baseUrl = $('model-url').value.trim(), type = $('model-type').value, key = $('model-key').value;
   if (!modelId || !baseUrl || !type) {
@@ -303,11 +287,10 @@ function applyModelDialogDraft(candidateDraft) {
 }
 async function testModelDialog() {
   if (busy) return;
-  invalidateModelTest();
   const candidate = structuredClone(draft), result = applyModelDialogDraft(candidate);
   if (!result) return;
-  const fingerprint = modelDialogFingerprint();
   busy = true;
+  $('model-submit').disabled = true;
   $('model-test').disabled = true;
   $('model-dialog-help').textContent = '正在测试连接，请稍候…';
   status('正在测试连接…');
@@ -319,36 +302,33 @@ async function testModelDialog() {
     });
     if (!response.ok) {
       const message = response.message || '连接失败，请检查接口地址、模型和 API Key。';
-      $('model-dialog-help').textContent = '测试失败：' + message + ' 模型不会保存。';
+      $('model-dialog-help').textContent = '测试失败：' + message + ' 仍可保存配置。';
       status(message, true);
       return;
     }
-    modelTestCandidate = candidate;
-    modelTestFingerprint = fingerprint;
-    $('model-submit').disabled = false;
-    $('model-dialog-help').textContent = '测试连接成功，现在可以保存此模型。';
+    $('model-dialog-help').textContent = '测试连接成功；测试不会保存配置。';
     status(response.message || '连接测试成功。');
   } catch (error) {
     const message = error instanceof Error ? error.message : '连接测试失败，请检查配置。';
-    $('model-dialog-help').textContent = '测试失败：' + message + ' 模型不会保存。';
+    $('model-dialog-help').textContent = '测试失败：' + message + ' 仍可保存配置。';
     status(message, true);
   } finally {
     busy = false;
     $('model-test').disabled = false;
+    $('model-submit').disabled = false;
   }
 }
 async function saveModelDialog(event) {
   event.preventDefault();
   if (busy) return;
-  if (!modelTestCandidate || modelTestFingerprint !== modelDialogFingerprint()) {
-    const message = '请先点击“测试连接”，测试通过后才能保存模型。';
-    $('model-dialog-help').textContent = message; status(message, true); return;
-  }
+  // 测试只是诊断：保存读取当前表单，不能依赖旧测试结果或旧候选草稿。
+  const candidate = structuredClone(draft);
+  if (!applyModelDialogDraft(candidate)) return;
   const before = structuredClone(draft);
-  draft = structuredClone(modelTestCandidate);
+  draft = candidate;
   const saved = await save();
   if (saved) closeModelDialog();
-  else { draft = before; invalidateModelTest(); render(); }
+  else { draft = before; render(); }
 }
 function defaults() {
   const modelSelect = $('default-model'); modelSelect.replaceChildren();
@@ -474,8 +454,6 @@ window.addEventListener('keydown', event => { if (event.key === 'Escape') { clos
 renderModelTypeMenu(); syncModelTypeDisplay();
 $('model-form').onsubmit = saveModelDialog;
 $('model-test').onclick = testModelDialog;
-$('model-form').addEventListener('input', invalidateModelTest);
-$('model-form').addEventListener('change', invalidateModelTest);
 $('model-cancel').onclick = closeModelDialog;
 $('provider-form').onsubmit = saveProviderDialog;
 $('provider-cancel').onclick = closeProviderDialog;
