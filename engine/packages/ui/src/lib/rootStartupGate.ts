@@ -41,7 +41,8 @@ export function shouldShowRootStartupLoading(state: RootStartupLoadingVisibility
 }
 
 export function shouldEnableProviderAvailabilityLoginEntryGuard(): boolean {
-  return true;
+  // ComeCode 使用用户自带 Provider；无模型配置不应强制厂商登录。
+  return false;
 }
 
 export function shouldResolveProviderStartupState(state: ProviderStartupResolutionState): boolean {

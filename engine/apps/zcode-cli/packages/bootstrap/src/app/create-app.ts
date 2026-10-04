@@ -1,5 +1,6 @@
 import { isAbsolute, join, resolve } from "node:path";
 import {
+  acquireSessionWriterLease,
   createInMemorySessionEventStore,
   createNodeToolArtifactStore,
 } from "@zcode/adapters/storage";
@@ -59,6 +60,7 @@ import { getCliStorageRoot, getModelIoDir, projectIdFromDirectory } from "./path
 import {
   asInputHistoryStore,
   asLocalSettingStore,
+  getSessionDbPath,
   openStartupSessionStore,
   readProjectPermissionMode,
   readSessionModelSelection,
@@ -196,7 +198,12 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
   let nodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
   let ownedNodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
   let providerModelRuntime: ApiProviderModelRuntime | undefined;
+  let releaseSessionWriter: (() => Promise<void>) | undefined;
   try {
+    releaseSessionWriter = await acquireSessionWriterLease({
+      dbPath: getSessionDbPath(configResult, workingDirectory),
+      sessionId,
+    });
     const storageRoot = resolvePath(configResult.config.storage.dir);
     const cliStorageRoot = getCliStorageRoot(storageRoot);
     const modelIoDir = getModelIoDir(
@@ -1115,7 +1122,12 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
           try {
             providerModelRuntime?.dispose();
           } finally {
-            await modelTelemetry.shutdown();
+            try {
+              await modelTelemetry.shutdown();
+            } finally {
+              await releaseSessionWriter?.();
+              releaseSessionWriter = undefined;
+            }
           }
         }
       },
@@ -1279,6 +1291,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       ...inputFacade,
     };
   } catch (error) {
+    await releaseSessionWriter?.();
     providerModelRuntime?.dispose();
     void modelTelemetry.shutdown().catch(() => undefined);
     void ownedNodeReplBrowserBroker?.close();

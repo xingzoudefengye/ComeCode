@@ -60,7 +60,11 @@ function isTruthyRuntimeEnvOverride(name: string): boolean {
 // 这里允许测试显式隔离运行时身份，正常桌面/远控路径保持原来的默认值。
 export const runtimeApplicationName =
   readRuntimeEnvOverride("ZCODE_DESKTOP_APPLICATION_NAME") ??
-  (isLocalDevelopmentRuntime ? "ZCode Dev" : isPreviewPackagedRuntime ? "ZCode Preview" : "ZCode");
+  (isLocalDevelopmentRuntime
+    ? "ComeCode Dev"
+    : isPreviewPackagedRuntime
+      ? "ComeCode Preview"
+      : "ComeCode");
 // Electron 的 app.getPath("home") 不一定跟随测试进程里的 HOME 覆盖。
 // e2e 默认工作区依赖 home 路径，因此提供显式覆盖，避免测试写到开发者真实 ~/ZCodeProject。
 export const runtimeHomePath = readRuntimeEnvOverride("ZCODE_DESKTOP_HOME_DIR");
@@ -553,7 +557,8 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
     // 模型请求默认 header 由 agent 进程构造，过去只继承 shell env 导致桌面启动时拿不到 app 版本。
     // 这里从 main 进程显式下发，agent 子进程继承 host env 后即可稳定写入请求 header。
     [ZCODE_APP_VERSION_ENV]: ZCODE_VERSION,
-    ...(dataBaseDir !== homedir() ? { ZCODE_DATA_BASE_DIR: dataBaseDir } : {}),
+    COMECODE_DATA_BASE_DIR: dataBaseDir,
+    ZCODE_DATA_BASE_DIR: dataBaseDir,
     ...(windowsAppInstallDir ? { [ZCODE_WINDOWS_APP_INSTALL_DIR_ENV]: windowsAppInstallDir } : {}),
     ...(bundledCuaHelperAppPath
       ? { [ZCODE_CUA_BUNDLED_HELPER_APP_PATH_ENV]: bundledCuaHelperAppPath }

@@ -953,6 +953,9 @@ importers:
 
   packages/services:
     dependencies:
+      '@zcode/adapters':
+        specifier: workspace:*
+        version: link:../../apps/zcode-cli/packages/adapters
       '@larksuiteoapi/node-sdk':
         specifier: 1.64.0
         version: 1.64.0

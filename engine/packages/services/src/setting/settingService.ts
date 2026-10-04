@@ -46,6 +46,8 @@ function resolveUserHomeDir() {
   // 独立桌面 Dev 实例已设置自己的 home，设置服务却仍写真实 HOME，
   // 导致启动迁移和外观操作污染其他实例。与 Electron 的显式 home 覆盖保持一致。
   const envHome =
+    process.env.COMECODE_DATA_BASE_DIR?.trim() ||
+    process.env.ZCODE_DATA_BASE_DIR?.trim() ||
     process.env.ZCODE_DESKTOP_HOME_DIR?.trim() ||
     process.env.HOME?.trim() ||
     process.env.USERPROFILE?.trim();
@@ -53,7 +55,7 @@ function resolveUserHomeDir() {
 }
 
 function getSettingsDir() {
-  return join(resolveUserHomeDir(), ".zcode", "v2");
+  return join(resolveUserHomeDir(), ".comecode", "v2");
 }
 
 function getSettingsFile() {
@@ -341,7 +343,7 @@ export function createSettingServiceWithMigrations(): {
       const targetBaseDir = newDir?.trim() || homedir();
       const validation = validateDataBaseDirTarget(targetBaseDir);
       if (!validation.ok) {
-        // Windows 安装目录由安装器/自动更新管理，把 .zcode/v2 放进去可能在升级时被覆盖。
+        // Windows 安装目录由安装器/自动更新管理，把 .comecode/v2 放进去可能在升级时被覆盖。
         // 迁移前在 service 层拦截，避免 UI 入口变化或 RPC 调用绕过前端判断。
         const error = new Error(`${validation.code}: ${validation.forbiddenDir}`);
         (error as Error & { code: string }).code = validation.code;

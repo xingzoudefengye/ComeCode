@@ -10,6 +10,7 @@ import { getAppConfigDir } from "../paths.js";
 import { importLegacyPersonalProviderConfig } from "./legacyPersonalProviderConfigImporter.js";
 
 export interface ProviderConfigRuntimeOptions {
+  readonly prepare?: () => Promise<void>;
   readonly zcodeBuiltinFilePath: string;
   readonly zcodeBuiltinActiveFilePath?: string;
   readonly zcodeBuiltinRemote?: NodeProviderConfigRuntimeOptions["zcodeBuiltinRemote"];
@@ -29,9 +30,11 @@ export interface ProviderConfigRuntimeOptions {
  */
 export class ProviderConfigRuntime {
   readonly configService: NodeProviderConfigRuntime["configService"];
+  readonly #prepare: (() => Promise<void>) | undefined;
   readonly #runtime: NodeProviderConfigRuntime;
 
   constructor(options: ProviderConfigRuntimeOptions) {
+    this.#prepare = options.prepare;
     const runtimeOptions: NodeProviderConfigRuntimeOptions = {
       zcodeBuiltinFilePath: options.zcodeBuiltinFilePath,
       zcodeBuiltinActiveFilePath: options.zcodeBuiltinActiveFilePath,
@@ -57,8 +60,9 @@ export class ProviderConfigRuntime {
     this.configService = this.#runtime.configService;
   }
 
-  start(): Promise<void> {
-    return this.#runtime.start();
+  async start(): Promise<void> {
+    await this.#prepare?.();
+    await this.#runtime.start();
   }
 
   get personalRepository(): NodeProviderConfigRuntime["personalRepository"] {
