@@ -6,6 +6,7 @@
 *.log
 tmp/
 /.pnpm-store/
+/artifacts/comecode/
 /comecode终端会话界面右侧.png
 
 .idea/
