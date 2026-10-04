@@ -18,5 +18,8 @@ packages/**/tests/**/*.js
 packages/**/tests/**/*.d.ts
 packages/**/tests/**/*.js.map
 packages/**/tests/**/*.d.ts.map
+
+# tsc 声明产物（dist-types 仅用于声明 emit，运行时类型走 exports 的 src）
+packages/**/dist-types/
 .VSCodeCounter
 vendor
