@@ -1,0 +1,82 @@
+name: comecode CLI
+
+on:
+  pull_request:
+    paths:
+      - "engine/**"
+      - "scripts/package-comecode-cli.mjs"
+      - ".github/workflows/comecode-cli.yml"
+  push:
+    branches: [main]
+    paths:
+      - "engine/**"
+      - "scripts/package-comecode-cli.mjs"
+      - ".github/workflows/comecode-cli.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comecode-cli-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli:
+    name: comecode CLI / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: engine
+    env:
+      CI: "true"
+      HUSKY: "0"
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      ZCODE_ENV: production
+      ZCODE_DATA_BASE_DIR: ${{ runner.temp }}/comecode-ci-data
+      COMECODE_DATA_BASE_DIR: ${{ runner.temp }}/comecode-ci-data
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Keep in sync with engine/mise.toml and engine/package.json.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+      - name: Install frozen CLI and bundled plugin dependency closure
+        run: pnpm --filter "@zcode/cli..." --filter "@zcode/browser-use-plugin..." --filter "@zcode/node-repl-host..." install --frozen-lockfile
+      - name: Build CLI dependencies before CLI bundle
+        run: pnpm --filter "@zcode/cli..." build
+      - name: Build bundled plugin runtimes
+        run: pnpm --filter @zcode/browser-use-plugin --filter @zcode/node-repl-host build
+      - name: Local mock regressions only
+        run: >-
+          node --import ./apps/zcode-cli/test/typescript-loader.mjs
+          --test --test-isolation=none --test-concurrency=1
+          ./apps/zcode-cli/test/cache-wire.test.mjs
+          ./apps/zcode-cli/test/model-request-headers.test.mjs
+          ./apps/zcode-cli/test/network-defaults.test.mjs
+          ./apps/zcode-cli/test/comecode-env.test.mjs
+      - name: CLI help startup
+        run: node ./apps/zcode-cli/packages/cli/dist/zcode.cjs --help
+      - name: Package and smoke-test extracted distribution
+        working-directory: .
+        run: node scripts/package-comecode-cli.mjs
+      - name: Upload comecode prerelease candidate artifacts only
+        uses: actions/upload-artifact@v4
+        with:
+          name: comecode-cli-${{ runner.os }}-${{ runner.arch }}
+          path: artifacts/comecode/*
+          if-no-files-found: error
+          retention-days: 14
