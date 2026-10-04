@@ -190,6 +190,8 @@ export interface DynamicWorkflowRunServiceDeps {
    * （就是那个「run 永远停在 running」的 bug）。宁可让接线错误在编译期出现。
    */
   parentSessionId: string;
+  /** 其他活 App 持有同会话 lease 时，非终态行不能被当作孤儿。 */
+  reconcileOrphans?: boolean;
   /** world-read（files.glob / files.read / files.grep）落到的文件系统端口。 */
   fileSystemPort: FileSystemPort;
   /** git.* world-read 落到的子进程执行端口（cwd = run 的工作区）。 */
@@ -306,9 +308,8 @@ export function createDynamicWorkflowRunService(
    */
   const escalations: WorkflowEscalationRegistry = createWorkflowEscalationRegistry();
 
-  // 构造即收敛：本实例名下此刻零个在飞 run，所以本会话的非终态行都是死进程的遗物。
-  // 见文件头不变式 4 与 {@link reconcileOrphanRuns}。
-  reconcileOrphanRuns(deps);
+  // 同会话允许多 App 打开；未取得 lease 时，运行中记录可能属于另一个活 App。
+  if (deps.reconcileOrphans !== false) reconcileOrphanRuns(deps);
 
   /**
    * 本进程的并发天花板。

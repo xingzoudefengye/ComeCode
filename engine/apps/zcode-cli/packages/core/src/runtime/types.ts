@@ -710,6 +710,8 @@ export interface CompactTimelineContext {
 }
 
 export interface ResumeSessionResult extends SessionHistoryHydrationResult {
+  /** bootstrap 恢复时的非阻断提示，由客户端显示。 */
+  warnings?: string[];
   directory: string;
   /** 当前恢复候选：允许仅有有效模型身份供界面补选档位，不代表 Runtime 已绑定。 */
   modelSelection?: ModelSelection;
