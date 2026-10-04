@@ -211,10 +211,8 @@ test(
       const sessionId = created.session.sessionId;
       await sendTurn(first.client, sessionId, "CLI first turn");
       const competing = startCli();
-      await assert.rejects(
-        competing.client.request("session/resume", { workspace, sessionId }),
-        /另一 CLI 或桌面进程/,
-      );
+      const shared = await competing.client.request("session/resume", { workspace, sessionId });
+      assert.equal(shared.session.sessionId, sessionId);
       await competing.transport.disposeAndWait();
       await first.transport.disposeAndWait();
       manager = new ZCodeAgentProcessManager({

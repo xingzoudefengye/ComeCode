@@ -43,7 +43,7 @@ test("会话只读查询跳过迁移并拒绝写；归档 SQL 先筛选再分页
     assert.deepEqual((await admin.list(url("?archived=true&limit=1&offset=1"))).sessions.map(s => s.id), ["boundary-0"]);
     assert.deepEqual((await admin.list(url())).sessions.map(s => s.id), ["boundary-3", "boundary-1"]);
     const detail = await admin.detail("boundary-0", url());
-    assert.match(detail.resumeCommand, /--cwd "\/fixture\/work space"/);
+    assert.match(detail.resumeCommand, /--cwd '\/fixture\/work space'/);
     assert.deepEqual(await readFile(f.dbPath), before);
     await assert.rejects(admin.update("boundary-0", { expectedUpdated: detail.session.time.updated, title: "字".repeat(31) }), { status: 400 });
     const updated = await admin.update("boundary-0", { expectedUpdated: detail.session.time.updated, title: "字".repeat(30) });
