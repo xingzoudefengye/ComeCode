@@ -101,7 +101,7 @@ export async function materializeUnifiedConfig(
           properties: {
             ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
             ...(model.toolCalling !== undefined ? { supportsToolCall: model.toolCalling } : {}),
-            ...(model.vision !== undefined ? { inputFormat: { supportsImage: model.vision } } : {}),
+            inputFormat: { supportsImage: model.vision ?? true },
           },
           ...(model.reasoningLevel !== undefined || model.maxOutputTokens !== undefined
             ? {
