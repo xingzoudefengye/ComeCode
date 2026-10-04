@@ -1,9 +1,5 @@
 import React from "react";
-import {
-  filterEffortOptions,
-  reconcileEffortCommandSelection,
-  selectedEffortOption,
-} from "./app-input.js";
+import { filterEffortOptions, selectedEffortOption } from "./app-input.js";
 import type { EffortCommandSelectionState } from "./app-model.js";
 import type { TuiEffortOption } from "./types.js";
 
@@ -11,9 +7,9 @@ export function useEffortCommandController(
   draft: string,
   effortOptions: readonly TuiEffortOption[],
 ): {
-    filteredOptions: readonly TuiEffortOption[];
-    openSelection: () => boolean;
-    reconcileDraft: (value: string) => EffortCommandSelectionState | undefined;
+  filteredOptions: readonly TuiEffortOption[];
+  openSelection: (value?: string) => boolean;
+  reconcileDraft: (value: string) => EffortCommandSelectionState | undefined;
   selectedOption: (submittedValue: string) => TuiEffortOption | undefined;
   selection: EffortCommandSelectionState | undefined;
   setSelection: React.Dispatch<React.SetStateAction<EffortCommandSelectionState | undefined>>;
@@ -23,18 +19,18 @@ export function useEffortCommandController(
     () => filterEffortOptions(draft, effortOptions),
     [draft, effortOptions],
   );
-  const reconcileDraft = React.useCallback(
-    (value: string) => {
-      setSelection(undefined);
-      return undefined;
+  const reconcileDraft = React.useCallback((_value: string) => {
+    setSelection(undefined);
+    return undefined;
+  }, []);
+  const openSelection = React.useCallback(
+    (value = draft) => {
+      if (selection || filterEffortOptions(value, effortOptions).length === 0) return false;
+      setSelection({ selectedIndex: 0 });
+      return true;
     },
-    [],
+    [draft, effortOptions, selection],
   );
-  const openSelection = React.useCallback(() => {
-    if (selection || filteredOptions.length === 0) return false;
-    setSelection({ selectedIndex: 0 });
-    return true;
-  }, [filteredOptions.length, selection]);
   const selectedOption = React.useCallback(
     (submittedValue: string) => selectedEffortOption(submittedValue, selection, filteredOptions),
     [filteredOptions, selection],
