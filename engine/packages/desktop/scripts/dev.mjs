@@ -84,10 +84,11 @@ async function waitForReady() {
   }
 
   // Wait for Vite dev server
-  // Vite 在不同本机 DNS/IPv6 配置下可能只监听 localhost/::1 或 127.0.0.1 其中之一。
-  // 这里轮询多个 loopback 地址，避免 dev 脚本和 Vite 实际监听地址不一致导致 Electron 永远不启动。
-  const viteUrls = ["http://localhost:5174", "http://127.0.0.1:5174", "http://[::1]:5174"];
+  // Vite 在所有平台都显式绑定 127.0.0.1，因此探测固定走 IPv4 回环；
+  // localhost/::1 在部分 Windows 上连接会被拒绝，不再列为备选。
+  const viteUrls = ["http://127.0.0.1:5174"];
   let lastViteWaitLogAt = 0;
+  const viteDeadlineMs = Date.now() + 120_000;
   while (true) {
     const failures = [];
     for (const viteUrl of viteUrls) {
@@ -101,6 +102,11 @@ async function waitForReady() {
     if (now - lastViteWaitLogAt >= waitLogIntervalMs) {
       console.log(`[dev] Waiting for Vite dev server... ${failures.join(" | ")}`);
       lastViteWaitLogAt = now;
+    }
+    if (now > viteDeadlineMs) {
+      throw new Error(
+        "等待 Vite 开发服务器超时：请确认 5174 端口未被其他进程占用，且防火墙未阻止本机 127.0.0.1 连接。",
+      );
     }
     await sleep(300);
   }
