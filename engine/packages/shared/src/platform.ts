@@ -488,6 +488,7 @@ export const DesktopCommandIds = {
   RelaunchApp: "relaunchApp",
   OpenFeedback: "openFeedback",
   OpenCommunity: "openCommunity",
+  OpenAdminConsole: "openAdminConsole",
   ExportLogs: "exportLogs",
   ToggleDevTools: "toggleDevTools",
   OpenResourceManager: "openResourceManager",

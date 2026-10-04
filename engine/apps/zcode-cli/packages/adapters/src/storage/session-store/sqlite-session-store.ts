@@ -241,11 +241,11 @@ export class SqliteSessionStore
     const startupLockTimeoutMs =
       options.startupLockTimeoutMs ?? DEFAULT_SQLITE_STARTUP_LOCK_TIMEOUT_MS;
     try {
-      ensureParentDir(this.dbPath);
+      if (!options.readOnly) ensureParentDir(this.dbPath);
       maybeThrowStorageFsFault({ operation: "sqliteOpen", path: this.dbPath });
       // 多个本地或远程 Agent 会共享同一个 session DB；timeout 必须在执行首条
       // PRAGMA 前生效，否则并发启动会在 migration prelude 直接抛 database is locked。
-      this.db = new DatabaseSync(this.dbPath, { timeout: startupLockTimeoutMs });
+      this.db = new DatabaseSync(this.dbPath, { timeout: startupLockTimeoutMs, readOnly: options.readOnly ?? false });
     } catch (error) {
       throw new SqliteSessionMigrationError(
         `Failed to open SQLite session database at ${this.dbPath}`,
@@ -257,7 +257,7 @@ export class SqliteSessionStore
       );
     }
     try {
-      if (startupToken !== deferredStartup)
+      if (!options.readOnly && startupToken !== deferredStartup)
         runSqliteSessionMigrations(this.db, this.dbPath, startupLockTimeoutMs);
     } catch (error) {
       try {
@@ -276,7 +276,7 @@ export class SqliteSessionStore
     // 未迁移的实例只保留在这个工厂内部；所有 Repo/业务只可能拿到 COMMIT 后的连接。
     const store = new SqliteSessionStore(options, deferredStartup);
     try {
-      await runSqliteSessionMigrationsAsync(store.db, store.dbPath, migrationOptions);
+      if (!options.readOnly) await runSqliteSessionMigrationsAsync(store.db, store.dbPath, migrationOptions);
       return store;
     } catch (error) {
       // close 也可能因 IO 失败；迁移的原始 cause 才是用户应处理的原因。
@@ -643,7 +643,7 @@ export class SqliteSessionStore
     return messageRepository.messageWithParts(this.db, input);
   }
 
-  async messages(input: { sessionID: SessionId }): Promise<MessageWithParts[]> {
+  async messages(input: { sessionID: SessionId; limit?: number; offset?: number }): Promise<MessageWithParts[]> {
     return messageRepository.messages(this.db, input);
   }
 

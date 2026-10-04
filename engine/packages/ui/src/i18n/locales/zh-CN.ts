@@ -2352,6 +2352,10 @@ const zhCN: Record<string, string> = {
   "settings.previewBadge.light": "浅色",
   "settings.previewBadge.dark": "深色",
   "settings.modelProviderTitle": "模型设置",
+  "settings.admin.open": "打开共享管理控制台",
+  "settings.admin.error": "无法打开管理控制台，请重新构建 CLI 或运行 comecode admin。",
+  "settings.admin.description":
+    "读写全局 config.json；保存后重启桌面应用生效，运行中的任务不会即时更新。历史可查看，本版控制台请使用 CLI 恢复命令继续会话；桌面原有会话恢复入口不变。",
   "settings.mcpTitle": "MCP 服务器",
   "settings.mcp.description": "管理 ComeCode Agent 使用的 MCP 服务器配置。",
   "settings.mcp.create.open": "新建 MCP 服务器",
