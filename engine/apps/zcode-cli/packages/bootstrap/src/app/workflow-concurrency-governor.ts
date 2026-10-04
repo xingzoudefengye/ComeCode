@@ -2,7 +2,7 @@
 // Workflow 并发治理器（进程级，按 provider key 分桶，**每个模型请求**准入）
 // ============================================================
 // 一个 CLI 进程里所有 run 加主代理
-// 共用一个 provider 配额，所以治理器是**进程级**的：每个 `${providerId}/${modelId}` 一个桶，
+// 共用一个 provider 配额，所以治理器是**进程级**的：每个 providerId 一个桶，
 // 桶里一台纯 AIMD 状态机（`ConcurrencyController`，@zcode/dynamic-workflow）+ 一条按 run 轮转的
 // 准入队列。
 //
@@ -30,7 +30,7 @@ import { resolveWorkflowConcurrencyCeiling } from "./workflow-concurrency-ceilin
 
 /** provider key：最具体的配额键。 */
 export function workflowConcurrencyKey(model: ModelRequestTarget): string {
-  return `${String(model.providerId)}/${String(model.modelId)}`;
+  return String(model.providerId);
 }
 
 /**
@@ -190,7 +190,8 @@ function createWorkflowConcurrencyGovernor(
             // 准入时已计入 inFlight，这里没有新信息。
             return;
           case "model_request_completed":
-            settle((at) => bucket.controller.succeeded(at, epoch));
+            settle((at) => bucket.controller.succeeded(at, epoch,
+              event.timeToFirstProviderEventMs ?? event.timeToFirstContentMs ?? event.durationMs));
             return;
           case "model_retry_scheduled": {
             const reason: string = event.reason;
@@ -331,6 +332,10 @@ function createWorkflowConcurrencyGovernor(
   // 不排队、不看冷却；observe 在 grant 里。快路径总命中，所以 runner 永远不会为主代理
   // 的请求发 queued / admitted。
   const observerAdmission: ModelRequestAdmission = {
+    forSubagent: (id) => ({
+      tryAcquire: ({ model }) => tryAdmit(id, workflowConcurrencyKey(model)),
+      acquire: ({ model, signal }) => admit(id, workflowConcurrencyKey(model), signal ?? new AbortController().signal),
+    }),
     tryAcquire: ({ model }) => grant(bucketFor(workflowConcurrencyKey(model)), OBSERVER_RUN_ID),
     acquire: ({ model }) =>
       Promise.resolve(grant(bucketFor(workflowConcurrencyKey(model)), OBSERVER_RUN_ID)),

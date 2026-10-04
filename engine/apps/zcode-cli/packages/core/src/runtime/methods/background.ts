@@ -293,15 +293,17 @@ async function stopLocalBashBackgroundTask(
 
 export async function cancelRunningRuntimeBackgroundTasks(
   this: AgentRuntimeInternal,
-  input: { reason: "subagent_cancelled"; traceContext?: TraceContext },
+  input: { reason: "subagent_cancelled" | "turn_terminal"; traceContext?: TraceContext },
 ): Promise<void> {
-  if (this.config.taskType !== "subagent_child") return;
+  if (input.reason === "subagent_cancelled" && this.config.taskType !== "subagent_child") return;
   const traceContext = input.traceContext ?? this.rootTraceContext;
   const tasks = Object.values(this.runtimeTaskRegistry.all()).filter(
     (task) =>
       task.type === "local_bash" &&
       task.isBackgrounded === true &&
-      task.status === "running",
+      task.status === "running" &&
+      (input.reason === "subagent_cancelled" ||
+        (task.backgroundScope === "turn" && traceContext.turnId !== undefined && task.turnId === traceContext.turnId)),
   );
 
   for (const task of tasks) {

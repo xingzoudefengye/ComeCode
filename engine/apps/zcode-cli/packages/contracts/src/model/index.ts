@@ -72,6 +72,8 @@ export interface ModelRequestAdmissionTicket extends ModelStatusSink {
  * 治理器的 observer 实现：`tryAcquire` 总命中、只喂信号。
  */
 export interface ModelRequestAdmission {
+  /** 派生子代理准入：主代理观察端口可为 child 提供排队治理。 */
+  forSubagent?(id: string): ModelRequestAdmission;
   /** 同步快路径：闸门开着且无人排队即给票；否则 undefined，runner 转 `acquire` 并报排队。 */
   tryAcquire?(input: { model: ModelRequestTarget }): ModelRequestAdmissionTicket | undefined;
   acquire(input: {

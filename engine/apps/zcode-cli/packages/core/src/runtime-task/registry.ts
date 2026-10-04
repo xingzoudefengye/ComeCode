@@ -51,6 +51,7 @@ export interface RuntimeTaskSnapshot extends SubagentTaskSnapshot {
   exitCode?: number;
   type: RuntimeTaskType;
   isBackgrounded?: boolean;
+  backgroundScope?: "turn" | "session";
   messageSink?: RuntimeTaskMessageSink;
   output?: AgentOutput;
   parentSessionId?: SessionId;

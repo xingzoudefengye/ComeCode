@@ -854,6 +854,14 @@ export async function executeTurnCommand(
     if (targetRunHeartbeat) {
       clearInterval(targetRunHeartbeat);
     }
+    try {
+      await this.cancelRunningRuntimeBackgroundTasks({ reason: "turn_terminal", traceContext: turnTraceContext });
+    } catch (error) {
+      this.logger?.warn("Temporary background task cleanup failed", {
+        error: error instanceof Error ? error.message : String(error),
+        turnId: String(turnId),
+      });
+    }
     this.releaseTurnStart(turnId);
     clearBrowserTurnState(this.sessionId, turnId);
     this.finishActiveTurn(activeTurn);

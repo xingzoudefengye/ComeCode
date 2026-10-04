@@ -369,6 +369,8 @@ export class NodeExecutionAdapterLifecycle extends NodeExecutionAdapterRun {
       record.status = "cancelled";
       record.controller.abort();
     }
+    await record.completion;
+    await Promise.allSettled([...this.pendingBashProcessTreeKills.keys()]);
     return this.snapshot(record);
   }
 }

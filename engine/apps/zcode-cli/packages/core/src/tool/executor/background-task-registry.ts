@@ -88,6 +88,9 @@ export function registerRuntimeBackgroundTask(
     agentType: existing?.agentType ?? taskType,
     description: existing?.description ?? description,
     isBackgrounded: true,
+    ...(taskType === "local_bash" ? {
+      backgroundScope: existing?.backgroundScope ?? (isRecord(toolCall.input) && toolCall.input.background_scope === "session" ? "session" as const : "turn" as const),
+    } : {}),
     outputFile: outputFile ?? existing?.outputFile,
     parentToolCallId: existing?.parentToolCallId ?? toolCall.id,
     startedAt: existing?.startedAt ?? new Date(),
