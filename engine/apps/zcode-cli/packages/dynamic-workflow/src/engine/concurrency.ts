@@ -35,6 +35,8 @@ export const CONCURRENCY_INCREASE_AFTER_SUCCESSES = 4;
 export const CONCURRENCY_FLOOR = 1;
 /** 某 key 空闲这么久（且无在飞）后遗忘学到的 cap，回天花板。 */
 export const CONCURRENCY_IDLE_RESET_MS = 300_000;
+export const CONCURRENCY_SLOW_RESPONSE_MS = 30_000;
+const SLOW_RESPONSE_SAMPLE_COUNT = 2;
 
 /** 会令 cap 减少的限流类原因。 */
 export type ConcurrencyThrottleReason = Extract<
@@ -64,6 +66,7 @@ export class ConcurrencyController {
   private inFlight = 0;
   private waiters_ = 0;
   private successStreak = 0;
+  private slowResponseStreak = 0;
   private cooldownUntil?: number;
   private lastRequestAt?: number;
   private lastGood?: number;
@@ -131,10 +134,24 @@ export class ConcurrencyController {
    * 完成的 streak 能设 lastGood，减少 cap 不能）。再满足有等待者 **且** `cap < ceiling` → +1。
    * 无等待者时 streak 照累积但不兑现。
    */
-  succeeded(now: number, epoch: number): ConcurrencyChange[] {
+  succeeded(now: number, epoch: number, responseLatencyMs?: number): ConcurrencyChange[] {
     const changes = this.idleReset(now);
     this.inFlight = Math.max(0, this.inFlight - 1);
     if (epoch !== this.epoch) return changes;
+    if (responseLatencyMs !== undefined && Number.isFinite(responseLatencyMs) && responseLatencyMs >= CONCURRENCY_SLOW_RESPONSE_MS) {
+      this.successStreak = 0;
+      this.slowResponseStreak += 1;
+      if (this.slowResponseStreak >= SLOW_RESPONSE_SAMPLE_COUNT) {
+        const previous = this.cap;
+        this.cap = Math.max(CONCURRENCY_FLOOR, Math.floor(this.cap * CONCURRENCY_DECREASE_FACTOR));
+        this.lastGood = undefined;
+        this.slowResponseStreak = 0;
+        this.epoch += 1;
+        if (previous !== this.cap) changes.push(this.change(previous, "slow_response"));
+      }
+      return changes;
+    }
+    this.slowResponseStreak = 0;
     this.successStreak += 1;
     if (this.successStreak < CONCURRENCY_INCREASE_AFTER_SUCCESSES) return changes;
     // 这一级被一整段 streak 证明可用——不论此刻有没有人等着往上爬。
@@ -238,6 +255,7 @@ export class ConcurrencyController {
       return [];
     }
     this.cap = this.ceiling;
+    this.slowResponseStreak = 0;
     this.successStreak = 0;
     this.cooldownUntil = undefined;
     this.lastGood = undefined;

@@ -256,7 +256,7 @@ export interface AgentRuntimeTurnMethods {
     options: RuntimeBackgroundStopOptions,
   ): Promise<RuntimeBackgroundStopResult>;
   cancelRunningRuntimeBackgroundTasks(input: {
-    reason: "subagent_cancelled";
+    reason: "subagent_cancelled" | "turn_terminal";
     traceContext?: TraceContext;
   }): Promise<void>;
   hasRunningBackgroundTasks(): boolean;
