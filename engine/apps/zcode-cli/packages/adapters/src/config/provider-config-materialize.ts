@@ -90,14 +90,14 @@ export async function materializeUnifiedConfig(
     provider.modelConfigs
       .filter(
         (model) =>
-          model.executable || model.enabled === false,
+          model.executable || model.enabled === false || !provider.enabled,
       )
       .map((model) => ({
         providerId: provider.id,
         modelId: model.id,
         config: {
           // 显式模型开关覆盖内置目录规则，停用时保留能力叶子供重新启用恢复。
-          enabled: model.enabled,
+          enabled: provider.enabled && model.enabled,
           properties: {
             ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
             ...(model.toolCalling !== undefined ? { supportsToolCall: model.toolCalling } : {}),

@@ -302,6 +302,11 @@ export interface ListSessionsInput {
   roots?: boolean;
   taskTypes?: SessionTaskType[];
   includeArchived?: boolean;
+  /** 显式归档状态过滤，优先于 includeArchived。 */
+  archived?: boolean;
+  /** 管理页有界查询；搜索按标题或目录的字面子串匹配。 */
+  search?: string;
+  offset?: number;
   limit?: number;
 }
 
@@ -1125,7 +1130,7 @@ export interface SessionStorePort {
     sessionID: SessionId;
     messageID: MessageId;
   }): Promise<MessageWithParts | null>;
-  messages(input: { sessionID: SessionId }): Promise<MessageWithParts[]>;
+  messages(input: { sessionID: SessionId; limit?: number; offset?: number }): Promise<MessageWithParts[]>;
   saveSessionEntry?(input: SessionEntryInfo): Promise<void>;
   sessionEntries?(input: {
     sessionID: SessionId;

@@ -214,18 +214,29 @@ export async function listSessions(
     values.push(...taskTypes);
   }
 
-  if (!input.includeArchived) {
+  if (input.archived === true) {
+    clauses.push("time_archived is not null");
+  } else if (input.archived === false || !input.includeArchived) {
     clauses.push("time_archived is null");
   }
 
+  if (input.search) {
+    clauses.push("(instr(lower(title), lower(?)) > 0 or instr(lower(directory), lower(?)) > 0)");
+    values.push(input.search, input.search);
+  }
   const where = clauses.length > 0 ? `where ${clauses.join(" and ")}` : "";
   const limitValue = input.limit && input.limit > 0 ? input.limit : undefined;
   const limit = limitValue === undefined ? "" : " limit ?";
   if (limitValue !== undefined) {
     values.push(limitValue);
   }
+  const offset = input.offset === undefined ? "" : " offset ?";
+  if (input.offset !== undefined) {
+    if (limitValue === undefined) values.push(-1);
+    values.push(input.offset);
+  }
   const rows = db
-    .prepare(`select * from session ${where} order by time_updated desc, id desc${limit}`)
+    .prepare(`select * from session ${where} order by time_updated desc, id desc${limit || (offset ? " limit ?" : "")}${offset}`)
     .all(...values) as unknown as SessionRow[];
   return rows.map(decodeSessionRow);
 }

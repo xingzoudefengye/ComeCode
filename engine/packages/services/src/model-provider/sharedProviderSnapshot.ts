@@ -18,6 +18,7 @@ export function createSharedProviderSnapshot(options: {
       return filePath;
     },
     prepare(): Promise<void> {
+      // 只合并并发中的投影；成功/失败后都失效，下一次准备重新读取全局配置。
       return (preparing ??= (async () => {
         const config = await materializeUnifiedConfig({
           dataRoot: options.dataRoot,
@@ -31,7 +32,7 @@ export function createSharedProviderSnapshot(options: {
         if (config.diagnostics.errors.length) {
           throw new Error("ComeCode 全局模型配置无效，请使用 comecode config check 检查配置");
         }
-      })());
+      })().finally(() => { preparing = undefined; }));
     },
     async dispose(): Promise<void> {
       await preparing?.catch(() => undefined);

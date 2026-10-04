@@ -231,28 +231,59 @@ test("供应商名称框与齿轮保持同高并垂直居中", () => {
   assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle:hover,\.protocol-picker-toggle:hover\{background:transparent/);
 });
 
-test("供应商名称同行紧随可访问齿轮图标，点击沿用编辑弹框", () => {
+test("供应商卡片菜单保持可访问编辑入口", () => {
   const f = form(providers(), true);
   const heading = f.get("providers").options[0].options[0];
   assert.equal(heading.className, "provider-heading");
-  assert.equal(heading.options.length, 1);
-  const info = heading.options[0], name = info.options[0];
-  assert.equal(name.className, "provider-name");
+  const name = heading.options[0].options[0];
   assert.equal(name.options[0].textContent, "接口 A");
-  const edit = name.options[1];
-  assert.equal(edit.tag, "button");
-  assert.equal(edit.type, "button");
-  assert.equal(edit.className, "provider-edit");
-  assert.equal(edit.textContent, undefined);
-  assert.equal(edit.title, "编辑供应商");
+  const menu = heading.options[1].options.at(-1);
+  assert.equal(menu.tag, "details");
+  const edit = menu.options[1];
   assert.equal(edit.attributes["aria-label"], "编辑供应商");
-  assert.equal(edit.options[0].tag, "svg");
-  assert.equal(edit.options[0].attributes["aria-hidden"], "true");
-  assert.match(edit.options[0].options[0].attributes.d, /^M12\.22/);
   edit.onclick();
   assert.equal(f.get("provider-dialog").open, true);
   assert.equal(f.get("provider-edit-id").value, "first");
-  assert.equal(f.get("provider-edit-name").value, "接口 A");
+});
+
+test("新增空供应商可保存且删除最后模型保留供应商", async () => {
+  const f = form(providers());
+  f.run("openProviderDialog(null)");
+  f.get("provider-edit-name").value = "新服务";
+  f.get("provider-edit-url").value = "https://new.example/v1";
+  f.get("provider-edit-key").value = "fixture-new-key";
+  await f.run("saveProviderDialog({preventDefault(){}})");
+  assert.equal(f.draft().providers.length, 3);
+  assert.equal(f.draft().providers[2].models.length, 0);
+  assert.equal(f.get("provider-edit-key").value, "");
+  f.run("confirmAction = async () => true");
+  await f.run("deleteModel({provider:draft.providers[0],model:draft.providers[0].models[0]})");
+  assert.equal(f.draft().providers[0].models.length, 0);
+});
+
+test("Key 查看仅控制新输入，关闭清空；用户草稿不反写有效覆盖", () => {
+  const f = form(providers());
+  f.get("model-key").type = "password";
+  f.get("model-key-eye").onclick();
+  assert.equal(f.get("model-key").type, "password");
+  f.get("model-key").value = "fixture-input-key";
+  f.get("model-key-eye").onclick();
+  assert.equal(f.get("model-key").type, "text");
+  f.run("closeModelDialog()");
+  assert.equal(f.get("model-key").value, "");
+  f.run('snapshot.config = {providers:[{id:"user",models:[],contextWindow:123456}]}; snapshot.effective.providers = [{id:"project",baseUrl:"https://project.example"}]');
+  assert.equal(JSON.parse(f.run("JSON.stringify(editableDraftFromEffective())")).providers[0].id, "user");
+});
+
+test("供应商开关不改写模型能力或模型自身开关", async () => {
+  const config = providers();
+  config.providers[0].models[0] = {id:"old-a",enabled:false,contextWindow:234567,reasoningLevel:"medium"};
+  const f = form(config);
+  await f.run("toggleProvider(draft.providers[0],false)");
+  assert.equal(f.draft().providers[0].enabled,false);
+  assert.deepEqual(f.draft().providers[0].models,config.providers[0].models);
+  await f.run("toggleProvider(draft.providers[0],true)");
+  assert.equal(f.draft().providers[0].enabled,undefined);
 });
 
 

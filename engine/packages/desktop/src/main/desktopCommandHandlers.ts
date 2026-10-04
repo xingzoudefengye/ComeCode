@@ -21,6 +21,7 @@ import {
   resolveZCodeEndpointOrigin,
 } from "@zcode/shared";
 import { readZCodeStdioTapDevState, setZCodeStdioTapDevEnabled } from "@zcode/services/node";
+import { openDesktopAdminConsole } from "./desktopAdminConsole.js";
 import { showAboutDialog } from "./about.js";
 import { checkForUpdateMenuClick } from "./autoUpdater.js";
 import { exportLogs } from "./exportLogs.js";
@@ -608,6 +609,9 @@ export async function executeDesktopCommand(options: {
         options.logger,
         options.fetchHelpConfig,
       );
+      return;
+    case DesktopCommandIds.OpenAdminConsole:
+      await openDesktopAdminConsole();
       return;
     case DesktopCommandIds.ExportLogs:
       await exportLogs();

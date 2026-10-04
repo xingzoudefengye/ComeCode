@@ -63,7 +63,8 @@ export function createProviderConfigEditor(options: UnifiedConfigLoadOptions) {
       const selectedModel = document.provider && document.model
         ? preview.providers.find((provider) => provider.id === document.provider)?.modelConfigs.find((model) => model.id === document.model)
         : undefined;
-      if (selectedModel?.enabled === false) {
+      const selectedProvider = document.provider ? preview.providers.find((provider) => provider.id === document.provider) : undefined;
+      if (selectedProvider?.enabled === false || selectedProvider?.models.length === 0 || selectedModel?.enabled === false) {
         // 默认模型被停用时自动切到解析器选出的启用模型，避免保存后启动仍指向停用项。
         if (preview.provider && preview.model) document = { ...document, provider: preview.provider, model: preview.model };
         else {
@@ -140,6 +141,7 @@ function mergeSecretFallback(
 
 function resolvedProviderDefinition(provider: ResolvedUnifiedProvider): UnifiedProviderDefinition {
   return {
+    enabled: provider.enabled,
     ...(provider.type ? { type: provider.type } : {}),
     ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
     ...secretFields(provider.apiKey, provider.apiKeySource),

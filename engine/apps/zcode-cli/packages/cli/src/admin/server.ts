@@ -1,14 +1,18 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createProviderConfigEditor, ConfigEditError, resolveUnifiedConfig, type UnifiedConfigLoadOptions } from "@zcode/adapters/config";
-import { ADMIN_HTML, ADMIN_SCRIPT, ADMIN_STYLE } from "./assets.js";
+import { ADMIN_HTML, ADMIN_SCRIPT, ADMIN_STYLE, ADMIN_CONSOLE_STYLE } from "./assets.js";
+import { ADMIN_SESSIONS_SCRIPT, ADMIN_SESSIONS_STYLE } from "./session-assets.js";
 import { testProviderConnection } from "./test-connection.js";
+import { createAdminSessions } from "./sessions.js";
+import type { SessionId } from "@zcode/contracts";
 const BODY_LIMIT = 256 * 1024;
-export interface AdminServerOptions extends UnifiedConfigLoadOptions { readonly port?: number; }
+export interface AdminServerOptions extends UnifiedConfigLoadOptions { readonly port?: number; readonly sessionDbPath?: string; }
 
 /** HTTP 只做本地安全边界与命令转发，配置事实仍归 adapters 的统一解析器。 */
 export async function startAdminServer(options: AdminServerOptions = {}) {
   const editor = createProviderConfigEditor(options);
+  const sessions = createAdminSessions(options);
   const token = randomBytes(32).toString("hex");
   let origin = "";
   const server = createServer(async (request, response) => {
@@ -23,6 +27,13 @@ export async function startAdminServer(options: AdminServerOptions = {}) {
         const incoming = Buffer.from(request.headers.authorization ?? "");
         const expected = Buffer.from(`Bearer ${token}`);
         if (incoming.length !== expected.length || !timingSafeEqual(incoming, expected)) throw new ConfigEditError(401, "管理页面授权已失效，请从终端重新打开链接");
+        if (request.method === "GET" && url.pathname === "/api/sessions") return json(response, 200, await sessions.list(url));
+        const sessionMatch = /^\/api\/sessions\/([^/]+)$/.exec(url.pathname);
+        if (sessionMatch) {
+          const id = decodeURIComponent(sessionMatch[1]!) as SessionId;
+          if (request.method === "GET") return json(response, 200, await sessions.detail(id, url));
+          if (request.method === "PATCH") return json(response, 200, await sessions.update(id, await readBody(request)));
+        }
         if (request.method === "GET" && url.pathname === "/api/config") return json(response, 200, await editor.read());
         if (request.method === "PUT" && url.pathname === "/api/config") return json(response, 200, await editor.save(await readBody(request)));
         if (request.method === "POST" && url.pathname === "/api/test-draft") {
@@ -38,7 +49,7 @@ export async function startAdminServer(options: AdminServerOptions = {}) {
         throw new ConfigEditError(404, "接口不存在");
       }
       if (request.method !== "GET") throw new ConfigEditError(405, "不支持此请求方法");
-      const asset = url.pathname === "/" ? ["text/html", ADMIN_HTML] : url.pathname === "/app.js" ? ["text/javascript", ADMIN_SCRIPT] : url.pathname === "/style.css" ? ["text/css", ADMIN_STYLE] : undefined;
+      const asset = url.pathname === "/" ? ["text/html", ADMIN_HTML] : url.pathname === "/app.js" ? ["text/javascript", ADMIN_SCRIPT + ADMIN_SESSIONS_SCRIPT] : url.pathname === "/style.css" ? ["text/css", ADMIN_STYLE + ADMIN_SESSIONS_STYLE + ADMIN_CONSOLE_STYLE] : undefined;
       if (!asset) throw new ConfigEditError(404, "页面不存在");
       response.writeHead(200, { "Content-Type": `${asset[0]}; charset=utf-8` }); response.end(asset[1]);
     } catch (error) {
@@ -51,7 +62,7 @@ export async function startAdminServer(options: AdminServerOptions = {}) {
   const address = server.address(); if (!address || typeof address === "string") throw new Error("后台监听地址无效");
   origin = `http://127.0.0.1:${address.port}`;
   let closing: Promise<void> | undefined;
-  return { origin, url: `${origin}/#token=${token}`, close: () => closing ??= new Promise<void>((resolve, reject) => { server.close((error) => error ? reject(error) : resolve()); server.closeAllConnections(); }) };
+  return { origin, url: `${origin}/#token=${token}`, close: () => closing ??= new Promise<void>((resolve, reject) => { server.close((error) => { sessions.close(); error ? reject(error) : resolve(); }); server.closeAllConnections(); }) };
 }
 function json(response: ServerResponse, status: number, body: unknown) {
   if (response.destroyed || response.writableEnded) return;
