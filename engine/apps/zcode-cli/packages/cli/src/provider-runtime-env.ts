@@ -1,4 +1,6 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, rmSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import {
   extractCliWorkingDirectory,
   extractProviderCliOverrides,
@@ -19,6 +21,14 @@ import type { CliEnv } from "./env.js";
 import { extractDisallowedToolsArgs, parseGlobalArgs } from "./arguments.js";
 
 export const SEA_ZCODE_BUILTIN_PROVIDER_CONFIG_ASSET_KEY = "zcode-provider/zcode-builtin.json";
+
+const runtimeDirectories = new Set<string>();
+process.once("exit", () => {
+  // 退出阶段无法等待异步 IO，清除含凭据快照；异常中断不以复用旧快照恢复。
+  for (const directory of runtimeDirectories) {
+    try { rmSync(directory, { recursive: true, force: true }); } catch { /* 退出清理不能掩盖原退出码。 */ }
+  }
+});
 
 export function createCliProviderRefreshReporter(
   stderr: Pick<NodeJS.WriteStream, "write"> = process.stderr,
@@ -63,15 +73,19 @@ export async function prepareCliProviderRuntimeEnv(
   const explicitZCodeBuiltin = env[ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]?.trim();
   const explicitPersonal = env[ZCODE_PERSONAL_PROVIDER_CONFIG_FILE_ENV]?.trim();
   const dataBaseDir = resolveComeCodeDataRoot(env, options.dataBaseDir);
-  const personalFilePath =
+  const legacyFilePath =
     explicitPersonal ?? join(dataBaseDir, "v2", PERSONAL_PROVIDER_CONFIG_FILE_NAME);
+  // 每次启动独立快照，避免项目覆盖写回全局来源或并发 Registry 读到另一启动的配置。
+  const runtimeDirectory = await mkdtemp(join(tmpdir(), "comecode-provider-runtime-"));
+  runtimeDirectories.add(runtimeDirectory);
+  const personalFilePath = join(runtimeDirectory, PERSONAL_PROVIDER_CONFIG_FILE_NAME);
   // 统一配置只在 CLI 边界 materialize，旧 Provider Registry 继续读取 JSON。
   const config = await materializeUnifiedConfig({
     cwd: extractCliWorkingDirectory(options.argv),
     dataRoot: dataBaseDir,
     env,
     targetProviderFile: personalFilePath,
-    legacyProviderFile: personalFilePath,
+    legacyProviderFile: legacyFilePath,
     cliOverrides: extractProviderCliOverrides(options.argv),
   });
   if (config.hasSource && config.diagnostics.errors.length) throw new Error(config.diagnostics.errors.join("；"));
@@ -95,7 +109,7 @@ export async function prepareCliProviderRuntimeEnv(
   if (explicitZCodeBuiltin && explicitPersonal) {
     return {
       [ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]: explicitZCodeBuiltin,
-      [ZCODE_PERSONAL_PROVIDER_CONFIG_FILE_ENV]: explicitPersonal,
+      [ZCODE_PERSONAL_PROVIDER_CONFIG_FILE_ENV]: personalFilePath,
     };
   }
 
