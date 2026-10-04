@@ -83,6 +83,10 @@ export function createElectronDesktopContextPromptConfigFetcher(options: {
   resolveEndpointOrigin: () => Promise<string>;
 }): (signal: AbortSignal) => Promise<unknown> {
   return async (signal) => {
+    // ComeCode 本地功能不依赖厂商灰度；默认不请求 client/configs。
+    if (!process.env.ZCODE_ENDPOINT_ORIGIN?.trim()) {
+      return { code: 0, data: { configs: {} } };
+    }
     const { net } = await import("electron");
     const endpointOrigin = await options.resolveEndpointOrigin();
     const url = new URL(`${buildZCodeEndpointUrls(endpointOrigin).origin}/api/v1/client/configs`);

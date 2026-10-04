@@ -9,7 +9,7 @@ function resolve(specifier, context, nextResolve) {
   } catch (error) {
     if (
       error.code !== "ERR_MODULE_NOT_FOUND" ||
-      !specifier.startsWith(".") ||
+      (!specifier.startsWith(".") && !specifier.startsWith("#src/")) ||
       !specifier.endsWith(".js")
     )
       throw error;

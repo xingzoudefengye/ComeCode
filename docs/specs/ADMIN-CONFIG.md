@@ -22,6 +22,23 @@
 - 不新增 Provider/MCP 的逐项目审批命令，不以本轮配置改造改变既有权限体验。
 - 配置隔离只处理内部正确性：项目临时覆盖不应污染其他项目的有效配置。该能力仍待实现，不把未完成草稿作为已交付行为。
 
+## M6 桌面共享配置与会话底层闭环（2026-10-04）
+
+- Electron Main → window-scoped Host → CLI `app-server --stdio` 保持不变；不创建第二套 Agent、消息库或记忆。桌面应用身份为 ComeCode，默认数据根与 CLI 一致为 `~/.comecode`。
+- Host 的模型就绪视图启动前使用 adapters 的统一配置解析器读取全局 JSON/JSONC/TOML 及兼容 Provider 文件，不要求登录、重复 Key 配置或逐项目授权。Host 使用独立临时派生快照，不覆盖用户配置；CLI 子进程继续按实际 workspace 解析项目覆盖。
+- 配置来源唯一为统一配置文件；Host 快照仅供既有 Registry/模型选择展示和就绪判断。当前阶段不改造完整桌面模型编辑界面；旧编辑界面不能被视为统一配置编辑入口，CLI admin 仍是已验收的写入入口。
+- `COMECODE_DATA_BASE_DIR` 优先于兼容的 `ZCODE_DATA_BASE_DIR`；Host 显式数据根传入子进程，配置和会话存储不得因 Electron 的 home/userData 或子进程 cwd 而分叉。显式 storage/sessionDbPath 继续优先。
+- 默认不刷新厂商 Provider CDN，不因无厂商账号自动打开登录页；远程、CUA 和手动登录能力保留，不为共享闭环删除已实现功能。
+- 会话所有者仍是 CLI Runtime/SessionStore；两端通过现有 session/list、session/resume 与 prompt 路径恢复相同 session ID、消息及模型选择。桌面任务索引仅作可重建投影，不导入旧 `.zcode` 数据，不自动重放崩溃时未完成的工具。
+- 可写 Runtime 在创建/冷恢复时通过 adapters 的跨进程会话 lease 获取独占所有权（数据库路径 + session ID）；同一进程重复创建同一会话亦拒绝。持有者存活或身份无法确认时失败关闭，不按超时偷取；正常关闭释放，进程死亡后按 PID 探测回收。恢复失败释放 lease；只读列表/历史读取不获取 lease。该阶段不自动转交、不自动重放工具，进程外修改存储不属于 lease 契约。
+- 验收使用临时数据根、虚构 Key、本地 HTTP mock 及真实 stdio 子进程，覆盖 CLI 创建→Host 恢复继续→CLI 恢复继续、跨项目配置复用及隔离、配置错误、兼容来源与无厂商请求。桌面 UI 实机、完整工具/权限/压缩组合和跨进程 writer 仲裁未经测试不得标记为完成。
+
+```text
+全局 config → adapters 统一解析 → Host 临时 Registry 视图（启动门禁）
+                         └── CLI app-server（workspace 覆盖）→ 同一 SQLite/Runtime
+CLI 恢复 ← session ID / 存储 ← Host session/resume ← Renderer
+```
+
 ## HTTP 安全与生命周期
 
 - 只监听 127.0.0.1，随机 32 字节 token。分享 URL 使用 fragment，不写 token 到 URL query/服务器日志；浏览器读取 token 后清理地址栏并仅存 sessionStorage。

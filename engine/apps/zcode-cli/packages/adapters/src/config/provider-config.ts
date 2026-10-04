@@ -89,6 +89,7 @@ export interface ResolvedUnifiedConfig {
 }
 
 export interface UnifiedConfigLoadOptions {
+  readonly includeProject?: boolean;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly dataRoot?: string;
@@ -120,6 +121,7 @@ const DEFAULT_BASE_URL: Readonly<Record<UnifiedProviderType, string>> = {
 };
 
 export function resolveUnifiedConfigPaths(options: {
+  readonly includeProject?: boolean;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly dataRoot?: string;
@@ -138,7 +140,7 @@ export function resolveUnifiedConfigPaths(options: {
     current = parent;
   }
   const userCandidates = CONFIG_FILE_NAMES.map((name) => join(userRoot, name));
-  const project = projectCandidates.find((candidate) => existsSync(candidate));
+  const project = options.includeProject === false ? undefined : projectCandidates.find((candidate) => existsSync(candidate));
   return Object.freeze({
     user: userCandidates.find((candidate) => existsSync(candidate)) ?? join(userRoot, CONFIG_FILE_NAME),
     userCandidates: Object.freeze(userCandidates),
