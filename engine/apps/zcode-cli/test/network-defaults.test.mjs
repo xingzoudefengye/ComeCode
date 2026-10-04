@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -238,6 +239,16 @@ test("完整会话仅请求用户配置的模型白名单主机", async () => {
     assert.equal(mainComplete?.payload.contextWindow, 32_000);
     assert.equal(result.projection.contextWindow, 32_000);
     assert.ok(requested.length > 0);
+    const database = new DatabaseSync(join(dataRoot, "cli", "db", "db.sqlite"), { readOnly: true });
+    try {
+      const rows = database.prepare("select data from session_entry where type = 'runtime/session_chronicle'").all();
+      assert.equal(rows.length, 1);
+      const chronicle = JSON.parse(rows[0].data);
+      assert.equal(chronicle.entries.length, 1);
+      assert.match(chronicle.entries[0][0], /ComeCode smoke ok/u);
+      assert.equal(chronicle.entries[0][1], "success");
+      assert.ok(JSON.stringify(chronicle).length <= 6000);
+    } finally { database.close(); }
     assert.deepEqual([...new Set(requested.map((url) => url.hostname))], ["model.example"]);
     await assert.rejects(stat(join(root, ".zcode")), { code: "ENOENT" });
   } finally {
