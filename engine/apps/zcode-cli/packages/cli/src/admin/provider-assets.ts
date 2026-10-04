@@ -104,7 +104,7 @@ function render() {
       actions.append(button('编辑', () => openModelDialog(entry)), button('删除', () => deleteModel(entry), 'danger'), testButton, modelSwitch(entry));
       heading.append(title, actions); row.append(heading);
       const meta = node('div', undefined, 'model-meta');
-      meta.append(node('span', model.contextWindow ? model.contextWindow + ' 上下文' : '默认窗口'), node('span', model.vision === true ? '视觉' : model.vision === false ? '无视觉' : '视觉默认'), node('span', model.toolCalling === true ? '工具' : model.toolCalling === false ? '无工具' : '工具默认'), node('span', model.reasoningLevel || '默认思考强度'));
+      meta.append(node('span', model.contextWindow ? model.contextWindow + ' 上下文' : '默认窗口'), node('span', model.vision === true ? '视觉' : model.vision === false ? '无视觉' : '视觉（默认支持）'), node('span', model.toolCalling === true ? '工具' : model.toolCalling === false ? '无工具' : '工具默认'), node('span', model.reasoningLevel || '默认思考强度'));
       row.append(meta); group.append(row);
     });
     group.append(button('+ 添加模型', () => openProviderModel(provider), 'add-provider-model')); container.append(group);
