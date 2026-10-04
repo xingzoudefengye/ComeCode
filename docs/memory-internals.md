@@ -15,7 +15,7 @@ Provider 配置导入已支持：
 
 `project.md` → `decisions.md` → `tasks.md` → `bugs.md` → `memory.md`。
 
-使用 `comecode memory init` 创建模板，`comecode memory path` 查看路径，`comecode memory check` 检查文件状态。`.ai/.local/` 由程序保存内部运行状态，初始化时自动加入 `.gitignore`。用户只需在 TUI 中输入 `/memory save` 触发显式提取；它不覆盖已有文件，是否发生实际修改由当前会话内容决定。
+这些命令均为可选管理入口，不是开始使用或压缩的前置步骤。使用 `comecode memory init` 创建模板，`comecode memory path` 查看路径，`comecode memory check` 检查文件状态。`.ai/.local/` 由程序保存内部运行状态，初始化时自动加入 `.gitignore`。用户只需在 TUI 中输入 `/memory save` 触发显式提取；它不覆盖已有文件，是否发生实际修改由当前会话内容决定。
 
 ## 加载与缓存
 
@@ -32,4 +32,7 @@ Runtime 首次初始化上下文时读取上述五个文件，并按固定顺序
 ## 当前边界
 
 - 旧用户级记忆代码仍保留兼容模块，但 ComeCode 项目记忆默认写入工作区 `.ai/`。
-- 压缩摘要和干活指南由程序自动携带；没有新增压缩原文归档，也不提供 RecallArchive 或 `memory search` 命令。已提交的指南、短上下文和项目记忆机制保持不变。
+- 压缩采用本地短交接，不调用摘要模型、不等待强制记忆提取；长期记忆提取独立，等待与预算边界仍待收尾。
+- 压缩只携带稳定前缀与不超过 6,000 字符的本地交接内容（固定包装另占少量字符），包含当前目标、近期进展、有限工具行动/结果和带来源的约束；不回带大原文尾部、不重放文件源码。实时运行与冷恢复读取同一份持久化交接。
+- 普通回合结束后，已有用户目标和最终回复被本地摘成短小结，写入 SessionStore 单个 `runtime/session_chronicle` entry；包括 JSON 开销总计不超过 6,000 字符。近期层最多 12 条、每条 160 字符；早期层最多 6 条、每条 100 字符；最旧层最多 4 条、每条 60 字符。旧层按代表事项合并，容量不足时继续丢弃，不依赖模型做语义总结。
+- 史书不注入正常请求，明确询问历史时由现有 `ReadSessionContext` 本地读取；缺失或损坏时从旧消息做有界摘录。没有新增压缩原文归档，也不提供 RecallArchive 或 `memory search` 命令。

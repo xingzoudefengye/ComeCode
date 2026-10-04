@@ -59,6 +59,7 @@ import {
   closeGoalStateChangeReminderDeferral,
   openGoalStateChangeReminderDeferral,
 } from "./goal-state-reminder.js";
+import { persistTurnChronicle } from "../helpers/session-chronicle.js";
 import { scheduleProjectMemoryExtraction } from "../helpers/project-memory-extraction.js";
 import { appendBrowserTurnScreenshot } from "./browser-turn-screenshot.js";
 import { clearBrowserTurnState } from "../../repl/browser-turn-state.js";
@@ -674,6 +675,21 @@ export async function executeTurnCommand(
           turnId,
           userMessageId,
         });
+        if (userMessageId && !options?.inputSource) {
+          await persistTurnChronicle({
+            sessionStore: this.sessionStore,
+            sessionId: this.sessionId,
+            sessionPersisted: this.sessionPersisted,
+            logger: this.logger,
+            turn: {
+              origin: { turnId, messageStartId: userMessageId, messageEndId: loopState.stableBoundaryAssistantMessageId, branchGeneration: this.branchGeneration },
+              goal: displayInput,
+              response: loopState.modelResponse,
+              status: "success",
+              endedAt: Date.now(),
+            },
+          });
+        }
         if (shouldRetryTitleGenerationAfterTurn && userMessageId) {
           // 需要请求前刷新 provider runtime headers 的模型
           // 若在主 turn 前生成标题，会先占用鉴权刷新窗口，导致真正的用户消息失败。
@@ -792,6 +808,20 @@ export async function executeTurnCommand(
           turnId,
           userMessageId,
         });
+        if (userMessageId && !options?.inputSource) {
+          await persistTurnChronicle({
+            sessionStore: this.sessionStore,
+            sessionId: this.sessionId,
+            sessionPersisted: this.sessionPersisted,
+            logger: this.logger,
+            turn: {
+              origin: { turnId, messageStartId: userMessageId, branchGeneration: this.branchGeneration },
+              goal: displayInput,
+              status: coreError.type === CoreErrorType.TurnCancelled ? "cancelled" : "failed",
+              endedAt: Date.now(),
+            },
+          });
+        }
         throw coreError;
       }
     }).then(

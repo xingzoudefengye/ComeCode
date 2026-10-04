@@ -3,74 +3,42 @@ import {
   CompactReason,
   CompactTrigger,
   CompactTimelineStatus,
-  MAX_OUTPUT_TOKENS_FOR_SUMMARY,
+  DEFAULT_COMPACT_CONTEXT_WINDOW,
   SessionEventType,
-  createChildTraceContext,
-  isCoreError,
   createMessageId,
   createPartId,
-  traceContextToLogContext,
-  buildCompactPrompt,
   buildCompactSummaryMessage,
-  buildLocalCompactHandoff,
   buildManualCompactBoundary,
   createCompactBoundaryId,
-  getUsageTotalTokens,
 } from "../deps.js";
-import type { SessionEvent, TraceContext } from "../deps.js";
-import { resolveModelRequestSessionTypeFromTaskType } from "./model-request-session-type.js";
+import type { SessionEvent, TraceContext, Model } from "../deps.js";
 import {
   defaultCompactPhaseForTrigger,
   defaultCompactReasonForTrigger,
-  buildPostCompactReadStateReminderEntries,
   buildPostCompactRuntimeEntries,
-  compactFailureReasonFromError,
   estimateRuntimeEntryTokens,
   getRuntimeEntriesToSummarize,
   hasEnoughRuntimeEntriesToCompact,
-  selectCompactEntries,
-  selectCompactEntriesAfterPromptTooLong,
-  selectCompactEntriesForInitialPromptTooLong,
   throwIfTurnAborted,
   isTurnCancellationError,
-  isModelContextExceededError,
-  isModelMediaTooLargeError,
-  logMediaBudgetProjection,
-  logMediaCapabilityProjection,
-  truncateCompactSummaryRequestEntriesAfterPromptTooLong,
-  projectCompactMediaForRetry,
-  projectMessagesForModelMediaPolicy,
-  logCompactMediaRetryProjection,
-  readApprovedPlanFileReferenceEntry,
 } from "../helpers/index.js";
-import type { CompactTimelineContext, RuntimeModelTextResult } from "../types.js";
-import type { Model } from "../deps.js";
+import { buildLocalCompactHandoff, MAX_LOCAL_HANDOFF_CHARS } from "../../compact/local-handoff.js";
+import type { CompactTimelineContext } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { CompactAttemptOutcome } from "./turn-loop-state.js";
 import {
+  countContextPrefixMessages,
   legacySyntheticRuntimeMetadata,
   type RuntimeMessageEntry,
 } from "../../agent/message-history.js";
-import { selectPersistedCompactTail } from "../helpers/compact-preservation.js";
-import {
-  buildCompactSummaryRequestMessages,
-  createCompactContextExceededFinishError,
-  createCompactPromptTooLongError,
-  formatCompactResultOrThrow,
-  persistCompactTimelineEvent,
-} from "./compact-active-helpers.js";
-import { runCompactSummaryModelRequest } from "./compact-summary-model-request.js";
-import { resolveNormalRequestMaxOutputTokens } from "./model-token-limits.js";
-import { createRefreshRuntimeHeadersBeforeModelAttempt } from "./model-runtime-headers.js";
-import { recordModelUsageFact } from "./usage-observability.js";
+import { persistCompactTimelineEvent } from "./compact-active-helpers.js";
 import { createRuntimeModel } from "./runtime-model.js";
 import {
   filterOutputTokenContinuationEntries,
   preserveCanonicalContextPrefix,
 } from "./turn-output-token-continuation.js";
 
-const AUTO_COMPACT_MAX_ATTEMPTS = 3;
-const COMPACT_TOOL_KEEP_MAX_COUNT = 100;
+const LOCAL_COMPACT_MAX_ATTEMPTS = 1;
 
 export async function compactActiveConversation(
   this: AgentRuntimeInternal,
@@ -105,7 +73,7 @@ export async function compactActiveConversation(
   const compactTelemetry = this.agentTelemetry.compaction({
     trigger,
     phase,
-    maxAttempts: AUTO_COMPACT_MAX_ATTEMPTS,
+    maxAttempts: LOCAL_COMPACT_MAX_ATTEMPTS,
     modelMode: this.config.modelStreaming === "off" ? "non_streaming" : "streaming",
     policyContextWindowTokens: options.compactContextTelemetry?.policyContextWindowTokens,
     thresholdTokens: options.compactContextTelemetry?.thresholdTokens,
@@ -185,22 +153,10 @@ async function compactActiveConversationImpl(
   const useMidConversationSystem =
     this.config.midConversationSystem?.mode === "force" ||
     compactModel.properties.supportsMidConversationSystem;
-  const initialSelection = selectInitialCompactEntriesForActiveConversation({
-    activeEntries,
-    initialPromptTooLongCause: options.initialPromptTooLongCause,
-    trigger,
-    useMidConversationSystem,
-  });
-  let currentSelection = initialSelection;
-  let preservedEntries = currentSelection.preservedEntries;
-  const initialEntriesForSummary = currentSelection.entriesForSummary;
-  let entriesForSummary = initialEntriesForSummary;
-  let entriesToSummarize = getRuntimeEntriesToSummarize(entriesForSummary);
+  const entriesToSummarize = getRuntimeEntriesToSummarize(activeEntries);
   const preCompactTokenCount = estimateRuntimeEntryTokens(activeEntries, {
     useMidConversationSystem,
   });
-  const maxAttempts = trigger === CompactTrigger.Auto ? AUTO_COMPACT_MAX_ATTEMPTS : 1;
-  let attempt = 1;
   const compactTimeline: CompactTimelineContext = {
     operationId: `cmp_${crypto.randomUUID()}`,
     messageId: createMessageId(),
@@ -213,7 +169,7 @@ async function compactActiveConversationImpl(
     preCompactTokenCount,
   };
 
-  if (!hasEnoughRuntimeEntriesToCompact(entriesForSummary)) {
+  if (!hasEnoughRuntimeEntriesToCompact(activeEntries)) {
     const skippedPayload = this.buildCompactTimelinePayload(compactTimeline, {
       endedAt: Date.now(),
       replace: true,
@@ -237,7 +193,6 @@ async function compactActiveConversationImpl(
   }
 
   const compactStartedPayload = this.buildCompactTimelinePayload(compactTimeline, {
-    ...(maxAttempts > 1 ? { attempt, maxAttempts } : {}),
     status: CompactTimelineStatus.Started,
   });
   await persistCompactTimelineEvent(
@@ -247,483 +202,133 @@ async function compactActiveConversationImpl(
     turnTraceContext,
     events,
   );
-  // 本地交接不需要初始化 MCP、工具 schema 或媒体投影，也不会发起模型请求。
-  const compactTools: never[] = [];
-  const useLocalHandoff = true;
+  try {
+    throwIfTurnAborted(options.abortSignal);
+    const modelTraceContext = turnTraceContext;
+    const lastSummarizedMessageId = this.latestConversationMessageId;
+    const prefixTokens = estimateRuntimeEntryTokens(
+      activeEntries.slice(0, countContextPrefixMessages(activeEntries)),
+      { useMidConversationSystem },
+    );
+    const configuredWindow = this.config.compact?.contextWindow;
+    const window =
+      configuredWindow && Number.isSafeInteger(configuredWindow) && configuredWindow > 0
+        ? configuredWindow
+        : (compactModel.properties.contextWindow ?? DEFAULT_COMPACT_CONTEXT_WINDOW);
+    const maxChars = Math.max(
+      256,
+      Math.min(
+        MAX_LOCAL_HANDOFF_CHARS,
+        (options.autoCompactThreshold ?? Math.floor(window * 0.5)) - prefixTokens - 1_000,
+      ),
+    );
+    const compactResult = buildLocalCompactHandoff({
+      entries: activeEntries,
+      customInstructions,
+      sessionId: this.sessionId,
+      maxChars,
+    });
+    const persistedSummary = compactResult.summary;
+    const summaryMessageId = createMessageId();
+    const summaryMessageContent = buildCompactSummaryMessage(persistedSummary, {
+      suppressFollowup: true,
+      workGuide: compactResult.guide,
+    });
+    const postCompactEntries = buildPostCompactRuntimeEntries(activeEntries, {
+      message: {
+        role: "user",
+        content: summaryMessageContent,
+      },
+      metadata: legacySyntheticRuntimeMetadata(),
+    });
+    const truePostCompactTokenCount = estimateRuntimeEntryTokens(postCompactEntries, {
+      useMidConversationSystem,
+    });
+    const providerPostCompactTokenCount = truePostCompactTokenCount;
+    const compactBoundary = buildManualCompactBoundary({
+      boundaryId: createCompactBoundaryId(),
+      autoCompactThreshold: options.autoCompactThreshold,
+      compactReason,
+      customInstructions,
+      lastSummarizedMessageId,
+      phase,
+      postCompactTokenCount: providerPostCompactTokenCount,
+      preCompactTokenCount,
+      summarizedMessageCount: entriesToSummarize.length,
+      summaryMessageId,
+      summarySource: "session_memory",
+      traceContext: turnTraceContext,
+      trigger,
+      truePostCompactTokenCount,
+      willRetriggerNextTurn:
+        options.autoCompactThreshold !== undefined
+          ? truePostCompactTokenCount >= options.autoCompactThreshold
+          : undefined,
+    });
 
-  while (true) {
-    try {
-      const modelTraceContext = createChildTraceContext(turnTraceContext, {
-        attributes: {
-          model: `${compactModel.providerId}/${compactModel.modelId}`,
-          querySource: "compact",
-        },
-      });
-      const lastSummarizedMessageId = this.latestConversationMessageId;
-      const compactPrompt = buildCompactPrompt(customInstructions);
-      const handoff = buildLocalCompactHandoff({
-        entries: [...entriesForSummary, ...preservedEntries],
-        preservedEntries,
-        customInstructions,
-      });
-      let result: RuntimeModelTextResult = {
-        finishReason: "stop",
-        text: `<work_guide>\n${handoff.guide}\n</work_guide>\n<summary>\n${handoff.summary}\n</summary>`,
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-      };
-      let compactPromptTooLongAttempts = 0;
-      let stripMediaForSummary = false;
-      const reselectEntriesAfterPromptTooLong = (cause: unknown): boolean => {
-        const reselected = selectCompactEntriesAfterPromptTooLong({
-          currentGroupsPreserved: currentSelection.groupsPreserved,
-          entries: activeEntries,
-          promptTooLongCause: cause,
-          trigger,
-          useMidConversationSystem,
-        });
-        if (!reselected) return false;
-        compactPromptTooLongAttempts += 1;
-        currentSelection = reselected;
-        preservedEntries = reselected.preservedEntries;
-        entriesForSummary = reselected.entriesForSummary;
-        entriesToSummarize = getRuntimeEntriesToSummarize(entriesForSummary);
-        return true;
-      };
-      const truncateEntriesAfterPromptTooLong = (cause: unknown): boolean => {
-        if (!canUseCompactSummaryTruncationFallback(trigger)) return false;
-        const truncated = truncateCompactSummaryRequestEntriesAfterPromptTooLong({
-          attempt: compactPromptTooLongAttempts,
-          cause,
-          entriesForSummary,
-          logger: this.logger,
-          traceContext: modelTraceContext,
-          useMidConversationSystem,
-        });
-        if (!truncated) return false;
-        compactPromptTooLongAttempts += 1;
-        entriesForSummary = truncated;
-        entriesToSummarize = getRuntimeEntriesToSummarize(entriesForSummary);
-        return true;
-      };
+    await this.persistCompactSummary(
+      summaryMessageId,
+      summaryMessageContent,
+      persistedSummary,
+      compactBoundary,
+      modelTraceContext,
+      {
+        model: compactModel,
+        operationId: compactTimeline.operationId,
+      },
+    );
 
-      if (!useLocalHandoff) {
-        while (true) {
-          const requestMessages = buildCompactSummaryRequestMessages(
-            entriesForSummary,
-            compactPrompt,
-          { useMidConversationSystem },
-        );
-        const recordableEntries = filterOutputTokenContinuationEntries(entriesForSummary);
-        const recordableRequestMessages =
-          recordableEntries === entriesForSummary
-            ? requestMessages
-            : buildCompactSummaryRequestMessages(recordableEntries, compactPrompt, {
-                useMidConversationSystem,
-              });
-        // Compact 曾只执行 capability projection，漏掉普通 turn 共用的聚合
-        // 媒体预算；统一走模型媒体策略，避免 summary 请求绕过全局请求上限。
-        const mediaPolicyProjection = projectMessagesForModelMediaPolicy(
-          requestMessages,
-          compactModel.properties.inputFormat,
-        );
-        logMediaCapabilityProjection(
-          this.logger,
-          modelTraceContext,
-          mediaPolicyProjection.capabilityProjection,
-          {
-            event: "compact.request.media_capability_projection",
-            message: "Compact request media capability projection",
-            model: `${compactModel.providerId}/${compactModel.modelId}`,
-          },
-        );
-        logMediaBudgetProjection(
-          this.logger,
-          modelTraceContext,
-          mediaPolicyProjection.mediaBudgetProjection,
-          {
-            event: "compact.request.media_projection",
-            message: "Compact request media budget projection",
-          },
-        );
-        let projectedRequestMessages = mediaPolicyProjection.messages;
-        let projectedRecordableMessages =
-          recordableRequestMessages === requestMessages
-            ? projectedRequestMessages
-            : projectMessagesForModelMediaPolicy(
-                recordableRequestMessages,
-                compactModel.properties.inputFormat,
-              ).messages;
-        if (stripMediaForSummary) {
-          // 复用通用 media budget 文案会污染 summary 的 provider-visible 内容。
-          const mediaProjection = projectCompactMediaForRetry(projectedRequestMessages);
-          projectedRequestMessages = mediaProjection.messages;
-          projectedRecordableMessages =
-            recordableRequestMessages === requestMessages
-              ? projectedRequestMessages
-              : projectCompactMediaForRetry(projectedRecordableMessages).messages;
-          logCompactMediaRetryProjection(this.logger, modelTraceContext, mediaProjection);
-        }
+    const compactBoundaryEvent = this.createEvent(
+      SessionEventType.CompactBoundary,
+      compactBoundary,
+      turnTraceContext,
+    );
+    await this.appendEvent(compactBoundaryEvent, turnTraceContext);
+    events.push(compactBoundaryEvent);
 
-        const modelRequestEvent = this.createEvent(
-          SessionEventType.ModelRequest,
-          {
-            // 事件误用了含 Continue 的实际请求数组，导致 query-local 提示进入持久化轨迹。
-            // 与 v0.16.6 一致：事件记录过滤后的投影，下面的 provider 请求仍使用完整上下文。
-            messages: projectedRecordableMessages,
-            providerId: String(compactModel.providerId),
-            modelId: String(compactModel.modelId),
-            querySource: "compact",
-            toolCount: compactTools.length,
-            compactPromptTooLongRetry: compactPromptTooLongAttempts,
-          },
-          modelTraceContext,
-        );
-        await this.appendEvent(modelRequestEvent, modelTraceContext);
-        events.push(modelRequestEvent);
-        const modelStartedAt = Date.now();
-        const networkEventStartIndex = events.length;
-        const compactSummaryMaxOutputTokens = capCompactSummaryMaxOutputTokens(compactModel);
-        const compactModelRequest = {
-          abortSignal: options.abortSignal,
-          maxOutputTokens: compactSummaryMaxOutputTokens,
-          messages: projectedRequestMessages,
-          metadata: traceContextToLogContext(modelTraceContext),
-          modelRequestSessionType: resolveModelRequestSessionTypeFromTaskType(this.config.taskType),
-          modelCall: {
-            attributes: {
-              compactionOuterAttempt: attempt,
-              compactionTrigger: trigger,
-            },
-            operation: "context_compaction" as const,
-            operationId: compactTimeline.operationId,
-          },
-          statusSink: this.createModelStatusSink(modelTraceContext, events),
-          // compact 的首个真实 provider event 结束 SSE retry 资格；隐藏 partial 在
-          // content block 提交前仍可丢弃并 HTTP fallback，block end 后则禁止任何重放。
-          preserveProviderStreamBoundaries: true,
-          traceContext: modelTraceContext,
-          tools: compactTools,
-          refreshRuntimeHeadersBeforeAttempt: createRefreshRuntimeHeadersBeforeModelAttempt(this, {
-            abortSignal: options.abortSignal,
-            model: compactModel,
-            traceContext: modelTraceContext,
-          }),
-        };
+    const compactCompletedPayload = this.buildCompactTimelinePayload(compactTimeline, {
+      boundaryId: compactBoundary.boundaryId,
+      endedAt: Date.now(),
+      postCompactTokenCount: providerPostCompactTokenCount,
+      replace: true,
+      status: CompactTimelineStatus.Completed,
+      summaryMessageId,
+      tailStartMessageId: lastSummarizedMessageId,
+      truePostCompactTokenCount,
+    });
+    await persistCompactTimelineEvent(
+      this,
+      SessionEventType.CompactCompleted,
+      compactCompletedPayload,
+      turnTraceContext,
+      events,
+    );
 
-        try {
-          result = await runCompactSummaryModelRequest({
-            logger: this.logger,
-            model: compactModel,
-            request: compactModelRequest,
-          });
-        } catch (error) {
-          await recordModelUsageFact(this, {
-            attemptIndex: compactPromptTooLongAttempts,
-            error,
-            events,
-            model: compactModel,
-            networkEventStartIndex,
-            querySource: "compact",
-            startedAt: modelStartedAt,
-            status: isTurnCancellationError(error, options.abortSignal) ? "cancelled" : "error",
-            traceContext: modelTraceContext,
-          });
-          if (isTurnCancellationError(error, options.abortSignal)) {
-            throw error;
-          }
-          if (isModelMediaTooLargeError(error) && !stripMediaForSummary) {
-            stripMediaForSummary = true;
-            this.logger?.info(
-              "Compact summary hit media-size error; retrying with stripped media",
-              {
-                ...traceContextToLogContext(modelTraceContext),
-                errorMessage: error instanceof Error ? error.message : String(error),
-                event: "compact.request.media_too_large.retry",
-                module: "core.runtime",
-              },
-            );
-            continue;
-          }
-          if (isModelContextExceededError(error)) {
-            if (reselectEntriesAfterPromptTooLong(error)) continue;
-            if (truncateEntriesAfterPromptTooLong(error)) continue;
-            throw createCompactPromptTooLongError({
-              attempt: compactPromptTooLongAttempts,
-              cause: error,
-              preCompactTokenCount,
-            });
-          }
-          throw error;
-        }
-
-        await recordModelUsageFact(this, {
-          attemptIndex: compactPromptTooLongAttempts,
-          events,
-          model: compactModel,
-          networkEventStartIndex,
-          querySource: "compact",
-          result,
-          startedAt: modelStartedAt,
-          status: "completed",
-          toolCallCount: this.extractToolCallsFromResult(result).length,
-          traceContext: modelTraceContext,
-        });
-        const contextError = createCompactContextExceededFinishError(result);
-        if (contextError) {
-          // compact summary 也可能以 finishReason 返回超窗而不是 throw；
-          // 必须先进入同一套 recent preserve 重选逻辑，避免 finishReason 路径丢上下文。
-          if (reselectEntriesAfterPromptTooLong(contextError)) continue;
-          if (truncateEntriesAfterPromptTooLong(contextError)) continue;
-          throw createCompactPromptTooLongError({
-            attempt: compactPromptTooLongAttempts,
-            cause: contextError,
-            preCompactTokenCount,
-          });
-        }
-        break;
-        }
-      }
-
-      const compactResult = formatCompactResultOrThrow(this, result);
-      const persistedSummary = compactResult.summary;
-      const planFileReferenceEntry = this.fileSystemPort
-        ? await readApprovedPlanFileReferenceEntry({
-            abortSignal: options.abortSignal,
-            fileSystemPort: this.fileSystemPort,
-            sessionId: this.sessionId,
-            traceContext: modelTraceContext,
-            workspaceRoot: this.workspaceRoot,
-          })
-        : undefined;
-      const postCompactReminderEntries = [
-        ...(planFileReferenceEntry ? [planFileReferenceEntry] : []),
-        ...buildPostCompactReadStateReminderEntries({
-          preservedEntries,
-          readFileState: this.readFileState,
-        }),
-      ];
-
-      const modelCompleteEvent = this.createEvent(
-        SessionEventType.ModelComplete,
-        {
-          content: persistedSummary,
-          stopReason: result.finishReason,
-          usage: result.usage,
-          querySource: "compact",
-          toolCallCount: 0,
-        },
-        modelTraceContext,
-      );
-      await this.appendEvent(modelCompleteEvent, modelTraceContext);
-      events.push(modelCompleteEvent);
-
-      const summaryMessageId = createMessageId();
-      const summaryMessageContent = buildCompactSummaryMessage(persistedSummary, {
-        suppressFollowup: true,
-        workGuide: compactResult.guide,
-      });
-      const postCompactPreservedEntries: readonly RuntimeMessageEntry[] = preservedEntries;
-      const preservation = this.sessionStore
-        ? await selectPersistedCompactTail({
-            sessionStore: this.sessionStore,
-            sessionId: this.sessionId,
-            groupsPreserved: currentSelection.groupsPreserved,
-            summaryMessageId,
-          })
-        : { keptMessageCount: postCompactPreservedEntries.length };
-      const postCompactEntries = buildPostCompactRuntimeEntries(
-        activeEntries,
-        {
-          message: {
-            role: "user",
-            content: summaryMessageContent,
-          },
-          metadata: legacySyntheticRuntimeMetadata(),
-        },
-        {
-          postCompactReminderEntries,
-          preservedEntries: postCompactPreservedEntries,
-        },
-      );
-      const truePostCompactTokenCount = estimateRuntimeEntryTokens(postCompactEntries, {
-        useMidConversationSystem,
-      });
-      const providerPostCompactTokenCount = getUsageTotalTokens(result.usage);
-      const compactBoundary = buildManualCompactBoundary({
-        boundaryId: createCompactBoundaryId(),
-        autoCompactThreshold: options.autoCompactThreshold,
-        compactReason,
-        customInstructions,
-        lastSummarizedMessageId,
-        phase,
-        postCompactTokenCount: providerPostCompactTokenCount,
-        preCompactTokenCount,
-        summarizedMessageCount: entriesToSummarize.length,
-        summaryMessageId,
-        summarySource: "session_memory",
-        traceContext: turnTraceContext,
-        trigger,
-        ...(postCompactPreservedEntries.length > 0
-          ? {
-              keptMessageCount: preservation.keptMessageCount,
-            }
-          : {}),
-        preservedSegment: preservation.preservedSegment,
-        truePostCompactTokenCount,
-        willRetriggerNextTurn:
-          options.autoCompactThreshold !== undefined
-            ? truePostCompactTokenCount >= options.autoCompactThreshold
-            : undefined,
-      });
-
-      await this.persistCompactSummary(
-        summaryMessageId,
-        summaryMessageContent,
-        persistedSummary,
-        compactBoundary,
-        modelTraceContext,
-        {
-          model: compactModel,
-          operationId: compactTimeline.operationId,
-          postCompactReminderEntries,
-        },
-      );
-
-      const compactBoundaryEvent = this.createEvent(
-        SessionEventType.CompactBoundary,
-        compactBoundary,
-        turnTraceContext,
-      );
-      await this.appendEvent(compactBoundaryEvent, turnTraceContext);
-      events.push(compactBoundaryEvent);
-
-      const compactCompletedPayload = this.buildCompactTimelinePayload(compactTimeline, {
-        ...(maxAttempts > 1 ? { attempt, maxAttempts } : {}),
-        boundaryId: compactBoundary.boundaryId,
-        endedAt: Date.now(),
-        postCompactTokenCount: providerPostCompactTokenCount,
-        replace: true,
-        status: CompactTimelineStatus.Completed,
-        summaryMessageId,
-        tailStartMessageId: lastSummarizedMessageId,
-        truePostCompactTokenCount,
-      });
-      await persistCompactTimelineEvent(
-        this,
-        SessionEventType.CompactCompleted,
-        compactCompletedPayload,
-        turnTraceContext,
-        events,
-      );
-
-      this.latestConversationMessageId = summaryMessageId;
-      const recordablePostCompactEntries = filterOutputTokenContinuationEntries(postCompactEntries);
-      this.messageHistory.replaceMessages(
-        options.activeEntries
-          ? preserveCanonicalContextPrefix(
-              this.messageHistory.borrowReadOnlyRuntimeEntries(),
-              recordablePostCompactEntries,
-            )
-          : recordablePostCompactEntries,
-      );
-      this.readFileState.clear();
-      return {
-        displayText: "Compacted",
-        entries: postCompactEntries,
-        outcome: "compacted",
-        tokenCount: providerPostCompactTokenCount,
-      };
-    } catch (error) {
-      if (
-        trigger === CompactTrigger.Auto &&
-        attempt < maxAttempts &&
-        !isTurnCancellationError(error, options.abortSignal) &&
-        isAutoCompactRetryableError(error)
-      ) {
-        attempt += 1;
-        const retryPayload = this.buildCompactTimelinePayload(compactTimeline, {
-          attempt,
-          maxAttempts,
-          reason: compactFailureReasonFromError(error),
-          status: CompactTimelineStatus.Retrying,
-        });
-        // 自动 compact 的中间失败不能提前落成 failed 横线。
-        // 这里在同一个 operation 上发 retrying，直到第 3 次仍失败才写最终 failed。
-        await persistCompactTimelineEvent(
-          this,
-          SessionEventType.CompactStarted,
-          retryPayload,
-          turnTraceContext,
-          events,
-        );
-        this.logger?.warn("Auto compact retrying", {
-          ...traceContextToLogContext(turnTraceContext),
-          attempt,
-          errorMessage: error instanceof Error ? error.message : String(error),
-          event: "compact.auto.retrying",
-          maxAttempts,
-          module: "core.runtime",
-          timelineStatus: CompactTimelineStatus.Retrying,
-        });
-        currentSelection = initialSelection;
-        preservedEntries = currentSelection.preservedEntries;
-        entriesForSummary = initialEntriesForSummary;
-        entriesToSummarize = getRuntimeEntriesToSummarize(entriesForSummary);
-        continue;
-      }
-      await this.finishCompactTimelineFailure({
-        abortSignal: options.abortSignal,
-        attempt,
-        error,
-        events,
-        maxAttempts: maxAttempts > 1 ? maxAttempts : undefined,
-        timeline: compactTimeline,
-        traceContext: turnTraceContext,
-      });
-      throw error;
-    }
+    this.latestConversationMessageId = summaryMessageId;
+    const recordablePostCompactEntries = filterOutputTokenContinuationEntries(postCompactEntries);
+    this.messageHistory.replaceMessages(
+      options.activeEntries
+        ? preserveCanonicalContextPrefix(
+            this.messageHistory.borrowReadOnlyRuntimeEntries(),
+            recordablePostCompactEntries,
+          )
+        : recordablePostCompactEntries,
+    );
+    this.readFileState.clear();
+    return {
+      displayText: "Compacted",
+      entries: postCompactEntries,
+      outcome: "compacted",
+      tokenCount: providerPostCompactTokenCount,
+    };
+  } catch (error) {
+    await this.finishCompactTimelineFailure({
+      abortSignal: options.abortSignal,
+      error,
+      events,
+      timeline: compactTimeline,
+      traceContext: turnTraceContext,
+    });
+    throw error;
   }
-}
-
-function isAutoCompactRetryableError(error: unknown): boolean {
-  return isCoreError(error) ? error.retryable : true;
-}
-
-function canUseCompactSummaryTruncationFallback(trigger: CompactTrigger): boolean {
-  return trigger !== CompactTrigger.Auto && trigger !== CompactTrigger.Reactive;
-}
-
-function selectInitialCompactEntriesForActiveConversation(input: {
-  activeEntries: readonly RuntimeMessageEntry[];
-  initialPromptTooLongCause?: unknown;
-  trigger: CompactTrigger;
-  useMidConversationSystem?: boolean;
-}) {
-  const baseSelection = selectCompactEntries({
-    entries: input.activeEntries,
-    trigger: input.trigger,
-  });
-  if (input.initialPromptTooLongCause === undefined) {
-    return baseSelection;
-  }
-
-  return (
-    selectCompactEntriesForInitialPromptTooLong({
-      entries: input.activeEntries,
-      promptTooLongCause: input.initialPromptTooLongCause,
-      trigger: input.trigger,
-      useMidConversationSystem: input.useMidConversationSystem,
-    }) ?? baseSelection
-  );
-}
-
-function capCompactSummaryMaxOutputTokens(model: Model): number {
-  // Compact 是独立执行链，在这里显式选择模型上限与 summary 20K 上限中的较小值。
-  const desired = Math.min(
-    resolveNormalRequestMaxOutputTokens({
-      modelMaxOutputTokens: model.optionSpecs.maxOutputTokens.max,
-    }),
-    MAX_OUTPUT_TOKENS_FOR_SUMMARY,
-  );
-  return Math.min(desired, model.optionSpecs.maxOutputTokens.max);
 }
