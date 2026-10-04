@@ -231,7 +231,7 @@ test("供应商名称框与齿轮保持同高并垂直居中", () => {
   assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle:hover,\.protocol-picker-toggle:hover\{background:transparent/);
 });
 
-test("供应商卡片菜单保持可访问编辑入口", () => {
+test("供应商名字后的图标保持可访问编辑入口", () => {
   const f = form(providers(), true);
   const heading = f.get("providers").options[0].options[0];
   assert.equal(heading.className, "provider-heading");
@@ -239,7 +239,7 @@ test("供应商卡片菜单保持可访问编辑入口", () => {
   assert.equal(name.options[0].textContent, "接口 A");
   const menu = heading.options[1].options.at(-1);
   assert.equal(menu.tag, "details");
-  const edit = menu.options[1];
+  const edit = name.options[1];
   assert.equal(edit.attributes["aria-label"], "编辑供应商");
   edit.onclick();
   assert.equal(f.get("provider-dialog").open, true);

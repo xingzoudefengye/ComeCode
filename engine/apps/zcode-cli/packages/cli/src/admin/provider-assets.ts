@@ -55,7 +55,7 @@ function providerSwitch(provider) {
   input.type = 'checkbox'; input.checked = provider.enabled !== false; input.disabled = busy;
   input.setAttribute('role', 'switch'); input.setAttribute('aria-label', '启用供应商 ' + (provider.name || provider.id));
   input.onchange = () => toggleProvider(provider, input.checked);
-  label.append(input, track); return label;
+  label.append(input, track, node('span', provider.enabled === false ? '已停用' : '已启用', 'model-toggle-label')); return label;
 }
 async function deleteProvider(provider) {
   if (!await confirmAction('删除供应商', '删除供应商及其模型配置？不会删除会话。')) return;
@@ -70,19 +70,25 @@ function openProviderModel(provider) {
 function render() {
   defaults(); const container = $('providers'); container.replaceChildren();
   const selector = $('provider-selector'); selector.replaceChildren();
-  selector.append(button('全部供应商', () => { selectedProviderId = ''; render(); }, selectedProviderId ? '' : 'selected'));
-  draft.providers.forEach(provider => selector.append(button(provider.name || provider.id, () => { selectedProviderId = provider.id; render(); }, selectedProviderId === provider.id ? 'selected' : '')));
   if (!draft.providers.some(provider => provider.id === selectedProviderId)) selectedProviderId = '';
+  const all = node('option', '全部供应商'); all.value = ''; selector.append(all);
+  draft.providers.forEach(provider => {
+    const option = node('option', provider.name || provider.id); option.value = provider.id; selector.append(option);
+  });
+  selector.value = selectedProviderId;
+  selector.onchange = () => { selectedProviderId = selector.value; render(); };
   if (!draft.providers.length) container.append(node('div', '还没有供应商。添加供应商后可配置模型。', 'empty'));
   draft.providers.filter(provider => !selectedProviderId || provider.id === selectedProviderId).forEach(provider => {
     const group = node('section', undefined, 'provider-group');
     const heading = node('div', undefined, 'provider-heading'), info = node('div'), name = node('div', undefined, 'provider-name');
-    name.append(node('strong', provider.name || provider.id), node('span', provider.enabled === false ? '已停用' : '已启用', 'enabled-badge'));
+    const edit = button('', () => openProviderDialog(provider), 'provider-edit');
+    edit.setAttribute('aria-label', '编辑供应商'); edit.title = '编辑供应商';
+    edit.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6Z"></path><path d="m14 5 5 5"></path></svg>';
+    name.append(node('strong', provider.name || provider.id), edit, node('span', provider.enabled === false ? '已停用' : '已启用', 'enabled-badge'));
     info.append(name, node('span', (provider.models || []).length + ' 个模型', 'provider-meta'));
     const actions = node('div', undefined, 'actions'), menu = node('details', undefined, 'provider-menu');
-    menu.append(node('summary', '菜单'));
-    const edit = button('编辑供应商', () => openProviderDialog(provider)); edit.setAttribute('aria-label', '编辑供应商');
-    menu.append(edit, button('删除供应商', () => deleteProvider(provider), 'danger'));
+    const more = node('summary', '⋯'); more.setAttribute('aria-label', '供应商更多操作'); more.title = '供应商更多操作';
+    menu.append(more, button('删除供应商', () => deleteProvider(provider), 'danger'));
     actions.append(providerSwitch(provider), menu); heading.append(info, actions); group.append(heading);
     const fields = node('div', undefined, 'provider-fields');
     for (const [label, value] of [['Base URL', provider.baseUrl || '未设置'], ['API 格式', protocolName(provider.type)], ['API Key', provider.hasApiKey || provider.apiKeyEnv ? '已配置 · 不回显' : '未配置']]) {
