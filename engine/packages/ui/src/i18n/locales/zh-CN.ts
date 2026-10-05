@@ -4517,6 +4517,7 @@ const zhCN: Record<string, string> = {
   "chat.toolbar.modelSwitch.stage.persistingWorkspace": "正在写入工作区默认模型...",
   "chat.toolbar.modelSwitch.lockedByRunningTask": "当前有任务运行中，完成后可切换模型供应商。",
   "chat.toolbar.modelSwitch.lockedByRunningTask.short": "任务运行中",
+  "chat.toolbar.modelSwitch.failed": "模型切换未生效，请重试或重新选择模型。",
   "chat.goal.runningBlocked": "请结束任务后设定目标。",
   "chat.goal.planModeBlocked": "Goal 无法在 Plan 模式下使用，请切换模式。",
   "chat.plan.attachmentsBlocked": "首版 /plan 仅支持纯文本，请移除附件或上下文后重试。",
