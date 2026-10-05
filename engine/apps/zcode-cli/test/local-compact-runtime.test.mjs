@@ -18,6 +18,8 @@ function fixture() {
   const persisted = [];
   const runtime = {
     config: {},
+    loadProjectMemoryRoot: async () => undefined,
+    loadUserMemoryRoot: async () => undefined,
     sessionId: "sess-local-fixture",
     messageHistory: history,
     readFileState: new Map([["big", { content: "源码".repeat(100_000) }]]),

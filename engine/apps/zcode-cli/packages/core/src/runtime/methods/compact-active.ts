@@ -38,6 +38,9 @@ import {
   preserveCanonicalContextPrefix,
 } from "./turn-output-token-continuation.js";
 
+import { reloadMemorySnapshot } from "./context.js";
+import { rebuildContextPrefix } from "./context-refresh.js";
+
 const LOCAL_COMPACT_MAX_ATTEMPTS = 1;
 
 export async function compactActiveConversation(
@@ -147,8 +150,9 @@ async function compactActiveConversationImpl(
   // Active compact 会跨多个 await 保留这份成员浅快照；它依赖 RuntimeMessageEntry
   // 不可变约定。selection、provider render 和最终 replace 会创建各自拥有的副本，
   // 禁止在 compact 期间原地修改 activeEntries 内共享的 entry/message/content。
+  await reloadMemorySnapshot(this, turnTraceContext);
   const activeEntries = [
-    ...(options.activeEntries ?? this.messageHistory.borrowReadOnlyRuntimeEntries()),
+    ...rebuildContextPrefix(this, { model: compactModel, turnRequestEntries: options.activeEntries }),
   ];
   const useMidConversationSystem =
     this.config.midConversationSystem?.mode === "force" ||

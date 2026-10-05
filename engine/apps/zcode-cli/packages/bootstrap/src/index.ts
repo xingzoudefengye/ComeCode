@@ -72,6 +72,7 @@ export { mapSessionEvent } from "./zcode-protocol/session-mapper.js";
 export { prepareZCodeTelemetryEnv, shutdownZCodeTelemetry } from "./telemetry-bootstrap.js";
 export { projectSessionTranscript } from "./session-transcript.js";
 export { getSessionDbPath } from "./app/session-store.js";
+export { getCliStorageRoot } from "./app/paths.js";
 export type { SessionTranscriptMessage, SessionTranscriptPart } from "./session-transcript.js";
 export { listZCodeSessions, resolveLatestSession } from "./sessions.js";
 export { inspectZCodeSkill, listZCodeSkills } from "./skills.js";

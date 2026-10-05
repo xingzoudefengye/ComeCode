@@ -193,7 +193,8 @@ T5.5 CLI 发布基础 + M6 功能验收 → T6.4 桌面打包 → T5.8 分发扩
 - 项目记忆是独立辅助功能，初始化和显式保存均可选，不能成为启动、压缩或继续工作的前置步骤；压缩不强制增加任何记忆模型调用。
 - 后台提取采用合理默认预算，不阻塞前台；保存可取消、有等待上限，失败保留现有内容，不要求用户修复后才能继续。
 - 保留现有写入权限、内容冲突检查及敏感信息过滤；滚动摘要以有界、低成本处理为先，不为旧历史无限调用模型。
-- `both` 尚未完整双读写，当前滚动主要丢弃旧段落；先补实际使用中的可靠性问题，不扩展一套新的记忆系统。
+- 2026-10-05 工作区收尾：`both` / `user` 已接双根稳定背景与固定白名单事务提取，默认仍 project；用户 profile/preferences 各 2k、快照含标题 4k，managed chronicle 6k 自动衰减且仅按需 ReadSessionContext(scope=user) 读取。新 turn / compact 边界刷新，tool steps 不读盘，user-first 双 section 总预算含说明 48k。提取固定输入16k字符/累计输出2k token、3turn/30s；普通用户目录写入不自动放行。enabled/use=false 禁用，桌面 memoryEnabled 控制 enabled。无旧 hashed 迁移、旧 history.md 导入、跨设备/远端同步或新增管理 UI；预算暂固定常量。规格见 `docs/specs/USER-MEMORY.md`。
+- 2026-10-05 验证补记：一次完整 CLI 344项（339通过、5失败），本轮4项fixture/旧文案兼容已修，另1项Windows EBUSY临时目录清理独立复测通过；修后定向41/41、37/37，不宣称修后全量通过。core/bootstrap/CLI无emit、engine根及CLI聚合类型通过；一次依赖聚合构建/help通过，架构0违规、diff check通过。根lint70 warning/0 error；CLI聚合仍受既有max-lines阻断，未扩大重构。预算暂固定、长会话实机与UI管理未验收。
 - 已验证（本轮工作区）：CLI 全量本地回归 245/245 通过，包含真实普通回合 SQLite 史书落盘；万轮史书容量、连续压缩、无新用户消息续作、显式小窗口、冷恢复、取消/保存失败和本地历史查询通过。core/CLI 包与 engine 根类型检查通过，依赖优先 CLI 构建及 `--help` 通过，架构 0 违规，本轮定向 lint/格式检查通过。
 - 检查限制：CLI 聚合 typecheck/lint 因缺少 `turbo` 无法运行；engine 根 lint 有 70 个既有 warning、0 error，根格式检查有 2,846 个文件不符合现有格式。未调用付费模型，尚无重启后真实长会话体验验收；后台记忆预算、保存等待、并发与 `both` 双读写仍未完成。
 
