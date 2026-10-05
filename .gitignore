@@ -9,6 +9,16 @@ tmp/
 /artifacts/comecode/
 /comecode终端会话界面右侧.png
 
+# 与项目无关的临时分析文档
+/docs/AIDER-MIGRATION-PLAN.md
+/docs/ANALYSIS.md
+/docs/COMPLETE-IMPLEMENTATION-PLAN.md
+/docs/WEB-REBUILD-PLAN.md
+
+# engine 目录下的测试临时文件
+/engine/NUL
+/engine/test-*.md
+
 .idea/
 
 /.ai/
