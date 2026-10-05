@@ -313,6 +313,15 @@ interface HeadlessWorkflowRuntimeFacts {
 
 /** 轮询间隔。等待期是分钟量级的，这个粒度的开销可忽略，而它决定退出的响应度。 */
 const HEADLESS_WORKFLOW_POLL_INTERVAL_MS = 100;
+/**
+ * Headless 下后台 workflow 的默认硬截止时间。
+ *
+ * 这不是工具输出的空闲超时：只要任务持续产生有效进展，就可以继续运行；它只负责
+ * 防止 workflow/通知链因脚本永不收口而让父命令无限等待。交互式 TUI 不走这条等待器。
+ */
+export const DEFAULT_HEADLESS_WORKFLOW_DEADLINE_MS = 30 * 60 * 1_000;
+
+export type HeadlessWorkflowWaitResult = "settled" | "aborted" | "deadline_exceeded";
 
 /**
  * 等在飞的 workflow run 结算 **+ 完成通知驱动的回合跑完**。
@@ -327,25 +336,31 @@ const HEADLESS_WORKFLOW_POLL_INTERVAL_MS = 100;
  * 谓词刻意**宽于 dwf**：并存的后台 Bash/subagent 任务也会被等。它们的通知回合与工作流的
  * 交织在同一条队列上，分开等没有意义。窄的那一半是**触发**（`hasWorkflowActivity`），
  * 所以没有 dwf 活动的运行完全不受影响。
- *
- * 不设超时、不设 env 逃生口：控制手段是 Cancel 与 Ctrl-C，后者经既有孤儿收敛
- * 把 run 记成 `stopped(interrupted)`（失败码 `Interrupted`，可 resume）。signal 一旦 abort 就立刻返回，绝不吞信号。
  */
 export const waitForHeadlessWorkflowSettle = async (input: {
+  deadlineMs?: number;
   intervalMs?: number;
   runtime: HeadlessWorkflowRuntimeFacts;
   signal: AbortSignal;
   sleep?: (ms: number) => Promise<void>;
-}): Promise<void> => {
+  onDeadlineExceeded?: () => void;
+}): Promise<HeadlessWorkflowWaitResult> => {
   const intervalMs = input.intervalMs ?? HEADLESS_WORKFLOW_POLL_INTERVAL_MS;
+  const deadlineMs = input.deadlineMs ?? DEFAULT_HEADLESS_WORKFLOW_DEADLINE_MS;
+  const deadlineAt = Number.isFinite(deadlineMs) && deadlineMs > 0 ? Date.now() + deadlineMs : undefined;
   const sleep =
     input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   while (!input.signal.aborted) {
     if (!input.runtime.hasRunningBackgroundTasks() && !input.runtime.hasActiveOrQueuedTurnWork()) {
-      return;
+      return "settled";
+    }
+    if (deadlineAt !== undefined && Date.now() >= deadlineAt) {
+      input.onDeadlineExceeded?.();
+      return "deadline_exceeded";
     }
     await sleep(intervalMs);
   }
+  return "aborted";
 };
 
 /**
