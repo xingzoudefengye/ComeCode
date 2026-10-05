@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x64
+          - os: windows-2022
+            target: windows-x64
+          - os: macos-14
+            target: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+
+      - name: Install dependencies
+        working-directory: engine
+        run: |
+          pnpm install --frozen-lockfile
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+      - name: Build CLI
+        working-directory: engine
+        run: pnpm build:sea
+
+      - name: Package distribution
+        run: node scripts/package-comecode-cli.mjs
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: comecode-${{ matrix.target }}
+          path: artifacts/comecode/*
+          retention-days: 7
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure
+        run: ls -R artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
+          body: |
+            ## 🚀 安装方式
+
+            ### 快速安装（推荐）
+
+            **Linux / macOS**:
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/xingzoudefengye/ComeCode/main/install.sh | bash
+            ```
+
+            **Windows (PowerShell)**:
+            ```powershell
+            iwr https://raw.githubusercontent.com/xingzoudefengye/ComeCode/main/install.ps1 | iex
+            ```
+
+            ### 手动下载
+
+            从下方选择对应平台的压缩包下载：
+            - `comecode-*-linux-x64.tar.gz` - Linux x64
+            - `comecode-*-windows-x64.zip` - Windows x64
+            - `comecode-*-darwin-arm64.tar.gz` - macOS Apple Silicon
+
+            解压后将可执行文件添加到 PATH。
+
+            ### npm 安装（即将支持）
+
+            ```bash
+            npm install -g comecode
+            ```
+
+            ## 📖 使用文档
+
+            - [用户使用指南](https://github.com/xingzoudefengye/ComeCode/blob/main/docs/USER-GUIDE.md)
+            - [开发环境搭建](https://github.com/xingzoudefengye/ComeCode/blob/main/docs/dev-setup.md)
