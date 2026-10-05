@@ -55,7 +55,8 @@ jobs:
         run: pnpm build:sea
 
       - name: Package distribution
-        run: node scripts/package-comecode-cli.mjs
+        run: node ../scripts/package-comecode-cli.mjs
+        working-directory: engine
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
