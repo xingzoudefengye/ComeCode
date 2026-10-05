@@ -21,7 +21,8 @@ test("缺少 Provider 的 TUI 只提示配置，不进入登录状态", async (t
   t.after(() => rm(root, { recursive: true, force: true }));
   const handler = createCommandCenter({
     hasSelectableModels: async () => false,
-    getProviderSetupResponse: () => providerSetupResponse("zh-CN", { COMECODE_DATA_BASE_DIR: root }, root),
+    getProviderSetupResponse: () =>
+      providerSetupResponse("zh-CN", { COMECODE_DATA_BASE_DIR: root }, root),
     getMode: () => "build",
     getLocale: () => "zh-CN",
   });
@@ -37,7 +38,8 @@ test("没有可用模型时所有操作统一进入 Provider 配置引导", asyn
   t.after(() => rm(root, { recursive: true, force: true }));
   const handler = createCommandCenter({
     hasSelectableModels: async () => false,
-    getProviderSetupResponse: () => providerSetupResponse("zh-CN", { COMECODE_DATA_BASE_DIR: root }, root),
+    getProviderSetupResponse: () =>
+      providerSetupResponse("zh-CN", { COMECODE_DATA_BASE_DIR: root }, root),
     getLocale: () => "en-US",
     getMode: () => "yolo",
   });
@@ -62,7 +64,7 @@ test("/memory save 调用当前会话的项目记忆保存入口", async () => {
   });
   const result = await handler("/memory save", {});
   assert.equal(calls, 1);
-  assert.match(result.response, /已执行项目记忆保存/u);
+  assert.match(result.response, /已按配置作用域执行长期记忆保存/u);
   assert.match((await handler("/memory", {})).response, /用法/u);
 });
 
@@ -106,7 +108,10 @@ test("显式旧登录命令只返回配置引导", async (t) => {
   );
   assert.equal(status, 1);
   assert.match(output, /comecode config setup/u);
-  const handler = createCommandCenter({ getProviderSetupResponse: () => providerSetupResponse("zh-CN", { COMECODE_DATA_BASE_DIR: root }, root) });
+  const handler = createCommandCenter({
+    getProviderSetupResponse: () =>
+      providerSetupResponse("zh-CN", { COMECODE_DATA_BASE_DIR: root }, root),
+  });
   assert.match((await handler("/login", {})).response, /comecode config setup/u);
 });
 

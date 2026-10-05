@@ -32,7 +32,6 @@ import type { Model } from "../deps.js";
 import type { ProviderContextUsageSnapshot } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { autoCompactDecisionLogContext } from "./compact-log-context.js";
-import { saveProjectMemory } from "../helpers/project-memory-extraction.js";
 import { resolveNormalRequestMaxOutputTokens } from "./model-token-limits.js";
 import type {
   AutoCompactLoopContext,
@@ -245,7 +244,6 @@ export async function autoCompactIfNeeded(
     return "rapid_refill_blocked";
   }
 
-  await saveProjectMemory.call(this, turnTraceContext);
   this.logger?.info("Auto compact started", {
     ...traceContextToLogContext(turnTraceContext),
     event: "compact.auto.started",

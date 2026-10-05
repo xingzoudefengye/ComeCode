@@ -10,7 +10,10 @@ import { SLASH_COMMAND_HELP_ENTRIES, type SlashCommandHelpEntry } from "./slash-
 import type { SlashCommand } from "./slash-command-types.js";
 import { splitArgs } from "./utils.js";
 
-export const AVAILABLE_COMMANDS = [...SLASH_COMMAND_HELP_ENTRIES.map((entry) => `/${entry.name}`), "/memory"];
+export const AVAILABLE_COMMANDS = [
+  ...SLASH_COMMAND_HELP_ENTRIES.map((entry) => `/${entry.name}`),
+  "/memory",
+];
 
 const SKILL_COMMAND_USAGE = "Usage: /skill [<skill-name> [task]]";
 
@@ -259,7 +262,7 @@ export function listSlashCommandSuggestions(
   customCommands?: CommandCenterCustomCommandListOutcome,
 ): TuiSlashCommandSuggestion[] {
   return [
-    { name: "memory", summary: "保存当前会话的项目记忆", usage: "/memory save" },
+    { name: "memory", summary: "保存当前会话的长期记忆（按配置作用域）", usage: "/memory save" },
     ...SLASH_COMMAND_HELP_ENTRIES.map((entry) => ({
       ...(entry.aliases ? { aliases: entry.aliases } : {}),
       name: entry.name,
@@ -279,8 +282,9 @@ export function formatSlashCommandHelp(
     if (target === "memory") {
       return [
         "/memory save",
-        "将当前会话中值得长期保留的信息写入项目 .ai/。",
-        "只允许保存项目事实、决策、任务和已知问题；不会保存密钥或临时聊天内容。",
+        "按配置的 user/project/both 作用域保存当前会话中值得长期保留的信息。",
+        "用户记忆保留跨项目偏好与长期约束，项目记忆保留事实、决策、任务和已知问题；不会保存密钥或临时聊天内容。",
+        "自动用户史书由运行时管理；此命令不手动追加史书。",
       ].join("\n");
     }
     const entry = findSlashCommandHelpEntry(target);
@@ -295,7 +299,7 @@ export function formatSlashCommandHelp(
   const lines = [
     "Slash commands:",
     ...SLASH_COMMAND_HELP_ENTRIES.map((entry) => `- ${entry.usage}: ${entry.summary}`),
-    "- /memory save: 保存当前会话的项目记忆",
+    "- /memory save: 保存当前会话的长期记忆（按配置作用域）",
   ];
   if (customCommands && customCommands.commands.length > 0) {
     lines.push(

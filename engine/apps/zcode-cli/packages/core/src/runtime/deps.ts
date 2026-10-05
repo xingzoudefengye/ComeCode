@@ -291,6 +291,7 @@ export {
   MAX_OUTPUT_TOKENS_FOR_SUMMARY,
   buildCompactPrompt,
   buildCompactSummaryMessage,
+  buildLocalCompactHandoff,
   buildManualCompactBoundary,
   createCompactBoundaryId,
   estimateMessageTokens,

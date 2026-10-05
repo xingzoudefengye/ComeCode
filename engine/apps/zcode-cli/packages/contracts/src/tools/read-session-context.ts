@@ -11,6 +11,12 @@ export const ReadSessionContextStrategySchema = z.enum(["relevant", "handoff"]);
 
 export const ReadSessionContextInputSchema = z
   .object({
+    scope: z
+      .enum(["session", "user"])
+      .optional()
+      .describe(
+        "Default session; user reads only enabled local cross-project managed history. Still supply the current sessionId.",
+      ),
     sessionId: z
       .string()
       .regex(SESSION_ID_PATTERN, "Session id must use the sess_* format.")

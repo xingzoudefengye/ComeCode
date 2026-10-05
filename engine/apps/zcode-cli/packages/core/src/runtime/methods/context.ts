@@ -14,17 +14,48 @@ import type {
 } from "../deps.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { ensureMemoryDirectoryExists } from "../../memory/directory.js";
-import { formatProjectMemorySnapshot, projectMemoryFilePath, PROJECT_MEMORY_FILES, type ProjectMemoryFileName } from "../../memory/project-files.js";
+import {
+  formatProjectMemorySnapshot,
+  projectMemoryFilePath,
+  PROJECT_MEMORY_FILES,
+  type ProjectMemoryFileName,
+} from "../../memory/project-files.js";
+import {
+  formatUserMemorySnapshot,
+  userMemoryFilePath,
+  USER_MEMORY_FILES,
+  type UserMemoryFileName,
+} from "../../memory/user-files.js";
 import {
   createReadFileStateKey,
   normalizeReadFileStateMtimeMs,
 } from "../../tool/read-file-state.js";
-import { resolveEnabledProjectMemoryRoot } from "../helpers/project-memory.js";
+import {
+  resolveEnabledProjectMemoryRoot,
+  resolveEnabledUserMemoryRoot,
+} from "../helpers/project-memory.js";
 import { buildContextHistoryEntries } from "./context-history-entries.js";
 import { resolveRuntimeEmbeddedSearchEnabled } from "./embedded-search-branch.js";
 import { getContextSourceShellDisplayName } from "./session-shell-environment.js";
 
 export { buildContextHistoryEntries };
+
+/** 只在 turn admission / compact 边界调用；同步前缀投影不能触发 IO。 */
+export async function reloadMemorySnapshot(
+  runtime: AgentRuntimeInternal,
+  trace: TraceContext,
+): Promise<void> {
+  const project = await runtime.loadProjectMemoryRoot(trace);
+  const user = await runtime.loadUserMemoryRoot(trace);
+  const [projectContent, userContent] = await Promise.all([
+    loadProjectMemoryIndexContent(runtime, project),
+    loadUserMemoryIndexContent(runtime, user),
+  ]);
+  runtime.memoryRoot = project;
+  runtime.userMemoryRoot = user;
+  runtime.memoryIndexContent = projectContent;
+  runtime.userMemoryIndexContent = userContent;
+}
 
 export async function ensureContextInitialized(
   this: AgentRuntimeInternal,
@@ -61,10 +92,11 @@ export async function ensureContextInitialized(
   this.contextSourceSnapshot = snapshot;
   this.startMcpStartup(traceContext);
   this.skillLoadOutcome = await this.discoverSkillsForContext(traceContext);
-  this.memoryRoot = await this.loadProjectMemoryRoot(traceContext);
-  this.memoryIndexContent = await loadProjectMemoryIndexContent(this, this.memoryRoot);
+  await reloadMemorySnapshot(this, traceContext);
   this.contextBuilder = this.createContextBuilderFromSnapshot(snapshot, this.memoryRoot, {
     memoryIndexContent: this.memoryIndexContent,
+    userMemoryRoot: this.userMemoryRoot,
+    userMemoryIndexContent: this.userMemoryIndexContent,
     model,
   });
   this.initializeMessageHistoryFromContext(this.contextBuilder, traceContext);
@@ -95,7 +127,13 @@ export function createContextBuilderFromSnapshot(
   this: AgentRuntimeInternal,
   snapshot: ContextSourceSnapshot,
   memoryRoot?: string,
-  options: { memoryIndexContent?: string; model?: Model; persistEnvInfo?: boolean } = {},
+  options: {
+    memoryIndexContent?: string;
+    userMemoryRoot?: string;
+    userMemoryIndexContent?: string;
+    model?: Model;
+    persistEnvInfo?: boolean;
+  } = {},
 ): ContextBuilder {
   const envInfo = snapshot.envInfo;
   // 同步 preview / config-only fallback 会构造 unknown envInfo。
@@ -127,6 +165,8 @@ export function createContextBuilderFromSnapshot(
     projectContext: snapshot.projectContext,
     memoryIndexContent: options.memoryIndexContent,
     memoryRoot,
+    userMemoryRoot: options.userMemoryRoot,
+    userMemoryIndexContent: options.userMemoryIndexContent,
     skills: this.skillLoadOutcome,
     agentProfiles: this.config.subagents?.profiles,
     embeddedSearchEnabled: resolveRuntimeEmbeddedSearchEnabled(this),
@@ -142,6 +182,49 @@ export function createContextBuilderFromSnapshot(
   return createContextBuilder(contextConfig).setToolRegistry(this.registry);
 }
 
+export async function loadUserMemoryRoot(
+  this: AgentRuntimeInternal,
+  traceContext: TraceContext,
+): Promise<string | undefined> {
+  const memoryRoot = resolveEnabledUserMemoryRoot(this.config, this.workspaceRoot);
+  if (!memoryRoot) return undefined;
+  if (!this.fileSystemPort) {
+    this.logMemorySkipped(traceContext, "missing_file_system_port", { memoryRoot });
+    return undefined;
+  }
+  await ensureMemoryDirectoryExists(this.fileSystemPort, memoryRoot, traceContext, this.logger);
+  return memoryRoot;
+}
+
+async function loadUserMemoryIndexContent(
+  runtime: AgentRuntimeInternal,
+  memoryRoot: string | undefined,
+): Promise<string | undefined> {
+  const fileSystemPort = runtime.fileSystemPort;
+  if (!fileSystemPort || !memoryRoot) return undefined;
+  const files: Partial<Record<UserMemoryFileName, string>> = {};
+  for (const fileName of USER_MEMORY_FILES) {
+    const filePath = userMemoryFilePath(memoryRoot, fileName);
+    try {
+      const read = await fileSystemPort.readTextFile({ path: filePath });
+      files[fileName] = read.content;
+      runtime.readFileState.set(createReadFileStateKey(filePath, undefined, undefined), {
+        content: read.content,
+        isPartialView: false,
+        limit: undefined,
+        mtimeMs: normalizeReadFileStateMtimeMs(read.revision?.mtimeMs),
+        offset: undefined,
+        path: filePath,
+        readAt: runtime.now(),
+        revisionId: read.revision?.id,
+        sizeBytes: read.sizeBytes,
+      });
+    } catch {
+      // 用户级记忆缺失不阻断启动。
+    }
+  }
+  return formatUserMemorySnapshot(files)?.content;
+}
 export async function loadProjectMemoryRoot(
   this: AgentRuntimeInternal,
   traceContext: TraceContext,

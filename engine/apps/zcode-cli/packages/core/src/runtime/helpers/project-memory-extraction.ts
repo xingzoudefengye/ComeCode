@@ -1,12 +1,12 @@
 import { selectActiveConversationBranch, type TraceContext } from "../deps.js";
 import {
   buildMemoryExtractionPrompt,
+  buildMemoryExtractionUserInput,
   createMemoryExtractionScheduler,
   type MemoryExtractionScheduler,
   type MemoryExtractionSnapshot,
 } from "../../memory/extraction.js";
 import { runMemoryAgentLoop } from "../../memory/memory-agent-loop.js";
-import { scanMemoryManifest } from "../../memory/recall/index.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import {
   buildProjectMemoryAgentProviderMessages,
@@ -14,12 +14,16 @@ import {
   createProjectMemoryAgentToolExecutor,
   type ProjectMemoryAgentContext,
 } from "./project-memory-agent.js";
-import { resolveEnabledProjectMemoryRoot, resolveMemoryExtractionRoots } from "./project-memory.js";
-import { projectMemoryFilePath, rollMemoryMarkdown } from "../../memory/project-files.js";
+import { resolveMemoryRoots, resolveMemoryExtractionRoots } from "./project-memory.js";
+import { PROJECT_MEMORY_FILES } from "../../memory/project-files.js";
+import {
+  MEMORY_AGENT_TIMEOUT_MS,
+  type MemoryAgentAllowedRoot,
+} from "../../memory/memory-agent-loop.js";
 import { createRuntimeModel } from "../methods/runtime-model.js";
 
-const EXTRACTION_MAX_TURNS = 5;
-const EXTRACTION_DRAIN_TIMEOUT_MS = 60_000;
+const EXTRACTION_MAX_TURNS = 3;
+const EXTRACTION_DRAIN_TIMEOUT_MS = MEMORY_AGENT_TIMEOUT_MS;
 
 interface ProjectMemoryExtractionSnapshot
   extends MemoryExtractionSnapshot, ProjectMemoryAgentContext {}
@@ -28,7 +32,7 @@ export type ProjectMemoryExtractionScheduler =
   MemoryExtractionScheduler<ProjectMemoryExtractionSnapshot>;
 
 export function isProjectMemoryEnabled(this: AgentRuntimeInternal): boolean {
-  return resolveEnabledProjectMemoryRoot(this.config, this.workspaceRoot) !== undefined;
+  return resolveMemoryExtractionRoots(this.config, this.workspaceRoot).length > 0;
 }
 
 export function scheduleProjectMemoryExtraction(
@@ -43,14 +47,23 @@ export function scheduleProjectMemoryExtraction(
   // 自动提取可以关闭；显式 /memory save 仍允许用户主动保存。
   if (runtime.config.memory?.extractionEnabled === false && input.force !== true) return false;
   // Bash cd 只改变执行 cwd，project Memory 身份必须继续使用会话 workspace root。
-  const memoryRoots = resolveMemoryExtractionRoots(runtime.config, runtime.workspaceRoot);
-  const memoryRoot = memoryRoots[0];
+  const roots = resolveMemoryRoots(runtime.config, runtime.workspaceRoot);
+  const allowedRoots: MemoryAgentAllowedRoot[] = [
+    ...(roots.project
+      ? [{ rootDir: roots.project, kind: "project" as const, files: PROJECT_MEMORY_FILES }]
+      : []),
+    ...(roots.user
+      ? [{ rootDir: roots.user, kind: "user" as const, files: ["profile.md", "preferences.md"] }]
+      : []),
+  ];
+  const memoryRoot = allowedRoots[0]?.rootDir;
   if (!memoryRoot) return false;
   if (runtime.isRemoteWorkspace()) return false;
   if (!runtime.sessionStore || !runtime.fileSystemPort) return false;
 
   const snapshotBase = captureProjectMemoryAgentContext(runtime, {
     memoryRoot,
+    allowedRoots,
     model: input.model,
     operation: "project_memory_extract",
     traceContext: input.traceContext,
@@ -103,7 +116,9 @@ export async function saveProjectMemory(
   });
   if (!scheduled) return "skipped";
   await drainMemoryExtractions.call(this, null);
-  return "saved";
+  return this.memoryExtractionScheduler?.getCursor() === this.latestConversationMessageId
+    ? "saved"
+    : "skipped";
 }
 
 export async function drainMemoryExtractions(
@@ -112,18 +127,18 @@ export async function drainMemoryExtractions(
 ): Promise<void> {
   const scheduler = this.memoryExtractionScheduler;
   if (!scheduler) return;
-  // benchmark 显式等待自然结束；普通 session close 仍保留原有有界取消清理。
-  if (timeoutMs === null) {
-    await scheduler.drain();
-    return;
-  }
+  // 显式保存、benchmark 与关闭都遵守相同总等待上限，超时要取消实际请求。
+  const waitMs = Math.min(timeoutMs ?? EXTRACTION_DRAIN_TIMEOUT_MS, EXTRACTION_DRAIN_TIMEOUT_MS);
 
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
       scheduler.drain(),
       new Promise<void>((resolve) => {
-        timeout = setTimeout(resolve, timeoutMs);
+        timeout = setTimeout(() => {
+          scheduler.shutdown();
+          resolve();
+        }, waitMs);
         timeout.unref?.();
       }),
     ]);
@@ -151,25 +166,17 @@ async function executeProjectMemoryExtraction(
 
   return telemetry.run(async () => {
     try {
-      const manifest = await scanMemoryManifest({
-        fileSystem: runtime.fileSystemPort!,
-        rootDir: input.snapshot.memoryRoot,
-        signal: input.abortSignal,
-      });
-      if (input.abortSignal.aborted) {
-        telemetry.finishCancelled("abort_signal");
-        return "aborted" as const;
-      }
+      // 固定白名单无需扫描历史目录；仅 Read 工具加载真正需要修改的文件。
+      const userInput = buildMemoryExtractionUserInput(input.snapshot.durableMessages);
+      if (!userInput) return "no-op" as const;
       const prompt = buildMemoryExtractionPrompt({
-        manifest,
+        manifest: [],
+        allowedRoots: input.snapshot.allowedRoots,
         messageCount: input.messageCount,
       });
-      const providerMessages = buildProjectMemoryAgentProviderMessages(
-        runtime,
-        input.snapshot,
-        prompt,
-      );
-      const executor = createProjectMemoryAgentToolExecutor(runtime, input.snapshot);
+      const context = { ...input.snapshot, userInput };
+      const providerMessages = buildProjectMemoryAgentProviderMessages(runtime, context, prompt);
+      const executor = createProjectMemoryAgentToolExecutor(runtime, context);
 
       await runMemoryAgentLoop({
         abortSignal: input.abortSignal,
@@ -182,13 +189,11 @@ async function executeProjectMemoryExtraction(
         messages: providerMessages,
         model: input.snapshot.model,
         rootDir: input.snapshot.memoryRoot,
+        allowedRoots: input.snapshot.allowedRoots,
         tools: input.snapshot.tools,
         workingDirectory: input.snapshot.workingDirectory,
         workspaceRoot: input.snapshot.workspaceRoot,
       });
-      for (const root of resolveMemoryExtractionRoots(runtime.config, runtime.workspaceRoot)) {
-        await rollProjectMemoryFile(runtime, root, input.abortSignal);
-      }
       telemetry.finishCompleted();
       return "success" as const;
     } catch (error) {
@@ -200,19 +205,6 @@ async function executeProjectMemoryExtraction(
       return "error" as const;
     }
   });
-}
-
-async function rollProjectMemoryFile(
-  runtime: AgentRuntimeInternal,
-  root: string,
-  signal: AbortSignal,
-): Promise<void> {
-  const path = projectMemoryFilePath(root, "memory.md");
-  const current = await runtime.fileSystemPort?.readTextFile({ path }, { signal }).catch(() => undefined);
-  if (!current) return;
-  const rolled = rollMemoryMarkdown(current.content);
-  if (rolled === current.content) return;
-  await runtime.fileSystemPort?.writeTextFile({ path, content: rolled, createParents: true });
 }
 
 function isAbortError(error: unknown): boolean {
