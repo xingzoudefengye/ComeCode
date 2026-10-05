@@ -191,6 +191,8 @@ export interface ToolExecutionContext {
   clientMode?: "desktop-continuous" | "web-remote-replayable";
   deliveryKind?: "desktop-continuous" | "web-remote-replayable";
   memoryRoot?: string;
+  /** 仅供 ReadSessionContext 读取 managed 史书，不参与普通文件权限。 */
+  userMemoryRoot?: string;
   runtimeScope?: ToolRuntimeScope;
   providerVisibleToolNames?: readonly string[];
   sessionId: SessionId;

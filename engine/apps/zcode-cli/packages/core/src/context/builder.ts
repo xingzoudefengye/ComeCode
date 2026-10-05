@@ -19,7 +19,7 @@ import { buildEnvInfoSection, buildGitSystemContextSection } from "./sections/en
 import { buildSkillsSection } from "./sections/skills.js";
 import { buildRequestUserContextSection } from "./sections/request-user-context.js";
 import { buildCurrentDateSection } from "./sections/current-date.js";
-import { buildMemorySection } from "./sections/memory.js";
+import { buildMemorySection, MEMORY_CONTEXT_MAX_CHARS } from "./sections/memory.js";
 import { buildDesktopContextSection } from "./sections/desktop.js";
 import {
   buildContextManagementSection,
@@ -148,11 +148,16 @@ export class ContextBuilder {
         sections.push(sessionGuidanceSection);
       }
 
-      // Memory
-      if (this.config.memoryRoot) {
-        const memorySection = buildMemorySection(this.config.memoryRoot, this.config.memoryIndexContent);
-        if (memorySection) {
-          sections.push(memorySection);
+      // 用户稳定偏好先放，两个 section 的标题与说明也必须计入总预算。
+      let memoryBudget = MEMORY_CONTEXT_MAX_CHARS;
+      for (const [root, snapshot, kind] of [
+        [this.config.userMemoryRoot, this.config.userMemoryIndexContent, "user"],
+        [this.config.memoryRoot, this.config.memoryIndexContent, "project"],
+      ] as const) {
+        const section = buildMemorySection(root, snapshot, { kind, maxChars: memoryBudget });
+        if (section) {
+          sections.push(section);
+          memoryBudget -= section.chars;
         }
       }
       sections.push(buildEnvInfoSection(this.config.envInfo, this.config.model));

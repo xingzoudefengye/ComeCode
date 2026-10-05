@@ -573,8 +573,14 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       });
     case "import":
       return await runImportCommand(ctx, options, commandDeps, parsed.positionals[1], parsed.positionals.slice(2));
-    case "memory":
-      return await runMemoryCommand(ctx, options, commandDeps, parsed.positionals.slice(1));
+    case "memory": {
+      const memoryArgs = parsed.positionals.slice(1);
+      const scope = parsed.values.scope as string | undefined;
+      if (scope && !memoryArgs.includes("--scope") && !memoryArgs.some((arg) => arg.startsWith("--scope="))) {
+        memoryArgs.push("--scope", scope);
+      }
+      return await runMemoryCommand(ctx, options, commandDeps, memoryArgs);
+    }
     case "login":
       return await runLoginCommand(
         ctx,

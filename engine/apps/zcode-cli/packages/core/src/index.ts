@@ -16,9 +16,23 @@ export { resolveProjectMemoryRoot } from "./memory/project-root.js";
 export {
   PROJECT_MEMORY_FILES,
   PROJECT_MEMORY_TEMPLATE,
+  PROJECT_MEMORY_MAX_FILE_CHARS,
+  PROJECT_MEMORY_MAX_TOTAL_CHARS,
   resolveWorkspaceProjectMemoryRoot,
 } from "./memory/project-files.js";
 export type { ProjectMemoryFileName } from "./memory/project-files.js";
+export {
+  USER_MEMORY_FILES,
+  USER_MEMORY_TEMPLATE,
+  USER_MEMORY_MAX_FILE_CHARS,
+  USER_MEMORY_MAX_TOTAL_CHARS,
+  formatUserMemorySnapshot,
+  resolveUserMemoryRoot,
+  userMemoryFilePath,
+} from "./memory/user-files.js";
+export { USER_CHRONICLE_MAX_CHARS, formatUserMemoryChronicle, loadUserMemoryChronicle } from "./memory/user-chronicle.js";
+export type { UserMemoryFileName } from "./memory/user-files.js";
+export type { UserMemoryChronicle } from "./memory/user-chronicle.js";
 
 // Tool components
 export { ToolScheduler, defaultToolScheduler, READ_ONLY_TOOLS } from "./tool/scheduler.js";

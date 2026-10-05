@@ -256,9 +256,16 @@ export interface AgentRuntimeCoreMethods {
   createContextBuilderFromSnapshot(
     snapshot: ContextSourceSnapshot,
     memoryRoot?: string,
-    options?: { memoryIndexContent?: string; model?: Model; persistEnvInfo?: boolean },
+    options?: {
+      memoryIndexContent?: string;
+      userMemoryRoot?: string;
+      userMemoryIndexContent?: string;
+      model?: Model;
+      persistEnvInfo?: boolean;
+    },
   ): ContextBuilder;
   loadProjectMemoryRoot(traceContext: TraceContext): Promise<string | undefined>;
+  loadUserMemoryRoot(traceContext: TraceContext): Promise<string | undefined>;
   logMemorySkipped(
     traceContext: TraceContext,
     reason: string,

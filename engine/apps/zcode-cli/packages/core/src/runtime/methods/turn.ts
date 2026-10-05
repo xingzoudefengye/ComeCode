@@ -60,11 +60,14 @@ import {
   openGoalStateChangeReminderDeferral,
 } from "./goal-state-reminder.js";
 import { persistTurnChronicle } from "../helpers/session-chronicle.js";
+import { persistUserMemoryChronicle } from "../helpers/user-memory-chronicle.js";
+import type { ChronicleTurn } from "../../compact/chronicle.js";
 import { scheduleProjectMemoryExtraction } from "../helpers/project-memory-extraction.js";
 import { appendBrowserTurnScreenshot } from "./browser-turn-screenshot.js";
 import { clearBrowserTurnState } from "../../repl/browser-turn-state.js";
 import { applySubmissionExecutionState, createTurnModel } from "./turn-model.js";
 import { rebuildContextPrefix } from "./context-refresh.js";
+import { reloadMemorySnapshot } from "./context.js";
 
 const TARGET_RUN_HEARTBEAT_MS = 15_000;
 
@@ -215,6 +218,7 @@ export async function executeTurnCommand(
       }
       let phaseStartedAt = startTurnPhase("context_initialization");
       if (this.contextInitialized) {
+        await reloadMemorySnapshot(this, turnTraceContext);
         // 每个后续 model step 都按该步骤实际持有的 Model 重新投影 Context；
         // Session Selection 只决定未来创建哪个 Model，不能充当执行事实。
         rebuildContextPrefix(this, { model: admittedModel });
@@ -676,19 +680,21 @@ export async function executeTurnCommand(
           userMessageId,
         });
         if (userMessageId && !options?.inputSource) {
+          const chronicleTurn: ChronicleTurn = {
+            origin: { turnId, messageStartId: userMessageId, messageEndId: loopState.stableBoundaryAssistantMessageId, branchGeneration: this.branchGeneration },
+            goal: displayInput,
+            response: loopState.modelResponse,
+            status: "success",
+            endedAt: Date.now(),
+          };
           await persistTurnChronicle({
             sessionStore: this.sessionStore,
             sessionId: this.sessionId,
             sessionPersisted: this.sessionPersisted,
             logger: this.logger,
-            turn: {
-              origin: { turnId, messageStartId: userMessageId, messageEndId: loopState.stableBoundaryAssistantMessageId, branchGeneration: this.branchGeneration },
-              goal: displayInput,
-              response: loopState.modelResponse,
-              status: "success",
-              endedAt: Date.now(),
-            },
+            turn: chronicleTurn,
           });
+          await persistUserMemoryChronicle(this, chronicleTurn);
         }
         if (shouldRetryTitleGenerationAfterTurn && userMessageId) {
           // 需要请求前刷新 provider runtime headers 的模型
@@ -809,18 +815,20 @@ export async function executeTurnCommand(
           userMessageId,
         });
         if (userMessageId && !options?.inputSource) {
+          const chronicleTurn: ChronicleTurn = {
+            origin: { turnId, messageStartId: userMessageId, branchGeneration: this.branchGeneration },
+            goal: displayInput,
+            status: coreError.type === CoreErrorType.TurnCancelled ? "cancelled" : "failed",
+            endedAt: Date.now(),
+          };
           await persistTurnChronicle({
             sessionStore: this.sessionStore,
             sessionId: this.sessionId,
             sessionPersisted: this.sessionPersisted,
             logger: this.logger,
-            turn: {
-              origin: { turnId, messageStartId: userMessageId, branchGeneration: this.branchGeneration },
-              goal: displayInput,
-              status: coreError.type === CoreErrorType.TurnCancelled ? "cancelled" : "failed",
-              endedAt: Date.now(),
-            },
+            turn: chronicleTurn,
           });
+          await persistUserMemoryChronicle(this, chronicleTurn);
         }
         throw coreError;
       }
