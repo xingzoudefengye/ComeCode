@@ -4816,6 +4816,7 @@ const enUS: Record<string, string> = {
   "chat.toolbar.modelSwitch.lockedByRunningTask":
     "A task is running. Finish it before switching model providers.",
   "chat.toolbar.modelSwitch.lockedByRunningTask.short": "busy",
+  "chat.toolbar.modelSwitch.failed": "Model switch did not take effect. Retry or pick the model again.",
   "chat.goal.runningBlocked": "Set a goal after the current task finishes.",
   "chat.goal.planModeBlocked": "Goal is unavailable in Plan mode. Switch modes to continue.",
   "chat.plan.attachmentsBlocked":

@@ -1,0 +1,113 @@
+import { providerSetupStartupResponse } from "./provider-setup.js";
+import { resolveZCodeRuntimeEnv } from "@zcode/shared";
+import { createNodeClipboardImageReader } from "./clipboard-image.js";
+import { createNodeClipboardTextWriter } from "./clipboard-text.js";
+import { listSlashCommandSuggestions } from "./command-center.js";
+import { registerCliShutdownHandlers } from "./shutdown.js";
+import { listCustomCommandsForTui, loadInitialTuiSessionMetadata } from "./tui-command-data.js";
+import { createTuiSubmitPrompt } from "./tui-prompt-handler.js";
+import { loadTuiRuntime } from "./tui-runtime-loader.js";
+import { resolveTuiStartupLocale } from "./tui-startup-locale.js";
+import { createWorkspacePathSuggestionProvider } from "./tui-workspace-paths.js";
+import { resolveWorkspaceGitBranch } from "./tui-workspace-git.js";
+import { loadWindowsShiftState } from "./windows-keyboard-state.js";
+import { createCliModeState, currentCliMode } from "./tui-command-state.js";
+export const runTuiCommand = async (ctx, options, deps, version, mode, resumeRequest, toolDisallowlist, forceMcs = false) => {
+    try {
+        const modeState = createCliModeState(mode);
+        const runTui = deps.runTui ?? (await loadTuiRuntime()).runTui;
+        const workspaceDirectory = (deps.cwd ?? process.cwd)();
+        const env = deps.env ?? process.env;
+        const isShiftPressed = await loadWindowsShiftState();
+        const developerMode = resolveZCodeRuntimeEnv(env) === "development";
+        const startupLocale = resolveTuiStartupLocale({
+            deps,
+            options,
+            workingDirectory: workspaceDirectory,
+        });
+        const promptHandler = createTuiSubmitPrompt(deps, modeState, version, resumeRequest, options.locale, options.detectedLocale, startupLocale, toolDisallowlist, forceMcs, options.browserUse, options.browserExecutable);
+        const unregisterShutdownHandlers = registerCliShutdownHandlers({
+            cleanup: async () => {
+                await promptHandler.close?.();
+            },
+            // Ctrl+C 归 TUI 所有（一次复制、两次确认退出）。若这里也注册 SIGINT，
+            // 第一次信号就会 process.exit，绕过 TUI 的双击确认并直接结束会话。
+            // 退出清理改由 runTui 正常返回后的 finally 分支负责。
+            excludeSignals: ["SIGINT"],
+            cleanupTimeoutMs: deps.shutdownCleanupTimeoutMs,
+            exitProcess: deps.exitProcess,
+            process: deps.shutdownProcess,
+        });
+        try {
+            return await runTui({
+                loadStartupOptions: async () => {
+                    const [metadata, customCommands, workspaceGitBranch] = await Promise.all([
+                        loadInitialTuiSessionMetadata(promptHandler),
+                        listCustomCommandsForTui(deps).catch(() => undefined),
+                        (deps.resolveWorkspaceGitBranch ?? resolveWorkspaceGitBranch)({
+                            workspaceDirectory,
+                        }).catch(() => undefined),
+                    ]);
+                    const initialResult = resumeRequest?.resumeSessionId || resumeRequest?.continueSession
+                        ? await promptHandler.resumeSession?.()
+                        : undefined;
+                    return {
+                        ...(initialResult ? { initialResult } : {}),
+                        // 首屏直接展示配置卡片，不要求用户先发送一句话才能发现没有模型。
+                        ...(!initialResult && !metadata.modelOptions?.some((model) => !model.disabledReason)
+                            ? { initialResult: { response: providerSetupStartupResponse(env, workspaceDirectory), responseFormat: "plain", loginRequired: false } }
+                            : {}),
+                        initialMode: currentCliMode(modeState),
+                        initialModel: metadata.model,
+                        initialThoughtLevel: metadata.thoughtLevel,
+                        initialSessionId: metadata.sessionId,
+                        loginRequired: metadata.loginRequired,
+                        locale: metadata.locale ?? startupLocale,
+                        theme: metadata.theme ?? "auto",
+                        modelOptions: metadata.modelOptions,
+                        effortOptions: metadata.effortOptions,
+                        slashCommands: listSlashCommandSuggestions(customCommands),
+                        workspaceGitBranch,
+                    };
+                },
+                locale: startupLocale,
+                developerMode,
+                version,
+                workspaceDirectory,
+                noColor: options.noColor,
+                readClipboardImage: deps.readClipboardImage ?? createNodeClipboardImageReader(),
+                listModelOptions: promptHandler.listModelOptions,
+                listWorkspacePathSuggestions: createWorkspacePathSuggestionProvider({
+                    workspaceDirectory,
+                }),
+                listMcpServers: promptHandler.listMcpServers,
+                readSubagents: promptHandler.readSubagents,
+                readSubagentTranscript: promptHandler.readSubagentTranscript,
+                listWorkflowRuns: promptHandler.listWorkflowRuns,
+                replayWorkflowRuns: promptHandler.replayWorkflowRuns,
+                getMainSessionId: promptHandler.getMainSessionId,
+                writeClipboardText: deps.writeClipboardText ?? createNodeClipboardTextWriter({ stdout: ctx.stdout }),
+                stderr: ctx.stderr,
+                stdin: ctx.stdin,
+                stdout: ctx.stdout,
+                isShiftPressed,
+                sendInput: promptHandler.sendInput,
+                setMode: promptHandler.setMode,
+                submitPrompt: promptHandler,
+                subscribeSessionEvents: promptHandler.subscribeSessionEvents,
+            });
+        }
+        finally {
+            unregisterShutdownHandlers();
+            await promptHandler.close?.();
+        }
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.stderr.write(`Error: ${message}\n`);
+        if (options.verbose && error instanceof Error && error.stack) {
+            ctx.stderr.write(`${error.stack}\n`);
+        }
+        return 1;
+    }
+};

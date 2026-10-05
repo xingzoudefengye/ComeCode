@@ -6,7 +6,8 @@
 
 基于 [ZCode](https://github.com/zai-org/ZCode)（Apache-2.0，代码位于 [engine/](./engine)）二次开发，借鉴 [Codex](https://github.com/openai/codex)（Apache-2.0）的部分设计。许可与署名见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE)。
 
-> 实施计划见 [docs/PLAN.md](./docs/PLAN.md)。
+> 实施计划见 [docs/PLAN.md](./docs/PLAN.md)。  
+> 📖 **[用户使用指南](./docs/USER-GUIDE.md)** - 快速开始、模型配置、会话管理
 
 ---
 
