@@ -21,14 +21,34 @@ async function setSessionArchived(session, control) {
   } catch (error) { sessionStatus(error.message); }
   finally { control.disabled = false; }
 }
+const SESSION_MINUTE_MS = 60_000, SESSION_HOUR_MS = 60 * SESSION_MINUTE_MS, SESSION_DAY_MS = 24 * SESSION_HOUR_MS;
+function validSessionUpdated(timestamp) {
+  return typeof timestamp === 'number' && Number.isFinite(timestamp) && timestamp > 0 && !Number.isNaN(new Date(timestamp).getTime());
+}
+function formatSessionUpdated(timestamp, now = Date.now()) {
+  if (!validSessionUpdated(timestamp)) return '更新时间未知';
+  const elapsed = Math.max(0, now - timestamp);
+  if (elapsed < SESSION_MINUTE_MS) return '刚刚';
+  if (elapsed < SESSION_HOUR_MS) return Math.floor(elapsed / SESSION_MINUTE_MS) + '分钟前';
+  if (elapsed < SESSION_DAY_MS) return Math.floor(elapsed / SESSION_HOUR_MS) + '小时前';
+  return Math.floor(elapsed / SESSION_DAY_MS) + '天前';
+}
 function renderSessionList() {
+  const now = Date.now();
   const list = $('session-list'); list.replaceChildren();
   const append = (session, parent) => {
     const row = node('div', undefined, 'session-list-row');
     const item = button('', () => { selectedSessionId = session.id; renderSessionList(); loadSessionDetail(session.id); }, 'session-item');
     if (selectedSessionId === session.id) row.className += ' is-selected';
     item.setAttribute('aria-pressed', String(selectedSessionId === session.id));
-    item.append(node('span', session.title || '未命名会话', 'session-item-title'), node('small', session.directory + (session.time.archived ? ' · 已归档' : '')));
+    const metadata = node('span', undefined, 'session-item-meta');
+    const directory = node('small', session.directory + (session.time.archived ? ' · 已归档' : ''), 'session-item-directory');
+    directory.title = session.directory;
+    const updated = node('small', formatSessionUpdated(session.time.updated, now), 'session-item-updated');
+    updated.title = validSessionUpdated(session.time.updated) ? '更新时间：' + new Date(session.time.updated).toLocaleString('zh-CN') : '更新时间未知';
+    updated.setAttribute('aria-label', '更新时间：' + updated.textContent);
+    metadata.append(directory, updated);
+    item.append(node('span', session.title || '未命名会话', 'session-item-title'), metadata);
     const rename = sessionIconButton('重命名会话', 'edit', () => renameSessionInList(session, row), 'session-icon session-rename');
     const archive = sessionIconButton(session.time.archived ? '取消归档会话' : '归档会话', 'archive', () => setSessionArchived(session, archive));
     const actions = node('div', undefined, 'session-row-actions'); actions.append(rename, archive);
