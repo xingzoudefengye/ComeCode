@@ -57,6 +57,7 @@ export const BashInputSchema = z
     /**
      * Set to true to run this command in the background. Use Read to read the output later.
      */
+    background_scope: z.enum(["turn", "session"]).optional().describe("Background command lifetime: turn (default) stops remaining work when this turn finishes; session keeps user-requested servers or monitoring across turns. Use session only when the user wants the process left running."),
     run_in_background: semanticBoolean()
       .optional()
       .describe("Set to true to run this command in the background."),

@@ -9,7 +9,12 @@ import {
   NodeModelSelectionConfigRepository,
   PERSONAL_PROVIDER_CONFIG_FILE_NAME,
 } from "@zcode/provider-node";
-import { getAppConfigDir as resolveAppConfigDir } from "./paths.js";
+import {
+  getAppConfigDir as resolveAppConfigDir,
+  getDataBaseDir,
+  getZCodeDataRootDir,
+} from "./paths.js";
+import { createSharedProviderSnapshot } from "./model-provider/sharedProviderSnapshot.js";
 import {
   buildLocalMediaPreviewUrl,
   isProviderProvisioningAccountCredentialKey,
@@ -372,7 +377,6 @@ import { bindAccountProviderInvalidation } from "./model-provider/accountProvide
 import { AccountProviderApiClient } from "./model-provider/accountProviderApiClient.js";
 import { AccountProviderApiKeyResolver } from "./model-provider/accountProviderApiKeyResolver.js";
 import { createProviderConfigRuntime } from "./model-provider/providerConfigRuntime.js";
-import { fetchZCodeBuiltinRemoteRelease } from "./model-provider/zcodeBuiltinRemoteConfig.js";
 import {
   createProviderRuntimeFromConfigRuntime,
   type ProviderRuntime,
@@ -392,7 +396,6 @@ import {
 import { createProviderProvisioningTarget } from "./model-provider/providerProvisioningTarget.js";
 import { IProviderProvisioningTargetService } from "./model-provider/providerProvisioning.js";
 import { buildOffPeakModelSelectionView } from "./model-provider/offPeakModelSelectionView.js";
-import { resolveClientConfigPlatform } from "./runtime-tools/clientPlatform.js";
 import {
   createAccountRequestAuthService,
   type IAccountRequestAuthService,
@@ -1515,28 +1518,15 @@ export function createLocalServices(options: {
     }),
   );
   const providerConfigLog = createServiceLogger("provider-config");
-  const clientConfigPlatform = resolveClientConfigPlatform();
+  const sharedProviderSnapshot = createSharedProviderSnapshot({
+    dataRoot: getZCodeDataRootDir(),
+    env: process.env,
+  });
   const providerConfigRuntime = createProviderConfigRuntime({
+    prepare: () => sharedProviderSnapshot.prepare(),
+    personalFilePath: sharedProviderSnapshot.filePath,
     zcodeBuiltinFilePath: options.zcodeBuiltinProviderConfigFilePath,
-    zcodeBuiltinEnvironment: {
-      environmentConfigRoot: resolveAppConfigDir(),
-      platform: clientConfigPlatform,
-      appVersion: ZCODE_VERSION,
-      resolveEndpointOrigin: resolveCurrentZCodeEndpointOrigin,
-      onRefreshResult: (event) => {
-        if (event.result === "updated")
-          providerConfigLog.info(undefined, "ZCode Built-in CDN 配置已更新", event);
-        else providerConfigLog.debug(undefined, "ZCode Built-in 刷新检查", event);
-      },
-      fetchRelease: (endpointOrigin, signal) =>
-        fetchZCodeBuiltinRemoteRelease({
-          apiClient,
-          endpointOrigin,
-          signal,
-          appVersion: ZCODE_VERSION,
-          platform: clientConfigPlatform,
-        }),
-    },
+    // ComeCode 默认只消费随包目录，不通过厂商 CDN 刷新模型配置。
     onZCodeBuiltinRefreshError: (error) => {
       providerConfigLog.warn(undefined, "ZCode Built-in Config 远端刷新失败", { error });
     },
@@ -1637,6 +1627,9 @@ export function createLocalServices(options: {
       disposeAccountProviderInvalidation();
       accountProviderRefreshErrorDispose();
       accountProviderConfigSource.dispose();
+      void sharedProviderSnapshot.dispose().catch((error) => {
+        providerConfigLog.warn(undefined, "ComeCode Host Provider 临时快照清理失败", { error });
+      });
     },
   });
   handleOAuthProviderLogout = createOAuthProviderLogoutHandler({
@@ -2219,6 +2212,8 @@ export function createLocalServices(options: {
       // 先拿到尚不存在的 provider_config.json 并发布短暂空 Registry。
       await providerConfigRuntime.start();
       return {
+        // 显式下发 Host 数据根，避免 Electron home 与独立 CLI 存储分叉。
+        COMECODE_DATA_BASE_DIR: getDataBaseDir(),
         ...buildAgentRuntimeEnv({
           httpProxy: agentNetwork.httpProxy,
           noProxy: agentNetwork.noProxy,

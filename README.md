@@ -6,28 +6,40 @@
 
 基于 [ZCode](https://github.com/zai-org/ZCode)（Apache-2.0，代码位于 [engine/](./engine)）二次开发，借鉴 [Codex](https://github.com/openai/codex)（Apache-2.0）的部分设计。许可与署名见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE)。
 
-> 实施计划见 [docs/PLAN.md](./docs/PLAN.md)。
+> 实施计划见 [docs/PLAN.md](./docs/PLAN.md)。  
+> 📖 **[用户使用指南](./docs/USER-GUIDE.md)** - 快速开始、模型配置、会话管理
 
 ---
 
-## 1. 用户体验目标
+## 1. 安装使用
 
-以下是**发布后的目标安装方式**，目前从源码运行请看 [开发指南](docs/dev-setup.md)。
+### 快速安装（推荐）
+
+**Linux / macOS**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/xingzoudefengye/ComeCode/main/install.sh | bash
+```
+
+**Windows (PowerShell)**:
+```powershell
+iwr https://raw.githubusercontent.com/xingzoudefengye/ComeCode/main/install.ps1 | iex
+```
+
+### npm 安装（即将支持）
 
 ```bash
 npm install -g comecode
-cd my-project
-comecode
 ```
 
-- 终端：进入 TUI，正常对话式 Coding（读文件、改代码、跑测试、修 Bug）。
-- 浏览器：同一进程内启动本地管理后台 `http://127.0.0.1:<port>`，默认只监听本机并带随机 token。
-- 桌面：基于上游 Electron 桌面端改造的 ComeCode Desktop，复用同一套 CLI Agent，与 CLI/Web 后台会话共享（见 [docs/PLAN.md](docs/PLAN.md) M6）。
-- 不需要额外启动 server，不需要登录任何账号，填好 API Key 就能用。
+### 手动下载
 
-管理后台目前提供 Provider / 模型配置与连接测试；会话、记忆、状态和日志页面是规划功能。
+从 [Releases](https://github.com/xingzoudefengye/ComeCode/releases) 下载对应平台的二进制文件。
 
-浏览器后台只做管理；对话和任务执行在 CLI 或规划中的桌面版完成。桌面将复用同一套 Agent、配置和会话存储，并支持跨端恢复及单执行所有者，不是另一套独立聊天系统。
+### 从源码运行
+
+目前推荐从源码运行，详见 [开发指南](docs/dev-setup.md)。
+
+---
 
 ## 2. 现状评估（基于源码核对）
 

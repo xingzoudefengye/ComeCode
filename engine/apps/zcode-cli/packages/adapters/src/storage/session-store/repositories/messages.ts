@@ -220,27 +220,32 @@ export async function removePart(
 
 export async function messages(
   db: DatabaseSync,
-  input: { sessionID: SessionId },
+  input: { sessionID: SessionId; limit?: number; offset?: number },
 ): Promise<MessageWithParts[]> {
+  const paging = input.limit === undefined ? "" : "limit ? offset ?";
   const messageRows = db
     .prepare(
       `
       select * from message
       where session_id = ?
       order by sequence is null, sequence, time_created, rowid
+      ${paging}
       `,
     )
-    .all(input.sessionID) as unknown as MessageRow[];
+    .all(...(input.limit === undefined ? [input.sessionID] : [input.sessionID, input.limit, input.offset ?? 0])) as unknown as MessageRow[];
 
+  // 分页历史仅查询已选消息的 parts，不把完整会话读入内存。
+  const ids = messageRows.map((row) => row.id);
+  if (ids.length === 0) return [];
   const partRows = db
     .prepare(
       `
       select * from part
-      where session_id = ?
+      where session_id = ? ${input.limit === undefined ? "" : `and message_id in (${ids.map(() => "?").join(",")})`}
       order by message_id, sequence is null, sequence, time_created, id
       `,
     )
-    .all(input.sessionID) as unknown as PartRow[];
+    .all(...(input.limit === undefined ? [input.sessionID] : [input.sessionID, ...ids])) as unknown as PartRow[];
   const partsByMessage = new Map<string, MessagePart[]>();
 
   for (const row of partRows) {

@@ -13,6 +13,7 @@ import { ADMIN_HTML, ADMIN_STYLE } from "../packages/cli/src/admin/assets.ts";
 function form(config, renderPage = false, fetchImpl) {
   const elements = new Map(), windowHandlers = new Map();
   const element = tag => ({ tag, attributes: {}, value: "", hidden: false, checked: false, options: [],
+    disabled: false,
     append(...items) { this.options.push(...items); }, replaceChildren() { this.options = []; },
     setAttribute(name, value) { this.attributes[name] = value; }, addEventListener() {}, showModal() { this.open = true; }, close() {}, focus() {},
   });
@@ -34,36 +35,58 @@ const providers = () => ({ providers: [
   { id: "second", name: "接口 B", type: "openai-responses", baseUrl: "https://b.example/v1", apiKeyEnv: "FIXTURE_API_KEY", models: [{ id: "old-b" }] },
 ] });
 function select(f, id) { f.get("model-endpoint").value = id; f.get("model-endpoint").onchange(); }
-async function add(f, id) { f.get("model-id").value = id; await f.run("testModelDialog();"); await f.run("saveModelDialog({ preventDefault() {} });"); }
+async function add(f, id) { f.get("model-id").value = id; await f.run("saveModelDialog({ preventDefault() {} });"); }
 
-test("测试连接失败时保存按钮保持置灰，模型不会加入列表", async () => {
-  const f = form(providers(), false, async (_url, options) => ({ ok: true, async json() {
-    assert.match(options.body, /failed-model/u);
-    return { ok: false, message: "连接失败（HTTP 401），请检查地址、模型和密钥" };
-  } }));
-  assert.equal(f.get("model-submit").disabled, true);
+test("连接测试失败不落草稿且仍可保存模型", async () => {
+  const calls = [];
+  const f = form(providers(), false, async (url, options) => {
+    calls.push(url);
+    return { ok: true, async json() {
+      if (url.endsWith("test-draft")) return { ok: false, message: "连接失败（HTTP 401）" };
+      return { revision: "saved", config: JSON.parse(options.body).config };
+    } };
+  });
+  assert.equal(f.get("model-submit").disabled, false);
   f.get("model-id").value = "failed-model";
   f.get("model-url").value = "https://failed.example/v1";
   await f.run("testModelDialog();");
-  assert.equal(f.get("model-submit").disabled, true);
-  assert.equal(f.draft().providers[0].models.some(model => model.id === "failed-model"), false);
-  assert.match(f.get("model-dialog-help").textContent, /测试失败.*HTTP 401.*不会保存/u);
+  assert.equal(f.get("model-submit").disabled, false);
+  assert.equal(f.draft().providers.length, 2);
+  assert.match(f.get("model-dialog-help").textContent, /测试失败.*HTTP 401.*仍可保存/u);
   await f.run("saveModelDialog({ preventDefault() {} });");
-  assert.equal(f.draft().providers[0].models.some(model => model.id === "failed-model"), false);
-  assert.equal(f.get("model-dialog").open, true);
+  assert.equal(f.draft().providers.at(-1).models[0].id, "failed-model");
+  assert.deepEqual(calls, ["/api/test-draft", "/api/config"]);
 });
 
-test("测试成功后才能保存，修改表单会重新置灰保存按钮", async () => {
+test("测试成功后编辑表单仍可保存最新值，不复用测试草稿", async () => {
   const f = form(providers());
   f.get("model-id").value = "tested-model";
   f.get("model-url").value = "https://tested.example/v1";
   await f.run("testModelDialog();");
   assert.equal(f.get("model-submit").disabled, false);
   f.get("model-id").value = "changed-model";
-  f.run("invalidateModelTest();");
-  assert.equal(f.get("model-submit").disabled, true);
+  f.get("model-name").value = "编辑后的模型";
+  assert.equal(f.get("model-submit").disabled, false);
   await f.run("saveModelDialog({ preventDefault() {} });");
-  assert.equal(f.draft().providers[0].models.some(model => model.id === "changed-model"), false);
+  assert.equal(f.draft().providers.at(-1).models[0].id, "changed-model");
+  assert.equal(f.draft().providers.at(-1).models[0].name, "编辑后的模型");
+});
+
+test("未测试可直接保存，缺少必填结构仍拒绝且不发请求", async () => {
+  const calls = [];
+  const f = form(providers(), false, async (url, options) => {
+    calls.push(url);
+    return { ok: true, async json() { return { revision: "saved", config: JSON.parse(options.body).config }; } };
+  });
+  assert.match(ADMIN_HTML, /测试连接（可选）/u);
+  assert.doesNotMatch(ADMIN_HTML, /id="model-submit"[^>]*disabled/u);
+  await f.run("saveModelDialog({ preventDefault() {} });");
+  assert.deepEqual(calls, []);
+  assert.equal(f.draft().providers.length, 2);
+  select(f, "first");
+  await add(f, "untested-model");
+  assert.deepEqual(calls, ["/api/config"]);
+  assert.equal(f.draft().providers[0].models.at(-1).id, "untested-model");
 });
 
 test("已有地址下拉选择带入地址/协议与 Key 复用提示，模型追加到所选供应商", async () => {
@@ -208,28 +231,59 @@ test("供应商名称框与齿轮保持同高并垂直居中", () => {
   assert.match(ADMIN_STYLE, /\.endpoint-picker-toggle:hover,\.protocol-picker-toggle:hover\{background:transparent/);
 });
 
-test("供应商名称同行紧随可访问齿轮图标，点击沿用编辑弹框", () => {
+test("供应商名字后的图标保持可访问编辑入口", () => {
   const f = form(providers(), true);
   const heading = f.get("providers").options[0].options[0];
   assert.equal(heading.className, "provider-heading");
-  assert.equal(heading.options.length, 1);
-  const info = heading.options[0], name = info.options[0];
-  assert.equal(name.className, "provider-name");
+  const name = heading.options[0].options[0];
   assert.equal(name.options[0].textContent, "接口 A");
+  const menu = heading.options[1].options.at(-1);
+  assert.equal(menu.tag, "details");
   const edit = name.options[1];
-  assert.equal(edit.tag, "button");
-  assert.equal(edit.type, "button");
-  assert.equal(edit.className, "provider-edit");
-  assert.equal(edit.textContent, undefined);
-  assert.equal(edit.title, "编辑供应商");
   assert.equal(edit.attributes["aria-label"], "编辑供应商");
-  assert.equal(edit.options[0].tag, "svg");
-  assert.equal(edit.options[0].attributes["aria-hidden"], "true");
-  assert.match(edit.options[0].options[0].attributes.d, /^M12\.22/);
   edit.onclick();
   assert.equal(f.get("provider-dialog").open, true);
   assert.equal(f.get("provider-edit-id").value, "first");
-  assert.equal(f.get("provider-edit-name").value, "接口 A");
+});
+
+test("新增空供应商可保存且删除最后模型保留供应商", async () => {
+  const f = form(providers());
+  f.run("openProviderDialog(null)");
+  f.get("provider-edit-name").value = "新服务";
+  f.get("provider-edit-url").value = "https://new.example/v1";
+  f.get("provider-edit-key").value = "fixture-new-key";
+  await f.run("saveProviderDialog({preventDefault(){}})");
+  assert.equal(f.draft().providers.length, 3);
+  assert.equal(f.draft().providers[2].models.length, 0);
+  assert.equal(f.get("provider-edit-key").value, "");
+  f.run("confirmAction = async () => true");
+  await f.run("deleteModel({provider:draft.providers[0],model:draft.providers[0].models[0]})");
+  assert.equal(f.draft().providers[0].models.length, 0);
+});
+
+test("Key 查看仅控制新输入，关闭清空；用户草稿不反写有效覆盖", () => {
+  const f = form(providers());
+  f.get("model-key").type = "password";
+  f.get("model-key-eye").onclick();
+  assert.equal(f.get("model-key").type, "password");
+  f.get("model-key").value = "fixture-input-key";
+  f.get("model-key-eye").onclick();
+  assert.equal(f.get("model-key").type, "text");
+  f.run("closeModelDialog()");
+  assert.equal(f.get("model-key").value, "");
+  f.run('snapshot.config = {providers:[{id:"user",models:[],contextWindow:123456}]}; snapshot.effective.providers = [{id:"project",baseUrl:"https://project.example"}]');
+  assert.equal(JSON.parse(f.run("JSON.stringify(editableDraftFromEffective())")).providers[0].id, "user");
+});
+
+test("供应商开关不改写模型能力或模型自身开关", async () => {
+  const config = providers();
+  config.providers[0].models[0] = {id:"old-a",enabled:false,contextWindow:234567,reasoningLevel:"medium"};
+  const f = form(config);
+  await f.run("toggleProvider(draft.providers[0],false)");
+  assert.equal(f.draft().providers[0].enabled,false);
+  assert.deepEqual(f.draft().providers[0].models,config.providers[0].models);
+  await f.run("toggleProvider(draft.providers[0],true)");
+  assert.equal(f.draft().providers[0].enabled,undefined);
 });
 
 

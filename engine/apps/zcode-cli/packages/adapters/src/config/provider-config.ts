@@ -32,10 +32,9 @@ export interface UnifiedModelDefinition {
   readonly enabled?: boolean;
 }
 
-export interface UnifiedProviderDefinition extends Omit<UnifiedModelDefinition, "id" | "enabled"> {
+export interface UnifiedProviderDefinition extends Omit<UnifiedModelDefinition, "id"> {
   readonly models?: readonly (string | UnifiedModelDefinition)[];
 }
-
 export interface UnifiedConfigDocument {
   readonly model?: string;
   readonly provider?: string;
@@ -43,7 +42,6 @@ export interface UnifiedConfigDocument {
   /** JSON 显式供应商列表是成员集合，删除后不从派生旧 JSON 复活。 */
   readonly ownsProviderMembership?: boolean;
 }
-
 export interface UnifiedConfigPaths {
   readonly user: string;
   readonly userCandidates: readonly string[];
@@ -51,20 +49,18 @@ export interface UnifiedConfigPaths {
   readonly projectCandidates: readonly string[];
   readonly legacyProviderFile: string;
 }
-
 export interface UnifiedConfigDiagnostics {
   readonly errors: readonly string[];
   readonly warnings: readonly string[];
 }
-
 export interface ResolvedUnifiedModel extends UnifiedModelDefinition {
   readonly enabled: boolean;
   readonly apiType?: UnifiedProviderApiType;
   readonly apiKeySource?: string;
   readonly executable: boolean;
 }
-
 export interface ResolvedUnifiedProvider {
+  readonly enabled: boolean;
   readonly id: string;
   readonly name?: string;
   readonly modelConfigs: readonly ResolvedUnifiedModel[];
@@ -76,7 +72,6 @@ export interface ResolvedUnifiedProvider {
   readonly models: readonly string[];
   readonly executable: boolean;
 }
-
 export interface ResolvedUnifiedConfig {
   readonly paths: UnifiedConfigPaths;
   readonly model?: string;
@@ -89,6 +84,7 @@ export interface ResolvedUnifiedConfig {
 }
 
 export interface UnifiedConfigLoadOptions {
+  readonly includeProject?: boolean;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly dataRoot?: string;
@@ -120,6 +116,7 @@ const DEFAULT_BASE_URL: Readonly<Record<UnifiedProviderType, string>> = {
 };
 
 export function resolveUnifiedConfigPaths(options: {
+  readonly includeProject?: boolean;
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly dataRoot?: string;
@@ -138,7 +135,7 @@ export function resolveUnifiedConfigPaths(options: {
     current = parent;
   }
   const userCandidates = CONFIG_FILE_NAMES.map((name) => join(userRoot, name));
-  const project = projectCandidates.find((candidate) => existsSync(candidate));
+  const project = options.includeProject === false ? undefined : projectCandidates.find((candidate) => existsSync(candidate));
   return Object.freeze({
     user: userCandidates.find((candidate) => existsSync(candidate)) ?? join(userRoot, CONFIG_FILE_NAME),
     userCandidates: Object.freeze(userCandidates),
@@ -200,10 +197,14 @@ export async function resolveUnifiedConfig(options: UnifiedConfigLoadOptions = {
   const providers = [...entries.entries()].map(([id, definition]) => resolveProvider(id, definition, selectedProvider, selectedModel, env, diagnostics));
   let activeProvider = selectedProvider;
   let activeModel = selectedModel;
-  const selected = providers.find((provider) => provider.id === selectedProvider)?.modelConfigs.find((model) => model.id === selectedModel);
+  const selectedEntry = providers.find((provider) => provider.id === selectedProvider);
+  const selected = selectedEntry?.modelConfigs.find((model) => model.id === selectedModel);
   const explicitModel = options.cliOverrides?.model?.trim() || env.COMECODE_MODEL?.trim() || env.MODEL?.trim();
-  // 只替换停用的默认项；显式选择需报错，Gemini/缺失凭据仍沿用原检查语义。
-  if (selected?.enabled === false && !explicitModel) {
+  const explicitProvider = options.cliOverrides?.provider?.trim() || env.COMECODE_PROVIDER?.trim();
+  const inactive = selectedEntry?.enabled === false || selected?.enabled === false || selectedEntry?.models.length === 0;
+  // 供应商开关只控制执行资格，不覆盖模型开关；显式选择绝不能悄悄回退。
+  if (inactive && (explicitModel || explicitProvider)) diagnostics.errors.push("显式选择的 Provider 或模型已停用或没有模型");
+  if (inactive && !explicitModel && !explicitProvider) {
     const fallback = providers.find((provider) => provider.id === selectedProvider)?.modelConfigs.find((model) => model.executable);
     const other = fallback ? undefined : providers.find((provider) => provider.executable);
     activeProvider = fallback ? selectedProvider : other?.id;
@@ -236,6 +237,7 @@ export function toPublicUnifiedConfig(config: ResolvedUnifiedConfig) {
     providers: config.providers.map((provider) => ({
       id: provider.id,
       name: provider.name,
+      enabled: provider.enabled,
       type: provider.type,
       apiType: provider.apiType,
       baseUrl: provider.baseUrl,
@@ -357,7 +359,8 @@ function mergeDocuments(base: UnifiedConfigDocument, next: UnifiedConfigDocument
 
 function resolveProvider(id: string, definition: UnifiedProviderDefinition, selectedProvider: string | undefined, selectedModel: string | undefined, env: Readonly<Record<string, string | undefined>>, diagnostics: { errors: string[]; warnings: string[] }): ResolvedUnifiedProvider {
   const definitions = [...(definition.models ?? [])];
-  if (id === selectedProvider && selectedModel && !definitions.some((model) => (typeof model === "string" ? model : model.id) === selectedModel)) definitions.push(selectedModel);
+  const providerEnabled = definition.enabled !== false;
+  if (id === selectedProvider && selectedModel && (definition.models === undefined || definition.models.length > 0) && !definitions.some((model) => (typeof model === "string" ? model : model.id) === selectedModel)) definitions.push(selectedModel);
   const resolveConnection = (input: UnifiedProviderDefinition, label: string, enabled = true) => {
     const previousErrorCount = diagnostics.errors.length;
     const type = input.type;
@@ -378,12 +381,12 @@ function resolveProvider(id: string, definition: UnifiedProviderDefinition, sele
     const model = typeof item === "string" ? { id: item } : item;
     const effective = mergeProviderDefinition(definition, model);
     const enabled = model.enabled !== false;
-    const connection = resolveConnection(effective, `Provider ${id} 模型 ${model.id}`, enabled);
-    return Object.freeze({ id: model.id, name: model.name, enabled, contextWindow: effective.contextWindow, maxOutputTokens: effective.maxOutputTokens, toolCalling: effective.toolCalling, vision: effective.vision, reasoningLevel: effective.reasoningLevel, ...connection, executable: enabled && connection.executable });
+    const connection = resolveConnection(effective, `Provider ${id} 模型 ${model.id}`, providerEnabled && enabled);
+    return Object.freeze({ id: model.id, name: model.name, enabled, contextWindow: effective.contextWindow, maxOutputTokens: effective.maxOutputTokens, toolCalling: effective.toolCalling, vision: effective.vision, reasoningLevel: effective.reasoningLevel, ...connection, executable: providerEnabled && enabled && connection.executable });
   });
-  const connection = modelConfigs.length ? { type: definition.type, apiType: definition.type ? TYPE_TO_API[definition.type] : undefined, baseUrl: definition.baseUrl ?? (definition.type ? DEFAULT_BASE_URL[definition.type] : undefined), apiKey: definition.apiKey || (definition.apiKeyEnv ? env[definition.apiKeyEnv]?.trim() : undefined), apiKeySource: definition.apiKey ? "config.api_key" : definition.apiKeyEnv ? `env:${definition.apiKeyEnv}` : undefined } : resolveConnection(definition, `Provider ${id}`);
+  const connection = modelConfigs.length ? { type: definition.type, apiType: definition.type ? TYPE_TO_API[definition.type] : undefined, baseUrl: definition.baseUrl ?? (definition.type ? DEFAULT_BASE_URL[definition.type] : undefined), apiKey: definition.apiKey || (definition.apiKeyEnv ? env[definition.apiKeyEnv]?.trim() : undefined), apiKeySource: definition.apiKey ? "config.api_key" : definition.apiKeyEnv ? `env:${definition.apiKeyEnv}` : undefined } : resolveConnection(definition, `Provider ${id}`, false);
   if (!modelConfigs.length) diagnostics.warnings.push(`Provider ${id}: 没有模型，需设置 model 或 models`);
-  return Object.freeze({ id, name: definition.name, ...connection, models: Object.freeze(modelConfigs.map((model) => model.id)), modelConfigs: Object.freeze(modelConfigs), executable: modelConfigs.some((model) => model.executable) });
+  return Object.freeze({ id, name: definition.name, enabled: providerEnabled, ...connection, models: Object.freeze(modelConfigs.map((model) => model.id)), modelConfigs: Object.freeze(modelConfigs), executable: modelConfigs.some((model) => model.executable) });
 }
 
 function inferProviderId(document: UnifiedConfigDocument): string | undefined {

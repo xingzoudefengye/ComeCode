@@ -3409,8 +3409,82 @@ export function SessionPane({
     snapshotSessionId,
   ]);
 
-  // Composer 选择表达“下一次提交”。点击只更新 renderer intent；Session Selection
-  // 在 Submission 真正开跑（Guide 为下一次 model-step）时由 CLI/Core 更新。
+  // 用户主动改选模型/思考档位后，立刻把选择写进已绑定会话（switchModelConfig），让
+  // runtime 真值、ConversationSnapshot config 与「模型已切换」marker 同源更新。只写
+  // Composer 草稿的话，切换要等到下一次 Submission 才落库：用户切完不发消息就看不到
+  // 切换记录，也看不到切换失败。pending 记录改选时所在的 scope，只消费本 pane 的显式
+  // 用户动作，绝不在打开/恢复会话时按存储草稿反推，避免「开旧会话」把会话模型改掉。
+  const pendingSessionModelSyncRef = useRef<{ sessionId: string | null } | null>(null);
+  const sessionModelSyncKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const pending = pendingSessionModelSyncRef.current;
+    if (!pending) return;
+    if (pending.sessionId !== sessionId) {
+      // 改选发生在另一个会话/草稿 scope，不能在当前会话上补发。
+      pendingSessionModelSyncRef.current = null;
+      return;
+    }
+    if (!sessionId || snapshotSessionId !== sessionId) return;
+    const providerId = draftConfig.modelSelection?.providerId?.trim() ?? "";
+    const modelId = draftConfig.modelSelection?.modelId?.trim() ?? "";
+    if (!providerId || !modelId) return;
+    const thought = (draftConfig.thought ?? "").trim();
+    const projectedProvider = snapshot?.config.provider?.trim() ?? "";
+    const projectedModel = snapshot?.config.model?.trim() ?? "";
+    const projectedThought = (snapshot?.config.thought ?? "").trim();
+    if (
+      projectedProvider === providerId &&
+      projectedModel === modelId &&
+      projectedThought === thought
+    ) {
+      // 已收敛（或 CLI 判定的同值 noop）：不再补发命令，也不重复产切换 marker。
+      pendingSessionModelSyncRef.current = null;
+      sessionModelSyncKeyRef.current = null;
+      return;
+    }
+    const syncKey = [sessionId, providerId, modelId, thought].join("\u0000");
+    if (sessionModelSyncKeyRef.current === syncKey) return;
+    sessionModelSyncKeyRef.current = syncKey;
+    pendingSessionModelSyncRef.current = null;
+    const reportSwitchFailure = (cause?: unknown): void => {
+      // 不再静默：清 key 让用户重新选择可以重试；下一次 Submission 仍携带同一选择。
+      sessionModelSyncKeyRef.current = null;
+      if (cause !== undefined) {
+        logger.warn("[v4-pane] switchModelConfig 派发失败", {
+          error: cause instanceof Error ? cause.message : String(cause),
+          modelId,
+          providerId,
+        });
+      }
+      toast(intl.formatMessage({ id: "chat.toolbar.modelSwitch.failed" }));
+    };
+    void configCommandBarrier
+      .enqueue(() =>
+        dispatchConfigCas("switchModelConfig", { provider: providerId, model: modelId, thought }),
+      )
+      .then((ack) => {
+        if (
+          ack &&
+          (ack.status === "accepted" || ack.status === "noop" || ack.status === "duplicate")
+        )
+          return;
+        reportSwitchFailure();
+      }, reportSwitchFailure);
+  }, [
+    configCommandBarrier,
+    dispatchConfigCas,
+    draftConfig.modelSelection,
+    draftConfig.thought,
+    intl,
+    sessionId,
+    snapshot?.config.model,
+    snapshot?.config.provider,
+    snapshot?.config.thought,
+    snapshotSessionId,
+  ]);
+
+  // Composer 选择表达“下一次提交”。点击先更新 renderer intent；上面再把它同步到
+  // 已绑定会话，Submission 仍携带同一选择（值相同时 CLI 不重复产 ModelSelected）。
   const handleSelectModel = useCallback(
     (modelProvider: string, model: string, sourceModel: ModelSelectionSource | null) => {
       const resolvedProvider =
@@ -3421,15 +3495,17 @@ export function SessionPane({
         branch: "composer-submission-intent",
       });
       handleDraftSelectModel(resolvedProvider, model);
+      pendingSessionModelSyncRef.current = { sessionId };
     },
-    [draftConfigRef, handleDraftSelectModel],
+    [draftConfigRef, handleDraftSelectModel, sessionId],
   );
 
   const handleSelectThought = useCallback(
     (thought: string, _modelContext: { provider: string; model: string }) => {
       handleDraftSelectThought(thought);
+      pendingSessionModelSyncRef.current = { sessionId };
     },
-    [handleDraftSelectThought],
+    [handleDraftSelectThought, sessionId],
   );
 
   const handleRecoverCustomModelSelection = useCallback(
@@ -3494,6 +3570,7 @@ export function SessionPane({
           zcodeSessionService,
         });
         handleDraftSelectModel(modelSelection.providerId, modelSelection.modelId);
+        pendingSessionModelSyncRef.current = { sessionId };
         store.setConfigOptions(workspacePath, prepareResult.configOptions ?? [], workspaceIdentity);
         store.setConfigOptionsStatus(workspacePath, "ready", workspaceIdentity);
         store.setSlashCommands(workspacePath, prepareResult.slashCommands ?? [], workspaceIdentity);

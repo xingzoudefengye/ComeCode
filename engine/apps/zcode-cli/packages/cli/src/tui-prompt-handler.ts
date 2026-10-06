@@ -142,6 +142,8 @@ export function createTuiSubmitPrompt(
       sessionId,
       workingDirectory,
     } = await prepareTuiAppRuntime(deps, version, request, processRuntime);
+    // 恢复当前会话时复用 App，避免新实例与尚未关闭的自身 writer lease 冲突。
+    if (app && sessionId !== undefined && sessionId === app.sessionId) return app;
     const browserRuntime = createCliHeadlessBrowserRuntime({ browserExecutable, browserUse }, deps);
     let createdApp: Awaited<ReturnType<NonNullable<RunDependencies["createZCodeApp"]>>>;
     try {

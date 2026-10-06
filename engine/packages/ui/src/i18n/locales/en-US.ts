@@ -2504,6 +2504,10 @@ const enUS: Record<string, string> = {
   "settings.previewBadge.light": "Light",
   "settings.previewBadge.dark": "Dark",
   "settings.modelProviderTitle": "Model settings",
+  "settings.admin.open": "Open shared admin console",
+  "settings.admin.error": "Unable to open the admin console. Rebuild the CLI or run comecode admin.",
+  "settings.admin.description":
+    "Read and write the global config.json. Restart the desktop app after saving to apply changes; running tasks are not updated immediately. You can view history here; use the CLI resume command to continue a session in this version. Existing desktop session recovery remains unchanged.",
   "settings.mcpTitle": "MCP Servers",
   "settings.mcp.description": "Manage MCP server configurations used by ComeCode Agent.",
   "settings.mcp.create.open": "Add MCP server",
@@ -4812,6 +4816,7 @@ const enUS: Record<string, string> = {
   "chat.toolbar.modelSwitch.lockedByRunningTask":
     "A task is running. Finish it before switching model providers.",
   "chat.toolbar.modelSwitch.lockedByRunningTask.short": "busy",
+  "chat.toolbar.modelSwitch.failed": "Model switch did not take effect. Retry or pick the model again.",
   "chat.goal.runningBlocked": "Set a goal after the current task finishes.",
   "chat.goal.planModeBlocked": "Goal is unavailable in Plan mode. Switch modes to continue.",
   "chat.plan.attachmentsBlocked":

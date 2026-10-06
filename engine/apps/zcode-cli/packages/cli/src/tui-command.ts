@@ -72,9 +72,13 @@ export const runTuiCommand = async (
               workspaceDirectory,
             }).catch(() => undefined),
           ]);
+          const initialResult = resumeRequest?.resumeSessionId || resumeRequest?.continueSession
+            ? await promptHandler.resumeSession?.()
+            : undefined;
           return {
+            ...(initialResult ? { initialResult } : {}),
             // 首屏直接展示配置卡片，不要求用户先发送一句话才能发现没有模型。
-            ...(!metadata.modelOptions?.some((model) => !model.disabledReason)
+            ...(!initialResult && !metadata.modelOptions?.some((model) => !model.disabledReason)
               ? { initialResult: { response: providerSetupStartupResponse(env, workspaceDirectory), responseFormat: "plain" as const, loginRequired: false } }
               : {}),
             initialMode: currentCliMode(modeState),

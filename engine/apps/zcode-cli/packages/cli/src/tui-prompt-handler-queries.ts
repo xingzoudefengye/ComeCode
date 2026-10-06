@@ -1,6 +1,7 @@
 // tui-prompt-handler.ts 顶到 oxlint max-lines 上限（400 行），把 submitPrompt 上
 // 那组「拿到当前 App 就只读转发」的查询方法拆到本文件；公开面仍从 tui-prompt-handler.ts 导出。
 import type { CommandCenterApp } from "./command-center.js";
+import { formatResumeResult } from "./command-center/formatters.js";
 import { listAppEffortOptions } from "./command-center/effort-options.js";
 import type { TuiPromptHandler } from "./tui-command-state.js";
 import type { TuiSessionMetadata } from "@zcode/tui";
@@ -23,6 +24,18 @@ export const attachTuiAppQueries = (
   submitPrompt: TuiPromptHandler,
   getApp: () => Promise<CommandCenterApp>,
 ): void => {
+  // 启动恢复不能只读取元数据，否则目标会话已打开但首屏仍像新会话。
+  submitPrompt.resumeSession = async () => {
+    const app = await getApp();
+    const result = await app.resume();
+    const restoredMessages = await app.loadSessionTranscript?.();
+    return {
+      ...(await readTuiSessionMetadata(app)),
+      response: formatResumeResult(app.sessionId, result, app.getModel?.()),
+      ...(restoredMessages !== undefined ? { resetSessionProjection: true, restoredMessages } : {}),
+      traceId: result.traceId ?? app.traceId,
+    };
+  };
   submitPrompt.readSubagents = async (input) => {
     const app = await getApp();
     return (

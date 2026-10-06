@@ -148,9 +148,10 @@ test("HTTP 鉴权、同源、Host、CSP、脱敏、体积限制和保存",async 
   assert.equal((await fetch(server.origin+'/api/config',{method:'PUT',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({revision:before.revision,config})})).status,200);
   assert.equal((await fetch(server.origin+'/api/missing',{headers})).status,404);
 });
-test("模型保存前连接测试失败不会写入配置文件", async t => {
+test("HTTP 未测试或测试失败仍可保存，结构非法仍拒绝且测试不落盘", async t => {
   const f = await fixture(t);
-  const remote = createServer((_request, response) => { response.writeHead(401); response.end("private-remote-response"); });
+  let requests = 0;
+  const remote = createServer((_request, response) => { requests++; response.writeHead(401); response.end("private-remote-response"); });
   await new Promise((resolve, reject) => { remote.once("error", reject); remote.listen(0, "127.0.0.1", resolve); });
   t.after(() => remote.close());
   const remoteUrl = `http://127.0.0.1:${remote.address().port}/v1`;
@@ -168,6 +169,30 @@ test("模型保存前连接测试失败不会写入配置文件", async t => {
   assert.match(result.message, /HTTP 401/u);
   const saved = JSON.parse(await readFile(join(f.dataRoot, "config.json"), "utf8"));
   assert.equal(saved.providers[0].models.some(model => model.id === "failed-save-model"), false);
+  assert.equal(requests, 1);
+  assert.doesNotMatch(JSON.stringify(result), /private-remote-response|private-admin-test-key/u);
+
+  const put = input => fetch(admin.origin + "/api/config", { method: "PUT", headers, body: JSON.stringify(input) });
+  // 测试后再编辑，保存必须接受最新结构，不检查测试成功标记。
+  config.providers[0].models.at(-1).name = "测试失败后编辑";
+  const afterFailure = await put({ revision: before.revision, config });
+  assert.equal(afterFailure.status, 200);
+  const snapshot = await afterFailure.json();
+  assert.equal(snapshot.saved, true);
+  config.providers[0].models.push({ id: "untested-model" });
+  const untested = await put({ revision: snapshot.revision, config });
+  assert.equal(untested.status, 200);
+  const latest = await untested.json();
+  assert.equal(requests, 1, "保存不得隐式连接模型服务");
+  const original = await readFile(join(f.dataRoot, "config.json"), "utf8");
+  assert.equal(JSON.parse(original).providers[0].models.at(-2).name, "测试失败后编辑");
+  for (const invalidModel of [{ id: "" }, { id: "invalid-window", contextWindow: -1 }]) {
+    const invalid = structuredClone(config);
+    invalid.providers[0].models.push(invalidModel);
+    assert.equal((await put({ revision: latest.revision, config: invalid })).status, 422);
+    assert.equal(await readFile(join(f.dataRoot, "config.json"), "utf8"), original);
+  }
+  assert.equal(requests, 1);
 });
 test("连接测试必须验证协议响应，并让 Anthropic 根地址与真实 SDK 一致", async t => {
   const f = await fixture(t);

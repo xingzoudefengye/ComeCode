@@ -348,6 +348,7 @@ export type ConcurrencyChangeReason =
   | "rate_limited"
   | "provider_overloaded"
   | "offpeak_queued"
+  | "slow_response"
   | "recovered"
   | "idle_reset";
 

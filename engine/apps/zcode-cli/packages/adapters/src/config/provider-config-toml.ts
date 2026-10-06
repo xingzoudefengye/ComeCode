@@ -37,12 +37,16 @@ export function parseUnifiedConfigToml(
       return;
     }
     const current = providers[section] ?? {};
-    if (!["type", "base_url", "api_key_env", "api_key", "models"].includes(key)) {
+    if (!["type", "base_url", "api_key_env", "api_key", "models", "enabled"].includes(key)) {
       warnings.push(`${filePath}:${line}: 忽略未知 Provider 字段 ${key}`);
       return;
     }
     if (["type", "base_url", "api_key_env", "api_key"].includes(key) && typeof value !== "string") {
       errors.push(`${filePath}:${line}: ${key} 必须是字符串`);
+      return;
+    }
+    if (key === "enabled" && typeof value !== "boolean") {
+      errors.push(`${filePath}:${line}: enabled 必须是布尔值`);
       return;
     }
     if (
@@ -58,6 +62,7 @@ export function parseUnifiedConfigToml(
       ...(key === "base_url" ? { baseUrl: value as string } : {}),
       ...(key === "api_key_env" ? { apiKeyEnv: value as string } : {}),
       ...(key === "api_key" ? { apiKey: value as string } : {}),
+      ...(key === "enabled" ? { enabled: value as boolean } : {}),
       ...(key === "models" ? { models: value as string[] } : {}),
     };
   };

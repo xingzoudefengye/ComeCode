@@ -295,9 +295,8 @@ export function createDefaultSubagentPort(
           agentTelemetryCausationMode: request.background ? "linked_root" : "child",
           eventStore: this.eventStore,
           sessionStore: deps.sessionStore,
-          // 子 runtime 继承父的模型请求准入端口：subagent 的请求 provider 同样看得见，
-          // 它们该与父一样喂治理器信号（父是 observer 则子也是 observer）。
-          modelRequestAdmission: this.modelRequestAdmission,
+          // 主代理优先直通，child 必须使用供应商共享的排队并发预算。
+          modelRequestAdmission: this.modelRequestAdmission?.forSubagent?.(request.agentId) ?? this.modelRequestAdmission,
           modelFactory: childModelFactory,
           resolveEffectiveModelSelection: deps.resolveEffectiveModelSelection,
           // 子 runtime 自己仍使用 request.sessionId 做事件持久化和 trace 归档；对外阻塞交互

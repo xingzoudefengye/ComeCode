@@ -14,8 +14,19 @@ export async function materializeUnifiedConfig(
   const generated = resolved.providers.filter(
     (provider) => provider.executable && resolved.managedProviderIds.includes(provider.id),
   );
-  if (!resolved.hasSource || resolved.diagnostics.errors.length) return resolved;
-  const current = await readJsonObject(options.targetProviderFile);
+  if (resolved.diagnostics.errors.length) return resolved;
+  // 有效配置必须从用户来源继承规则；读取共享派生目标会把项目 A 覆盖带入项目 B。
+  const current = await readJsonObject(resolved.paths.legacyProviderFile);
+  if (!resolved.hasSource) {
+    // 来源不存在时不创建空 JSON，让 Registry 原有旧 CLI 配置迁移仍可执行。
+    if (options.targetProviderFile !== resolved.paths.legacyProviderFile && Object.keys(current).length) {
+      await mkdir(dirname(options.targetProviderFile), { recursive: true });
+      await writeFile(options.targetProviderFile, `${JSON.stringify(current, null, 2)}\n`, {
+        encoding: "utf8", mode: 0o600,
+      });
+    }
+    return resolved;
+  }
   const currentConfig = isRecord(current.config) ? current.config : {};
   const oldRules =
     isRecord(currentConfig.providerConfigRules) &&
@@ -79,18 +90,18 @@ export async function materializeUnifiedConfig(
     provider.modelConfigs
       .filter(
         (model) =>
-          model.executable || model.enabled === false,
+          model.executable || model.enabled === false || !provider.enabled,
       )
       .map((model) => ({
         providerId: provider.id,
         modelId: model.id,
         config: {
           // 显式模型开关覆盖内置目录规则，停用时保留能力叶子供重新启用恢复。
-          enabled: model.enabled,
+          enabled: provider.enabled && model.enabled,
           properties: {
             ...(model.contextWindow !== undefined ? { contextWindow: model.contextWindow } : {}),
             ...(model.toolCalling !== undefined ? { supportsToolCall: model.toolCalling } : {}),
-            ...(model.vision !== undefined ? { inputFormat: { supportsImage: model.vision } } : {}),
+            inputFormat: { supportsImage: model.vision ?? true },
           },
           ...(model.reasoningLevel !== undefined || model.maxOutputTokens !== undefined
             ? {

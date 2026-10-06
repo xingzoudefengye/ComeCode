@@ -1,10 +1,9 @@
 import type { KeyEvent } from "@mbears/opentui-core";
-import type { TuiWorkflowExpansionControls } from "./app-workflow-controller.js";
+import type { UseTuiKeyboardControlsOptions } from "./app-keyboard-options.js";
 import { useKeyboard } from "@mbears/opentui-react";
 import { useCallback, useRef } from "react";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { handleApprovalKey } from "./app-approval.js";
-import { handleSelectionKey } from "./app-input.js";
+import { handleSelectionKey, selectedSlashCommand } from "./app-input.js";
 import {
   CTRL_C_EXIT_PROMPT,
   PROMPT_DRAFT_CLEARED_STATUS,
@@ -24,20 +23,6 @@ import {
 import { handleSuggestionNavigationKey } from "./app-keyboard-suggestions.js";
 import { createSidebarShortcutState, type SidebarShortcutState } from "./app-sidebar-shortcut.js";
 import { handleSidebarShortcutKey } from "./app-sidebar-keyboard.js";
-import type {
-  ApprovalPrompt,
-  DraftAttachment,
-  EffortCommandSelectionState,
-  Message,
-  ModeCommandSelectionState,
-  ModelCommandSelectionState,
-  SelectionState,
-  SubmitValueOptions,
-  SlashCommand,
-  SlashSelectionState,
-} from "./app-model.js";
-import type { SidebarSectionId } from "./app-sidebar-layout.js";
-import type { TuiEffortOption, TuiModeOption, TuiModelOption } from "./types.js";
 import { latestRetryableCompactCommand } from "./app-compact-timeline.js";
 
 export {
@@ -53,48 +38,6 @@ export {
   resolveCtrlCExitIntent,
   shouldHandleInputHistoryNavigation,
 } from "./app-keyboard-helpers.js";
-
-type UseTuiKeyboardControlsOptions = {
-  readOnlyView?: { back(): void };
-  abortControllerRef: MutableRefObject<AbortController | undefined>;
-  approvalQueue: ApprovalPrompt[];
-  busy: boolean;
-  copyCurrentSelection: () => boolean;
-  draftValue: string;
-  workflowExpansion?: TuiWorkflowExpansionControls;
-  filteredEffortOptions: readonly TuiEffortOption[];
-  filteredModeOptions: readonly TuiModeOption[];
-  filteredModelOptions: readonly TuiModelOption[];
-  filteredSlashCommands: readonly SlashCommand[];
-  handleFileMentionKey: (key: KeyEvent) => boolean;
-  openModelSelection: () => boolean;
-  openEffortSelection: () => boolean;
-  openModeSelection: () => boolean;
-  inputHistoryActive: boolean;
-  messages: readonly Message[];
-  effortSelection: EffortCommandSelectionState | undefined;
-  modelSelection: ModelCommandSelectionState | undefined;
-  modeSelection: ModeCommandSelectionState | undefined;
-  onExit: (code: number) => void;
-  pasteClipboardImage: () => Promise<void>;
-  recallNextInput: () => Promise<void>;
-  recallPreviousInput: () => Promise<void>;
-  selection: SelectionState | undefined;
-  setApprovalQueue: Dispatch<SetStateAction<ApprovalPrompt[]>>;
-  setDraftAttachments: Dispatch<SetStateAction<DraftAttachment[]>>;
-  setDraftValue: (value: string) => void;
-  setEffortSelection: Dispatch<SetStateAction<EffortCommandSelectionState | undefined>>;
-  setModelSelection: Dispatch<SetStateAction<ModelCommandSelectionState | undefined>>;
-  setModeSelection: Dispatch<SetStateAction<ModeCommandSelectionState | undefined>>;
-  setSelection: Dispatch<SetStateAction<SelectionState | undefined>>;
-  setSlashSelection: Dispatch<SetStateAction<SlashSelectionState | undefined>>;
-  setStatus: Dispatch<SetStateAction<string>>;
-  slashSelection: SlashSelectionState | undefined;
-  submitValue: (value: string, options?: SubmitValueOptions) => Promise<void>;
-  switchMode: () => void;
-  toggleSidebar: () => boolean;
-  toggleSidebarSection: (section: SidebarSectionId) => boolean;
-};
 
 export function useTuiKeyboardControls({
   readOnlyView,
@@ -239,6 +182,31 @@ export function useTuiKeyboardControls({
         }
 
         if (key.name === "return" && !key.shift) {
+          const command =
+            filteredSlashCommands.find((item) => draftValue === `/${item.name}`) ??
+            selectedSlashCommand(draftValue, slashSelection, filteredSlashCommands);
+          const openCommandSelection =
+            command?.name === "model"
+              ? openModelSelection
+              : command?.name === "mode"
+                ? openModeSelection
+                : command?.name === "effort" || command?.name === "variant"
+                  ? openEffortSelection
+                  : undefined;
+          if (
+            !modelSelection &&
+            !effortSelection &&
+            !modeSelection &&
+            openCommandSelection &&
+            command
+          ) {
+            // 补全项尚未写入草稿，先规范命令再打开面板，避免缩写被直接提交为文字列表。
+            const value = `/${command.name}`;
+            setDraftValue(value);
+            openCommandSelection(value);
+            consumeKey(key);
+            return;
+          }
           if (openModelSelection() || openEffortSelection() || openModeSelection()) {
             consumeKey(key);
             return;

@@ -1,10 +1,5 @@
 import React from "react";
-import {
-  filterModelOptions,
-  modelCommandQuery,
-  reconcileModelCommandSelection,
-  selectedModelOption,
-} from "./app-input.js";
+import { filterModelOptions, modelCommandQuery, selectedModelOption } from "./app-input.js";
 import type { ModelCommandSelectionState } from "./app-model.js";
 import type { TuiModelOption, TuiOptions } from "./types.js";
 
@@ -13,10 +8,10 @@ export function useModelCommandController(
   options: Pick<TuiOptions, "modelOptions" | "initialResult" | "listModelOptions">,
 ): {
   filteredOptions: readonly TuiModelOption[];
-    reconcileDraft: (value: string) => ModelCommandSelectionState | undefined;
-    openSelection: () => boolean;
-    selectedOption: (submittedValue: string) => TuiModelOption | undefined;
-    selection: ModelCommandSelectionState | undefined;
+  reconcileDraft: (value: string) => ModelCommandSelectionState | undefined;
+  openSelection: (value?: string) => boolean;
+  selectedOption: (submittedValue: string) => TuiModelOption | undefined;
+  selection: ModelCommandSelectionState | undefined;
   setSelection: React.Dispatch<React.SetStateAction<ModelCommandSelectionState | undefined>>;
   setModelOptions: React.Dispatch<React.SetStateAction<readonly TuiModelOption[]>>;
 } {
@@ -42,18 +37,23 @@ export function useModelCommandController(
     () => filterModelOptions(draft, modelOptions),
     [draft, modelOptions],
   );
-  const reconcileDraft = React.useCallback(
-    (value: string) => {
-      setSelection(undefined);
-      return undefined;
+  const reconcileDraft = React.useCallback((_value: string) => {
+    setSelection(undefined);
+    return undefined;
+  }, []);
+  const openSelection = React.useCallback(
+    (value = draft) => {
+      if (
+        selection ||
+        modelCommandQuery(value) === undefined ||
+        filterModelOptions(value, modelOptions).length === 0
+      )
+        return false;
+      setSelection({ selectedIndex: 0 });
+      return true;
     },
-    [],
+    [draft, modelOptions, selection],
   );
-  const openSelection = React.useCallback(() => {
-    if (selection || !active || filteredOptions.length === 0) return false;
-    setSelection({ selectedIndex: 0 });
-    return true;
-  }, [active, filteredOptions.length, selection]);
   const selectedOption = React.useCallback(
     (submittedValue: string) => selectedModelOption(submittedValue, selection, filteredOptions),
     [filteredOptions, selection],

@@ -1,5 +1,6 @@
 import { isAbsolute, join, resolve } from "node:path";
 import {
+  acquireSessionWriterLease,
   createInMemorySessionEventStore,
   createNodeToolArtifactStore,
 } from "@zcode/adapters/storage";
@@ -59,6 +60,7 @@ import { getCliStorageRoot, getModelIoDir, projectIdFromDirectory } from "./path
 import {
   asInputHistoryStore,
   asLocalSettingStore,
+  getSessionDbPath,
   openStartupSessionStore,
   readProjectPermissionMode,
   readSessionModelSelection,
@@ -196,7 +198,24 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
   let nodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
   let ownedNodeReplBrowserBroker: NodeReplBrowserBroker | undefined;
   let providerModelRuntime: ApiProviderModelRuntime | undefined;
+  let releaseSessionWriter: Awaited<ReturnType<typeof acquireSessionWriterLease>> | undefined;
   try {
+    releaseSessionWriter = await acquireSessionWriterLease({
+      dbPath: getSessionDbPath(configResult, workingDirectory),
+      sessionId,
+    });
+    const sessionWriterWarning = releaseSessionWriter.acquired
+      ? undefined
+      : "此会话也在其他窗口中打开，已继续恢复。";
+    const announceSessionWriterWarning = async (): Promise<void> => {
+      if (!sessionWriterWarning) return;
+      await getRuntime().appendEvent(
+        createSessionEvent("system_message", sessionId, { type: "init", content: sessionWriterWarning }, {
+          traceId: traceContext.traceId,
+        }),
+        traceContext,
+      );
+    };
     const storageRoot = resolvePath(configResult.config.storage.dir);
     const cliStorageRoot = getCliStorageRoot(storageRoot);
     const modelIoDir = getModelIoDir(
@@ -495,7 +514,8 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         });
         await runtime.activatePausedTargetAfterResume(resumeTraceContext);
         resumePrepared = true;
-        return { ...result, modelSelection };
+        await announceSessionWriterWarning();
+        return { ...result, modelSelection, ...(sessionWriterWarning ? { warnings: [sessionWriterWarning] } : {}) };
       } finally {
         unsubscribe?.();
       }
@@ -693,6 +713,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
             // 孤儿收敛的作用域：本 app 的会话。构造时把**这个会话**留在 journal 里的非终态
             // run（死进程的遗物）收敛成 failed；兄弟会话的在飞 run 因此绝不会被误伤。
             parentSessionId: sessionId,
+            reconcileOrphans: releaseSessionWriter.acquired,
             // 在飞的引擎把本会话钉成常驻。
             // 惰性取 runtime 同 onRunEvent：run service 是 AgentRuntime 的依赖，构造更早；
             // 而启动只来自工具调用或 v4 命令，那时 runtime 必已就绪。
@@ -779,6 +800,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       appVersion,
       traceContext,
     });
+    await announceSessionWriterWarning();
     markRuntimeConstructed({
       hasInjectedModelAdapter: options.modelAdapter !== undefined,
       sessionId,
@@ -1115,7 +1137,12 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
           try {
             providerModelRuntime?.dispose();
           } finally {
-            await modelTelemetry.shutdown();
+            try {
+              await modelTelemetry.shutdown();
+            } finally {
+              await releaseSessionWriter?.();
+              releaseSessionWriter = undefined;
+            }
           }
         }
       },
@@ -1279,6 +1306,7 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       ...inputFacade,
     };
   } catch (error) {
+    await releaseSessionWriter?.();
     providerModelRuntime?.dispose();
     void modelTelemetry.shutdown().catch(() => undefined);
     void ownedNodeReplBrowserBroker?.close();

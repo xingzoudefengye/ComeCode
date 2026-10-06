@@ -186,7 +186,9 @@ export default defineConfig(({ mode }) => {
       },
       dedupe: ["react", "react-dom", "lucide-react"],
     },
-    server: { port: 5174, strictPort: true },
+    // 显式绑 IPv4 回环：某些 Windows 上 Vite 只监听 IPv6 [::1]，而 dev.mjs 的
+    // node:http 探测连接 ::1 会被拒绝，导致桌面永远等不到 Vite 就绪。
+    server: { host: "127.0.0.1", port: 5174, strictPort: true },
     define: {
       __ZCODE_ENDPOINT_ENV__: JSON.stringify(pickProductEndpointEnv(env)),
       __ZCODE_VERSION__: JSON.stringify(buildMetadata.appVersion),

@@ -1,11 +1,11 @@
-/* eslint-disable max-lines -- 管理页面脚本与 DOM 模板需保持同一资源边界。 */
+import { ADMIN_PROVIDER_SCRIPT } from "./provider-assets.js";
 // 页面只持有编辑草稿；原始凭据与有效配置均由服务端拥有。
 export const ADMIN_SCRIPT = String.raw`
 'use strict';
 const fragment = new URLSearchParams(location.hash.slice(1));
 let token = fragment.get('token') || sessionStorage.getItem('comecode-admin-token');
 if (fragment.has('token')) { sessionStorage.setItem('comecode-admin-token', token); history.replaceState(null, '', location.pathname); }
-let snapshot, draft, busy = false, editing = null, modelTestCandidate = null, modelTestFingerprint = "";
+let snapshot, draft, busy = false, editing = null;
 const $ = id => document.getElementById(id);
 const status = (text, error = false) => { $('status').textContent = text; $('status').className = error ? 'error' : ''; };
 const node = (tag, text, className) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (className) element.className = className; return element; };
@@ -34,6 +34,8 @@ function modelName(entry) { return entry.model.name || entry.model.id || '未命
 function environmentKeyName(source) { return typeof source === 'string' && source.startsWith('env:') ? source.slice(4) : ''; }
 function editableDraftFromEffective() {
   const effective = snapshot.effective;
+  // 编辑用户事实源，不能把项目/环境的有效覆盖反写全局配置；仅空用户配置兼容旧 Provider 导入。
+  if (snapshot.config.providers?.length) return structuredClone(snapshot.config);
   if (!effective || !Array.isArray(effective.providers) || effective.providers.length === 0) return structuredClone(snapshot.config);
   // 列表展示运行时有效模型；草稿不携带真实 Key，保存时由服务端按 ID 保留密钥。
   return {
@@ -43,6 +45,7 @@ function editableDraftFromEffective() {
       id: provider.id,
       ...(provider.name ? { name: provider.name } : {}),
       ...(provider.type ? { type: provider.type } : {}),
+      ...(provider.enabled === false ? { enabled: false } : {}),
       ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
       ...(environmentKeyName(provider.apiKeySource) ? { apiKeyEnv: environmentKeyName(provider.apiKeySource) } : {}),
       ...(provider.apiKey || provider.apiKeySource ? { hasApiKey: true } : {}),
@@ -143,7 +146,7 @@ function renderModelTypeMenu() {
   const select = $('model-type'), menu = $('model-type-menu');
   menu.replaceChildren();
   modelTypeOptions().forEach(option => {
-    const item = button(option.textContent, () => { $('model-type').value = option.value; syncModelTypeDisplay(); invalidateModelTest(); closeModelTypeMenu(); renderModelTypeMenu(); }, 'protocol-picker-option');
+    const item = button(option.textContent, () => { $('model-type').value = option.value; syncModelTypeDisplay(); closeModelTypeMenu(); renderModelTypeMenu(); }, 'protocol-picker-option');
     item.setAttribute('role', 'option'); item.setAttribute('aria-selected', String(option.value === select.value));
     menu.append(item);
   });
@@ -168,7 +171,7 @@ function selectModelEndpoint() {
   // 换地址时清空新输入的 Key，防止跨供应商误用；存量 Key 不进入表单。
   $('model-key').value = ''; $('clear-key').checked = false;
   $('model-type').value = provider && provider.type ? provider.type : 'openai-chat';
-  syncModelTypeDisplay(); invalidateModelTest(); closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
+  syncModelTypeDisplay(); closeModelEndpointMenu(); renderModelEndpointMenu(); updateModelKeyHint();
   if (!provider) $('model-url').focus();
 }
 function openModelDialog(entry) {
@@ -180,7 +183,7 @@ function openModelDialog(entry) {
   $('model-dialog-help').textContent = entry ? '修改这一个模型的连接信息；留空 API Key 表示保持原 Key。' : $('model-endpoint').hidden ? '只需要填写下面四项即可，其他设置可以保持默认。' : '直接填写接口地址，或点击右侧下拉选择已有接口以复用地址和 API Key。';
   $('model-id').value = model ? (model.id || '') : '';
   $('model-url').value = model && model.baseUrl ? model.baseUrl : (provider && provider.baseUrl ? provider.baseUrl : '');
-  $('model-key').value = '';
+  $('model-key').value = ''; $('model-key').type = 'password';
   $('model-key').placeholder = model && (model.hasApiKey || (provider && provider.hasApiKey)) ? '已配置，留空保持不变' : '输入服务商提供的 API Key';
   $('model-type').value = model && model.type ? model.type : (provider && provider.type ? provider.type : 'openai-chat');
   syncModelTypeDisplay(); renderModelTypeMenu(); closeModelTypeMenu();
@@ -192,63 +195,11 @@ function openModelDialog(entry) {
   $('model-reasoning').value = model && model.reasoningLevel ? model.reasoningLevel : 'high';
   $('clear-key').checked = false;
   $('model-more').open = false;
-  invalidateModelTest();
   $('model-dialog').showModal();
 }
-function closeModelDialog() { editing = null; invalidateModelTest(); $('model-dialog').close(); }
-function openProviderDialog(provider) {
-  editing = { provider };
-  $('provider-dialog-title').textContent = '编辑供应商';
-  $('provider-dialog-help').textContent = '这里修改的是同一接口地址下模型共用的供应商信息。';
-  $('provider-edit-id').value = provider.id || '';
-  $('provider-edit-name').value = provider.name || '';
-  $('provider-edit-url').value = provider.baseUrl || '';
-  $('provider-edit-type').value = provider.type || 'openai-chat';
-  $('provider-edit-key-env').value = provider.apiKeyEnv || '';
-  $('provider-edit-key').value = '';
-  $('provider-edit-key').placeholder = provider.hasApiKey ? '已配置，留空保持不变' : '输入服务商提供的 API Key';
-  $('provider-clear-key').checked = false;
-  $('provider-dialog').showModal();
-}
-function closeProviderDialog() { editing = null; $('provider-dialog').close(); }
-async function saveProviderDialog(event) {
-  event.preventDefault();
-  if (busy) return;
-  const before = structuredClone(draft), provider = editing && editing.provider;
-  const id = $('provider-edit-id').value.trim(), name = $('provider-edit-name').value.trim();
-  const url = $('provider-edit-url').value.trim(), type = $('provider-edit-type').value;
-  if (!provider || !id || !url || !type) { status('供应商 ID、接口地址和协议不能为空。', true); return; }
-  if (draft.providers.some(item => item !== provider && item.id === id)) { status('供应商 ID 已存在，请换一个。', true); return; }
-  const oldId = provider.id;
-  provider.id = id; provider.name = name || nextProviderName(); provider.baseUrl = url; provider.type = type;
-  const envName = $('provider-edit-key-env').value.trim();
-  if (envName) provider.apiKeyEnv = envName; else delete provider.apiKeyEnv;
-  if ($('provider-clear-key').checked) { provider.clearApiKey = true; delete provider.apiKey; }
-  const key = $('provider-edit-key').value;
-  if (key) { provider.apiKey = key; delete provider.clearApiKey; }
-  if (draft.provider === oldId) draft.provider = id;
-  const candidate = (provider.models || []).find(model => model.enabled !== false) || (provider.models || [])[0];
-  const saved = await save();
-  if (saved) closeProviderDialog();
-  else { draft = before; render(); }
-}
+function closeModelDialog() { $('model-key').value = ''; editing = null; $('model-dialog').close(); }
 function readOptionalNumber(id) { const value = $(id).value.trim(); return value ? Number(value) : undefined; }
 function assignOptional(object, key, value) { if (value === undefined || value === '') delete object[key]; else object[key] = value; }
-function modelDialogFingerprint() {
-  return JSON.stringify([
-    $('model-id').value.trim(), $('model-url').value.trim(), $('model-key').value,
-    $('model-type').value, $('model-name').value.trim(), $('model-context').value.trim(),
-    $('model-output').value.trim(), $('model-tool').value, $('model-vision').value,
-    $('model-reasoning').value,
-    $('clear-key').checked,
-  ]);
-}
-function invalidateModelTest() {
-  modelTestCandidate = null;
-  modelTestFingerprint = '';
-  const submit = $('model-submit');
-  if (submit) submit.disabled = true;
-}
 function applyModelDialogDraft(candidateDraft) {
   const modelId = $('model-id').value.trim(), baseUrl = $('model-url').value.trim(), type = $('model-type').value, key = $('model-key').value;
   if (!modelId || !baseUrl || !type) {
@@ -292,7 +243,6 @@ function applyModelDialogDraft(candidateDraft) {
   }
   if (editing && oldProvider && oldProvider !== provider && oldModel) {
     oldProvider.models = (oldProvider.models || []).filter(item => item !== oldModel);
-    if (!oldProvider.models.length) candidateDraft.providers = candidateDraft.providers.filter(item => item !== oldProvider);
     if (wasDefault) { candidateDraft.provider = provider.id; candidateDraft.model = model.id; }
   }
   if (!candidateDraft.providers.includes(provider)) candidateDraft.providers.push(provider);
@@ -303,11 +253,10 @@ function applyModelDialogDraft(candidateDraft) {
 }
 async function testModelDialog() {
   if (busy) return;
-  invalidateModelTest();
   const candidate = structuredClone(draft), result = applyModelDialogDraft(candidate);
   if (!result) return;
-  const fingerprint = modelDialogFingerprint();
   busy = true;
+  $('model-submit').disabled = true;
   $('model-test').disabled = true;
   $('model-dialog-help').textContent = '正在测试连接，请稍候…';
   status('正在测试连接…');
@@ -319,40 +268,37 @@ async function testModelDialog() {
     });
     if (!response.ok) {
       const message = response.message || '连接失败，请检查接口地址、模型和 API Key。';
-      $('model-dialog-help').textContent = '测试失败：' + message + ' 模型不会保存。';
+      $('model-dialog-help').textContent = '测试失败：' + message + ' 仍可保存配置。';
       status(message, true);
       return;
     }
-    modelTestCandidate = candidate;
-    modelTestFingerprint = fingerprint;
-    $('model-submit').disabled = false;
-    $('model-dialog-help').textContent = '测试连接成功，现在可以保存此模型。';
+    $('model-dialog-help').textContent = '测试连接成功；测试不会保存配置。';
     status(response.message || '连接测试成功。');
   } catch (error) {
     const message = error instanceof Error ? error.message : '连接测试失败，请检查配置。';
-    $('model-dialog-help').textContent = '测试失败：' + message + ' 模型不会保存。';
+    $('model-dialog-help').textContent = '测试失败：' + message + ' 仍可保存配置。';
     status(message, true);
   } finally {
     busy = false;
     $('model-test').disabled = false;
+    $('model-submit').disabled = false;
   }
 }
 async function saveModelDialog(event) {
   event.preventDefault();
   if (busy) return;
-  if (!modelTestCandidate || modelTestFingerprint !== modelDialogFingerprint()) {
-    const message = '请先点击“测试连接”，测试通过后才能保存模型。';
-    $('model-dialog-help').textContent = message; status(message, true); return;
-  }
+  // 测试只是诊断：保存读取当前表单，不能依赖旧测试结果或旧候选草稿。
+  const candidate = structuredClone(draft);
+  if (!applyModelDialogDraft(candidate)) return;
   const before = structuredClone(draft);
-  draft = structuredClone(modelTestCandidate);
+  draft = candidate;
   const saved = await save();
   if (saved) closeModelDialog();
-  else { draft = before; invalidateModelTest(); render(); }
+  else { draft = before; render(); }
 }
 function defaults() {
   const modelSelect = $('default-model'); modelSelect.replaceChildren();
-  const entries = allModels().filter(entry => entry.model.enabled !== false), counts = new Map();
+  const entries = allModels().filter(entry => entry.provider.enabled !== false && entry.model.enabled !== false), counts = new Map();
   entries.forEach(entry => counts.set(modelName(entry), (counts.get(modelName(entry)) || 0) + 1));
   const automatic = node('option', '按配置顺序自动选择'); automatic.value = ''; modelSelect.append(automatic);
   entries.forEach(entry => { const option = node('option', displayName(entry, counts)); option.value = JSON.stringify([entry.provider.id, entry.model.id]); modelSelect.append(option); });
@@ -365,7 +311,7 @@ async function toggleModel(entry, enabled) {
   if (enabled) delete entry.model.enabled;
   else entry.model.enabled = false;
   if (!enabled && draft.provider === entry.provider.id && draft.model === entry.model.id) {
-    const candidates = allModels().filter(candidate => candidate.model.enabled !== false);
+    const candidates = allModels().filter(candidate => candidate.provider.enabled !== false && candidate.model.enabled !== false);
     const fallback = candidates.find(candidate => candidate.provider === entry.provider) || candidates[0];
     if (fallback) { draft.provider = fallback.provider.id; draft.model = fallback.model.id; }
     else { delete draft.provider; delete draft.model; }
@@ -380,51 +326,11 @@ function modelSwitch(entry) {
   input.onchange = async () => { await toggleModel(entry, input.checked); $(input.id).focus(); };
   label.append(input, track, text); return label;
 }
-function render() {
-  defaults(); const container = $('providers'); container.replaceChildren(); const entries = allModels();
-  if (!entries.length) { container.append(node('div', '还没有模型。点击“添加模型”，填写地址、API Key、协议和模型名即可开始。', 'empty')); }
-  const counts = new Map(); entries.forEach(entry => counts.set(modelName(entry), (counts.get(modelName(entry)) || 0) + 1));
-  // 仍以模型为主视图，只用轻量标题表达自动归类结果。
-  draft.providers.filter(provider => (provider.models || []).length).forEach(provider => {
-    const group = node('section', undefined, 'provider-group');
-    const heading = node('div', undefined, 'provider-heading'), info = node('div');
-    const enabledCount = (provider.models || []).filter(model => model.enabled !== false).length;
-    const name = node('div', undefined, 'provider-name'), edit = button(undefined, () => openProviderDialog(provider), 'provider-edit');
-    edit.title = '编辑供应商'; edit.setAttribute('aria-label', '编辑供应商');
-    // 齿轮图标仅负责展示，保留原生按钮的键盘操作和无障碍名称。
-    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg'), path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('aria-hidden', 'true'); icon.setAttribute('focusable', 'false');
-    path.setAttribute('d', 'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z');
-    icon.append(path); edit.append(icon);
-    name.append(node('strong', provider.name || provider.id || '未命名供应商'), edit);
-    info.append(name, node('span', (provider.models || []).length + ' 个模型 · ' + enabledCount + ' 个已启用 · ' + (provider.baseUrl || '未设置地址'), 'provider-meta'));
-    heading.append(info);
-    group.append(heading);
-    (provider.models || []).forEach(model => {
-      const entry = { provider, model }, row = node('div', undefined, model.enabled === false ? 'model-row is-disabled' : 'model-row');
-      const rowHeading = node('div', undefined, 'model-row-heading'), title = node('div');
-      title.append(node('strong', displayName(entry, counts)), node('span', protocolName(model.type || provider.type), 'model-protocol'));
-      const actions = node('div', undefined, 'actions'), testButton = button('测试连接', () => test(entry, testButton));
-      if (model.enabled === false) { testButton.disabled = true; testButton.title = '请先启用模型再测试连接'; }
-      actions.append(modelSwitch(entry), button('编辑', () => openModelDialog(entry)), testButton, button('删除', () => deleteModel(entry), 'danger'));
-      rowHeading.append(title, actions); row.append(rowHeading);
-      const meta = node('div', undefined, 'model-meta'); meta.append(node('span', model.contextWindow ? Math.round(model.contextWindow / 1000) + 'K 上下文' : '默认上下文'), node('span', model.vision === true ? '支持图片' : model.vision === false ? '不支持图片' : '图片能力默认'), node('span', model.toolCalling === true ? '支持工具' : model.toolCalling === false ? '不支持工具' : '工具能力默认'), node('span', model.reasoningLevel ? '思考强度 ' + model.reasoningLevel : '思考强度默认')); row.append(meta);
-      const url = node('p', model.baseUrl || provider.baseUrl || '未设置接口地址', 'model-url'); row.append(url); group.append(row);
-    });
-    container.append(group);
-  });
-  const sources = $('sources'); sources.replaceChildren();
-  sources.append(node('p', '编辑用户配置：' + snapshot.source), node('p', '保存目标：' + snapshot.target));
-  if (snapshot.effective.paths.project) sources.append(node('p', '项目覆盖：' + snapshot.effective.paths.project + '（只读，可能覆盖此页设置）'));
-  sources.append(node('p', '优先级：CLI 参数 > 环境变量 > 项目配置 > 用户配置 > 旧配置 / 内置默认'));
-  sources.append(node('pre', JSON.stringify(snapshot.effective, null, 2)));
-}
 
 async function deleteModel(entry) {
   if (!await confirmAction('删除模型', '删除“' + modelName(entry) + '”？此操作会立即保存。')) return;
   const before = structuredClone(draft);
   entry.provider.models = (entry.provider.models || []).filter(model => model !== entry.model);
-  if (!entry.provider.models.length) draft.providers = draft.providers.filter(provider => provider !== entry.provider);
   if (draft.provider === entry.provider.id && draft.model === entry.model.id) { delete draft.provider; delete draft.model; }
   render();
   if (!await save()) { draft = before; render(); }
@@ -460,6 +366,10 @@ async function test(entry, control) {
     if (control) { control.disabled = entry.model.enabled === false; control.textContent = '测试连接'; }
   }
 }
+${ADMIN_PROVIDER_SCRIPT}
+for (const [eye, input] of [['model-key-eye','model-key'],['provider-key-eye','provider-edit-key']]) {
+  $(eye).onclick = () => { const field = $(input); if (!field.value) return; field.type = field.type === 'password' ? 'text' : 'password'; $(eye).textContent = field.type === 'password' ? '查看' : '隐藏'; };
+}
 $('model-endpoint').onchange = selectModelEndpoint;
 $('model-endpoint-toggle').onclick = toggleModelEndpointMenu;
 $('model-type-toggle').onclick = toggleModelTypeMenu;
@@ -474,8 +384,6 @@ window.addEventListener('keydown', event => { if (event.key === 'Escape') { clos
 renderModelTypeMenu(); syncModelTypeDisplay();
 $('model-form').onsubmit = saveModelDialog;
 $('model-test').onclick = testModelDialog;
-$('model-form').addEventListener('input', invalidateModelTest);
-$('model-form').addEventListener('change', invalidateModelTest);
 $('model-cancel').onclick = closeModelDialog;
 $('provider-form').onsubmit = saveProviderDialog;
 $('provider-cancel').onclick = closeProviderDialog;

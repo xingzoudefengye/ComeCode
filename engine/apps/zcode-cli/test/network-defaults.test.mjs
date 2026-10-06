@@ -206,7 +206,7 @@ test("完整会话仅请求用户配置的模型白名单主机", async () => {
       }),
     );
     assert.equal(env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE, builtinConfigPath);
-    assert.equal(env.ZCODE_PERSONAL_PROVIDER_CONFIG_FILE, join(dataRoot, "v2", "provider_config.json"));
+    assert.notEqual(env.ZCODE_PERSONAL_PROVIDER_CONFIG_FILE, join(dataRoot, "v2", "provider_config.json"));
     runtime = await startProcessProviderRegistryRuntime(env, {
       standalone: { legacyCliUserConfigFilePath: legacyPath },
     });

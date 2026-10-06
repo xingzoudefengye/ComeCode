@@ -32,16 +32,28 @@ export async function prepareTuiAdmin(ctx: RunContext, env: CliEnv) {
 }
 /** 独立管理命令不创建 Agent，会话结束前只持有本地监听。 */
 export async function runAdminCommand(ctx: RunContext, deps: RunDependencies, args: readonly string[]) {
-  if (args.length) { ctx.stderr.write("用法：comecode admin [--web-port <port>] [--no-browser]\n"); return 1; }
+  const desktop = args.length === 1 && args[0] === "desktop-stdio";
+  if (args.length && !desktop) { ctx.stderr.write("用法：comecode admin [--web-port <port>] [--no-browser]\n"); return 1; }
   let server: Awaited<ReturnType<typeof startAdminServer>> | undefined;
   try {
     if (options(ctx)["no-web"]) throw new Error("admin 命令不能与 --no-web 同时使用");
-    server = await open(ctx, deps.env ?? process.env, (deps.cwd ?? process.cwd)(), true);
-    ctx.stderr.write("按 Ctrl+C 关闭管理页面。\n");
-    await new Promise<void>((resolve) => {
-      const close = () => { process.off("SIGINT", close); process.off("SIGTERM", close); resolve(); };
-      process.once("SIGINT", close); process.once("SIGTERM", close);
-    });
+    if (desktop) {
+      // 管理进程只通过私有 stdio 返回授权地址，不写入终端日志或启动 Agent。
+      server = await startAdminServer({ env: deps.env ?? process.env, includeProject: false, port: 0 });
+      ctx.stdout.write(`${JSON.stringify({ type: "comecode-admin-ready", url: server.url })}\n`);
+      await new Promise<void>((resolve) => {
+        const close = () => { process.off("SIGINT", close); process.off("SIGTERM", close); process.stdin.off("end", close); resolve(); };
+        process.once("SIGINT", close); process.once("SIGTERM", close);
+        process.stdin.once("end", close); process.stdin.resume();
+      });
+    } else {
+      server = await open(ctx, deps.env ?? process.env, (deps.cwd ?? process.cwd)(), true);
+      ctx.stderr.write("按 Ctrl+C 关闭管理页面。\n");
+      await new Promise<void>((resolve) => {
+        const close = () => { process.off("SIGINT", close); process.off("SIGTERM", close); resolve(); };
+        process.once("SIGINT", close); process.once("SIGTERM", close);
+      });
+    }
     return 0;
   } catch (error) { ctx.stderr.write(`${(error as NodeJS.ErrnoException).code === "EADDRINUSE" ? "端口已被占用，请使用 --web-port 选择其他端口" : (error as Error).message}\n`); return 1; }
   finally { await server?.close(); }

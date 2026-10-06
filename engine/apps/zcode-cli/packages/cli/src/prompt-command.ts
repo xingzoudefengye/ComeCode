@@ -323,10 +323,20 @@ export const runPrompt = async (
     // 在飞的 workflow run 不能被进程退出孤儿化。窄触发（观察到过 dwf 活动）+ 宽排水
     // （runtime 的两个 busy 事实）——论证见 waitForHeadlessWorkflowSettle 的注释。
     if (observer.hasWorkflowActivity() && runtimeFacts) {
-      await waitForHeadlessWorkflowSettle({
+      const workflowWait = await waitForHeadlessWorkflowSettle({
         runtime: runtimeFacts,
         signal: abortController.signal,
+        onDeadlineExceeded: () => {
+          abortController.abort(
+            new Error(
+              "Headless workflow exceeded its 30 minute deadline; the background task was not allowed to wait indefinitely.",
+            ),
+          );
+        },
       });
+      if (workflowWait === "deadline_exceeded") {
+        abortController.signal.throwIfAborted();
+      }
     }
     // bench 的正常等待必须先于 close；close 会取消 Extraction，且有独立的清理时限。
     if (options.memoryBench) {

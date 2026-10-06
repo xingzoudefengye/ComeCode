@@ -1,0 +1,43 @@
+import { formatJson } from "@zcode/core";
+import { loadBootstrapModule } from "./bootstrap-loader.js";
+import { loadCliDotenv } from "./env.js";
+import { providerSetupResponse } from "./provider-setup.js";
+export async function runLoginCommand(ctx, options, deps, _noBrowser, _args = []) {
+    ctx.stderr.write(providerSetupResponse(options.locale ?? options.detectedLocale, deps.env) + "\n");
+    return 1;
+}
+export async function runLogoutCommand(ctx, options, deps) {
+    try {
+        const env = deps.env ?? process.env;
+        const workingDirectory = (deps.cwd ?? process.cwd)();
+        const dotenvResult = (deps.loadDotenv ?? loadCliDotenv)({
+            cwd: workingDirectory,
+            env,
+        });
+        if (dotenvResult.error) {
+            throw new Error(`Failed to load environment file: ${dotenvResult.path}`, {
+                cause: dotenvResult.error,
+            });
+        }
+        const logout = deps.logoutZCodeCli ?? (await loadBootstrapModule()).logoutZCodeCli;
+        const result = await logout({ env });
+        if (options.json) {
+            ctx.stdout.write(formatJson({
+                status: "logged_out",
+                provider: "zai",
+                credentialsPath: result.credentialsPath,
+            }));
+            return 0;
+        }
+        ctx.stdout.write(`Logged out from Coding Plan accounts. Credentials: ${result.credentialsPath}\n`);
+        return 0;
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.stderr.write(`Error: ${message}\n`);
+        if (options.verbose && error instanceof Error && error.stack) {
+            ctx.stderr.write(`${error.stack}\n`);
+        }
+        return 1;
+    }
+}
