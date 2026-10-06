@@ -160,6 +160,22 @@ test("history无需init只读，不创建storage或启动模型；非法scope与
   assert.match(failed.err, /记忆命令失败/u);
 });
 
+test("实际CLI路由透传apply，预览只读且非法用途返回失败", async (t) => {
+  const f = await fixture(t);
+  await mkdir(join(f.project, ".ai"));
+  const file = join(f.project, ".ai", "tasks.md");
+  await writeFile(file, "- [x] fixture finished\n- [ ] fixture pending\n");
+  const preview = await f.invoke(["compact"], {}, true);
+  assert.equal(preview.code, 0, preview.err);
+  assert.match(await readFile(file, "utf8"), /finished/u);
+  const applied = await f.invoke(["compact", "--apply"], {}, true);
+  assert.equal(applied.code, 0, applied.err);
+  assert.doesNotMatch(await readFile(file, "utf8"), /finished/u);
+  assert.match(await readFile(file, "utf8"), /pending/u);
+  assert.equal((await f.invoke(["check", "--apply"], {}, true)).code, 1);
+  assert.equal((await f.invoke(["compact", "--apply", "--scope", "user"], {}, true)).code, 1);
+});
+
 test("实际CLI路由透传全局scope，/memory save帮助按配置作用域且独立自动史书", async (t) => {
   const f = await fixture(t);
   const result = await f.invoke(["path", "--scope", "user"], {}, true);

@@ -18,6 +18,8 @@ import {
 } from "@zcode/contracts";
 import { createStructuredPatch } from "../diff.js";
 import { stampMemoryOriginSessionId } from "../../memory/origin-session.js";
+import { writeMemoryTextFile } from "../../memory/project-storage.js";
+import { resolveWorkspaceProjectMemoryRoot } from "../../memory/project-files.js";
 import { resolveWorkspacePath } from "../path-policy.js";
 import {
   createReadFileStateKey,
@@ -122,7 +124,8 @@ const writeHandler: ToolHandler = async (input, context) => {
     sessionId: context.sessionId,
   });
   const writeStartedAt = Date.now();
-  const writeResult = await fileSystemPort.writeTextFile(
+  const writeResult = await writeMemoryTextFile(
+    fileSystemPort,
     {
       path: filePath,
       content: contentToWrite,
@@ -134,6 +137,8 @@ const writeHandler: ToolHandler = async (input, context) => {
       trace: createWriteTrace(context),
     },
     { signal: context.abortSignal },
+    context.memoryRoot ??
+      resolveWorkspaceProjectMemoryRoot(context.workspaceRoot ?? context.workingDirectory),
   );
   const fsWriteMs = elapsedMsSince(writeStartedAt);
 

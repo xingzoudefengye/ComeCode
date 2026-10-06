@@ -4,8 +4,9 @@ import { createConfig, resolvePath } from "@zcode/adapters/config";
 import { getCliStorageRoot } from "@zcode/bootstrap";
 import {
   PROJECT_MEMORY_FILES,
-  PROJECT_MEMORY_MAX_FILE_CHARS,
-  PROJECT_MEMORY_MAX_TOTAL_CHARS,
+  PROJECT_MEMORY_STORAGE_MAX_CHARS,
+  PROJECT_MEMORY_STORAGE_MAX_BYTES,
+  PROJECT_MEMORY_TARGET_CHARS,
   PROJECT_MEMORY_TEMPLATE,
   USER_MEMORY_TEMPLATE,
   USER_MEMORY_MAX_TOTAL_CHARS,
@@ -17,12 +18,13 @@ import {
 } from "@zcode/core";
 import type { GlobalOptions, RunContext } from "@zcode/shared-types";
 import type { RunDependencies } from "./cli-types.js";
+import { runMemoryRetentionCommand } from "./memory-retention-command.js";
 
 type MemoryScope = "user" | "project" | "both";
-type MemoryAction = "path" | "init" | "check" | "history";
+type MemoryAction = "path" | "init" | "check" | "history" | "compact" | "recover";
 const USER_STABLE_FILES = ["profile.md", "preferences.md"] as const;
 const MEMORY_USAGE =
-  "用法: comecode memory <path|init|check> [--scope user|project|both]\n      comecode memory history [--scope user]\n";
+  "用法: comecode memory <path|init|check> [--scope user|project|both]\n      comecode memory history [--scope user]\n      comecode memory compact [--apply] | recover [--scope project]\n";
 
 export async function runMemoryCommand(
   ctx: RunContext,
@@ -39,6 +41,13 @@ export async function runMemoryCommand(
     const { action, scope } = parsed;
     const cwd = deps.cwd?.() ?? process.cwd();
     const workspace = await resolveWorkspaceRoot(cwd);
+    if (action === "compact" || action === "recover")
+      return await runMemoryRetentionCommand(
+        ctx,
+        resolveWorkspaceProjectMemoryRoot(workspace),
+        action,
+        parsed.apply,
+      );
     // 默认 project 命令不解析用户配置，保留原有路径与初始化行为。
     const config =
       scope === "project"
@@ -146,8 +155,15 @@ export async function runMemoryCommand(
           );
         } else {
           ctx.stdout.write(
-            `项目记忆：${bytes} bytes (UTF-8), ${chars}/${PROJECT_MEMORY_MAX_TOTAL_CHARS} chars；单文件预算：${PROJECT_MEMORY_MAX_FILE_CHARS} chars\n`,
+            `存储硬上限：${chars}/${PROJECT_MEMORY_STORAGE_MAX_CHARS} chars，${bytes}/${PROJECT_MEMORY_STORAGE_MAX_BYTES} UTF-8 bytes；整理目标：${PROJECT_MEMORY_TARGET_CHARS} chars\n`,
           );
+          ctx.stdout.write(
+            "上下文加载：双根合计 4000 估算 token / 12000 chars（与磁盘存储分开）。\n",
+          );
+          if (chars > PROJECT_MEMORY_STORAGE_MAX_CHARS || bytes > PROJECT_MEMORY_STORAGE_MAX_BYTES)
+            ctx.stdout.write(
+              "存储超限：普通写入只允许逐步缩减；运行 comecode memory compact 查看整理计划。\n",
+            );
         }
       }
     }
@@ -160,25 +176,32 @@ export async function runMemoryCommand(
 
 function parseMemoryArgs(
   args: readonly string[],
-): { action: MemoryAction; scope: MemoryScope } | undefined {
+): { action: MemoryAction; scope: MemoryScope; apply: boolean } | undefined {
   let action: MemoryAction | undefined;
   let scope: MemoryScope | undefined;
+  let apply = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
-    if (arg === "--scope" || arg.startsWith("--scope=")) {
+    if (arg === "--apply") {
+      if (apply) return undefined;
+      apply = true;
+    } else if (arg === "--scope" || arg.startsWith("--scope=")) {
       if (scope) return undefined;
       const value = arg === "--scope" ? args[++index] : arg.slice("--scope=".length);
       if (value !== "user" && value !== "project" && value !== "both") return undefined;
       scope = value;
     } else {
-      if (action || !["path", "init", "check", "history"].includes(arg)) return undefined;
+      if (action || !["path", "init", "check", "history", "compact", "recover"].includes(arg))
+        return undefined;
       action = arg as MemoryAction;
     }
   }
   action ??= "path";
   scope ??= action === "history" ? "user" : "project";
   if (action === "history" && scope !== "user") return undefined;
-  return { action, scope };
+  if ((action === "compact" || action === "recover") && scope !== "project") return undefined;
+  if (apply && action !== "compact") return undefined;
+  return { action, scope, apply };
 }
 
 function printChronicleSummary(

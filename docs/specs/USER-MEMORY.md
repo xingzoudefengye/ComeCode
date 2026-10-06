@@ -4,7 +4,7 @@
 
 Runtime 是上下文快照的唯一所有者；本地 managed chronicle 是用户历史的唯一持久化写入路径。默认 `memory.scope=project`，只有 `both` / `user` 启用用户记忆，且 `enabled=false` 或 `use=false` 均禁止加载和历史读取。桌面 `memoryEnabled` 控制运行时 enabled，关闭不会删除文件。
 
-项目 `.ai/` 保留五类文件及正常 Read-before-Edit、Write/Edit 权限。用户稳定背景位于同一 CLI storage root 的 `memories/user/`，仅加载 profile.md、preferences.md（各最多 2000 字符、快照含标题最多 4000 字符）；只保存明确的用户偏好，不保存项目事实、不提升指令优先级。普通工具不会自动获得用户目录写入许可。
+项目 `.ai/` 保留五类文件及正常 Read-before-Edit、Write/Edit 权限；统一存储预算、状态更新、分层整理及迁移事务见 [有限容量项目记忆](BOUNDED-PROJECT-MEMORY.md)。用户稳定背景位于同一 CLI storage root 的 `memories/user/`，仅加载 profile.md、preferences.md（各最多 2000 字符、快照含标题最多 4000 字符）；只保存明确的用户偏好，不保存项目事实、不提升指令优先级。普通工具不会自动获得用户目录写入许可。
 
 ## 时序与预算
 

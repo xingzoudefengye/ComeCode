@@ -12,7 +12,7 @@ import type { AgentRuntimeInternal } from "../internal.js";
 import { getSessionShellSelectionFromConfig } from "../methods/session-shell-environment.js";
 import { sanitizeChronicleText } from "../../compact/chronicle.js";
 import { withShortFileTransaction } from "../../memory/file-transaction.js";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import {
   isFileSystemPortError,
   type FileSystemPort,
@@ -23,7 +23,12 @@ import {
   type MemoryAgentAllowedRoot,
 } from "../../memory/memory-agent-loop.js";
 import { MEMORY_EXTRACTION_MAX_INPUT_CHARS } from "../../memory/extraction.js";
-import { rollMemoryMarkdown } from "../../memory/project-files.js";
+import {
+  PROJECT_MEMORY_WRITE_GUARD,
+  validateProjectMemoryWrite,
+} from "../../memory/project-storage.js";
+import { compactProjectMemoryFile } from "../../memory/project-retention.js";
+import type { ProjectMemoryFileName } from "../../memory/project-files.js";
 
 import { createRuntimeModel } from "../methods/runtime-model.js";
 import { createProjectMemoryUsageModel } from "./project-memory-usage.js";
@@ -174,6 +179,7 @@ export function createMemoryExtractionFileSystem(
   };
   return new Proxy(port, {
     get(target, key) {
+      if (key === PROJECT_MEMORY_WRITE_GUARD) return true;
       if (key === "readTextFileRange")
         return async (
           request: Parameters<FileSystemPort["readTextFileRange"]>[0],
@@ -219,7 +225,10 @@ export function createMemoryExtractionFileSystem(
             const root = roots.find((item) =>
               item.files.some((file) => join(item.rootDir, file) === path),
             )!;
-            const lockFile = root.kind === "user" ? join(root.rootDir, ".stable-memory") : path;
+            const lockFile = join(
+              root.rootDir,
+              root.kind === "user" ? ".stable-memory" : ".project-memory",
+            );
             if (root.kind === "user") {
               for (const file of root.files) await allowed(join(root.rootDir, file), "Read");
             }
@@ -271,8 +280,18 @@ export function createMemoryExtractionFileSystem(
                 const keys = stableKeys(content + "\n" + sibling);
                 if (new Set(keys).size !== keys.length)
                   throw new Error("Duplicate user preference key");
-              } else if (relative(root.rootDir, path) === "memory.md")
-                content = rollMemoryMarkdown(content);
+              } else {
+                const file = root.files.find(
+                  (name) => join(root.rootDir, name) === path,
+                ) as ProjectMemoryFileName;
+                content = compactProjectMemoryFile(file, content).content;
+                await validateProjectMemoryWrite(
+                  port,
+                  root.rootDir,
+                  { ...request, path, content },
+                  options,
+                );
+              }
               options?.signal?.throwIfAborted();
               const result = await port.writeTextFile(
                 { ...request, content, atomic: true, expectedRevision: current?.revision },

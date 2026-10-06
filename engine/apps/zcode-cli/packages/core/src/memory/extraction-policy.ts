@@ -1,10 +1,15 @@
 import { join } from "node:path";
 import type { MessageId, MessageWithParts, ToolPart } from "@zcode/contracts";
 import { resolveContainedMemoryFilePath } from "./memory-file-path.js";
+import {
+  buildMemoryExtractionEvidence,
+  hasMemoryExtractionEvidence,
+} from "./extraction-evidence.js";
 import type { MemoryExtractionDecision, MemoryExtractionSnapshot } from "./extraction.js";
 
 const MINIMUM_USER_WORDS = 3;
 export const MEMORY_EXTRACTION_MAX_INPUT_CHARS = 16_000;
+export const MEMORY_EXTRACTION_BATCH_INPUT_CHARS = 6_000;
 
 /** 只投影 scheduler 决策后的用户增量；旧 tool/模型输出及注入指令不进入背景请求。 */
 export function buildMemoryExtractionUserInput(messages: readonly MessageWithParts[]): string {
@@ -28,6 +33,28 @@ export function buildMemoryExtractionUserInput(messages: readonly MessageWithPar
   return texts.join("\n\n").slice(0, MEMORY_EXTRACTION_MAX_INPUT_CHARS);
 }
 
+export function measureMemoryExtractionInputChars(messages: readonly MessageWithParts[]): number {
+  const evidence = buildMemoryExtractionEvidence(messages);
+  const evidenceSection = evidence ? `VERIFIED TOOL EVIDENCE:\n${evidence}` : "";
+  const userInput = buildMemoryExtractionUserInput(messages);
+  const userSection = userInput ? `NEW USER PROSE:\n${userInput}` : "";
+  return [userSection, evidenceSection].filter(Boolean).join("\n\n").length;
+}
+
+export function buildMemoryExtractionInput(messages: readonly MessageWithParts[]): string {
+  const evidence = buildMemoryExtractionEvidence(messages);
+  const evidenceSection = evidence ? `VERIFIED TOOL EVIDENCE:\n${evidence}` : "";
+  const userBudget = Math.max(
+    0,
+    MEMORY_EXTRACTION_BATCH_INPUT_CHARS - evidenceSection.length - (evidenceSection ? 2 : 0),
+  );
+  const userInput = buildMemoryExtractionUserInput(messages).slice(0, userBudget);
+  const sections = [userInput ? `NEW USER PROSE:\n${userInput}` : "", evidenceSection].filter(
+    Boolean,
+  );
+  return sections.join("\n\n").slice(0, MEMORY_EXTRACTION_BATCH_INPUT_CHARS);
+}
+
 export function evaluateMemoryExtraction(
   snapshot: MemoryExtractionSnapshot,
   cursor: MessageId | undefined,
@@ -39,12 +66,13 @@ export function evaluateMemoryExtraction(
   const userCount = pending.filter(
     (message) => buildMemoryExtractionUserInput([message]).length > 0,
   ).length;
-  // 批次中一次直接写入不能代表其它用户输入也已沉淀。
-  if (userCount <= 1 && containsDirectMemoryWrite(snapshot, cursor)) {
+  const hasEvidence = hasMemoryExtractionEvidence(pending);
+  // 批次中一次直接写入不能代表其它用户输入也已沉淀；核验证据同样不能被正文门控吞掉。
+  if (userCount <= 1 && !hasEvidence && containsDirectMemoryWrite(snapshot, cursor)) {
     return { decision: "skip", messageCount, reason: "direct-memory-write" };
   }
 
-  if (!containsEligibleUserProse(snapshot.durableMessages, cursor)) {
+  if (!containsEligibleUserProse(snapshot.durableMessages, cursor) && !hasEvidence) {
     return { decision: "skip", messageCount, reason: "no-user-prose" };
   }
 

@@ -69,7 +69,12 @@ export function createMemoryExtractionScheduler<
     }
     const batch = options.batch
       ? selectMemoryExtractionBatch(snapshot.durableMessages, progress.cursor)
-      : { messages: snapshot.durableMessages, userCount: Infinity, chars: Infinity };
+      : {
+          messages: snapshot.durableMessages,
+          userCount: Infinity,
+          evidenceCount: Infinity,
+          chars: Infinity,
+        };
     const boundary = batch.messages.at(-1)?.info.id;
     if (!boundary) return;
     // pending 先落盘；关闭后仍完成这次本地写入，但不能再启动模型。
@@ -93,6 +98,7 @@ export function createMemoryExtractionScheduler<
     if (
       !force &&
       options.batch &&
+      batch.evidenceCount === 0 &&
       batch.userCount < MEMORY_EXTRACTION_BATCH_MESSAGES &&
       batch.chars < MEMORY_EXTRACTION_BATCH_CHARS
     )

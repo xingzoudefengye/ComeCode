@@ -297,6 +297,13 @@ export const completedToolPartMetadataSchema = z
     schemaVersion: z.literal(COMPLETED_TOOL_PART_METADATA_SCHEMA_VERSION),
     display: toolResultDisplayPayloadSchema.optional(),
     serialization: toolResultSerializationMetadataSchema.optional(),
+    commandResult: z
+      .object({
+        status: z.enum(["completed", "failed", "cancelled", "backgrounded", "timeout"]),
+        exitCode: z.number().int().optional(),
+      })
+      .strict()
+      .optional(),
   })
   .passthrough();
 

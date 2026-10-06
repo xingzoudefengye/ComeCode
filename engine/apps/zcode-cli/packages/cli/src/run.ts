@@ -431,6 +431,11 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     return 0;
   }
 
+  if (parsed.values.apply === true && parsed.positionals[0] !== "memory") {
+    ctx.stderr.write("--apply 仅用于 comecode memory compact。\n");
+    return 1;
+  }
+
   if (parsed.values.version === true) {
     ctx.stdout.write(`${version}\n`);
     return 0;
@@ -575,6 +580,7 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       return await runImportCommand(ctx, options, commandDeps, parsed.positionals[1], parsed.positionals.slice(2));
     case "memory": {
       const memoryArgs = parsed.positionals.slice(1);
+      if (parsed.values.apply === true) memoryArgs.push("--apply");
       const scope = parsed.values.scope as string | undefined;
       if (scope && !memoryArgs.includes("--scope") && !memoryArgs.some((arg) => arg.startsWith("--scope="))) {
         memoryArgs.push("--scope", scope);

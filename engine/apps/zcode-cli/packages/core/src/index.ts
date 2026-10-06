@@ -22,6 +22,17 @@ export {
 } from "./memory/project-files.js";
 export type { ProjectMemoryFileName } from "./memory/project-files.js";
 export {
+  PROJECT_MEMORY_STORAGE_MAX_CHARS,
+  PROJECT_MEMORY_STORAGE_MAX_BYTES,
+  PROJECT_MEMORY_TARGET_CHARS,
+  planProjectMemoryRetention,
+} from "./memory/project-retention.js";
+export {
+  previewProjectMemoryRetention,
+  applyProjectMemoryRetention,
+  resumeProjectMemoryRetention,
+} from "./memory/project-retention-transaction.js";
+export {
   USER_MEMORY_FILES,
   USER_MEMORY_TEMPLATE,
   USER_MEMORY_MAX_FILE_CHARS,
@@ -30,7 +41,11 @@ export {
   resolveUserMemoryRoot,
   userMemoryFilePath,
 } from "./memory/user-files.js";
-export { USER_CHRONICLE_MAX_CHARS, formatUserMemoryChronicle, loadUserMemoryChronicle } from "./memory/user-chronicle.js";
+export {
+  USER_CHRONICLE_MAX_CHARS,
+  formatUserMemoryChronicle,
+  loadUserMemoryChronicle,
+} from "./memory/user-chronicle.js";
 export type { UserMemoryFileName } from "./memory/user-files.js";
 export type { UserMemoryChronicle } from "./memory/user-chronicle.js";
 

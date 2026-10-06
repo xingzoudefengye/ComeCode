@@ -1,7 +1,7 @@
 import { selectActiveConversationBranch, type TraceContext } from "../deps.js";
 import {
+  buildMemoryExtractionInput,
   buildMemoryExtractionPrompt,
-  buildMemoryExtractionUserInput,
   createMemoryExtractionScheduler,
   type MemoryExtractionScheduler,
   type MemoryExtractionSnapshot,
@@ -207,7 +207,7 @@ async function executeProjectMemoryExtraction(
   return telemetry.run(async () => {
     try {
       // 固定白名单无需扫描历史目录；仅 Read 工具加载真正需要修改的文件。
-      const userInput = buildMemoryExtractionUserInput(input.snapshot.durableMessages).slice(
+      const userInput = buildMemoryExtractionInput(input.snapshot.durableMessages).slice(
         0,
         MEMORY_EXTRACTION_BATCH_MAX_CHARS,
       );

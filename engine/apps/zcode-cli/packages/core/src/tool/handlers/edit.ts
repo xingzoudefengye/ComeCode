@@ -29,6 +29,8 @@ import {
 } from "@zcode/contracts";
 import { createStructuredPatch } from "../diff.js";
 import { stampMemoryOriginSessionId } from "../../memory/origin-session.js";
+import { writeMemoryTextFile } from "../../memory/project-storage.js";
+import { resolveWorkspaceProjectMemoryRoot } from "../../memory/project-files.js";
 import {
   findEditMatch,
   normalizeLineEndings,
@@ -505,7 +507,8 @@ async function writeEditResult(input: {
     sessionId: input.context.sessionId,
   });
   const writeStartedAt = Date.now();
-  const writeResult = await fileSystemPort.writeTextFile(
+  const writeResult = await writeMemoryTextFile(
+    fileSystemPort,
     {
       path: input.filePath,
       content: contentToWrite,
@@ -517,6 +520,10 @@ async function writeEditResult(input: {
       trace: createEditTrace(input.context),
     },
     { signal: input.context.abortSignal },
+    input.context.memoryRoot ??
+      resolveWorkspaceProjectMemoryRoot(
+        input.context.workspaceRoot ?? input.context.workingDirectory,
+      ),
   );
   const fsWriteMs = elapsedMsSince(writeStartedAt);
 
