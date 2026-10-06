@@ -38,6 +38,7 @@ import type { HookRunner } from "../../hooks/index.js";
 import type { PermissionService } from "../../permission/service.js";
 import type { RuntimeTaskRegistry } from "../../runtime-task/registry.js";
 import type { ToolRegistry } from "../registry.js";
+import type { MemoryContextSnapshot } from "../../memory/context-projection.js";
 import type { ToolSchedule } from "../scheduler.js";
 import type {
   ExecutableToolCall,
@@ -133,6 +134,7 @@ export interface ToolExecutorOptions {
   getWorkspaceRoot?: () => string;
   getMemoryRoot?: () => string | undefined;
   getUserMemoryRoot?: () => string | undefined;
+  getMemorySnapshot?: () => Pick<MemoryContextSnapshot, "projectContent"> | undefined;
   traceContext?: TraceContext;
   mode?: CollaborationMode;
   getMode?: () => CollaborationMode;
@@ -236,6 +238,7 @@ export interface ToolExecutorDeps {
   deliveryKind?: "desktop-continuous" | "web-remote-replayable";
   getMemoryRoot?: () => string | undefined;
   getUserMemoryRoot?: () => string | undefined;
+  getMemorySnapshot?: () => Pick<MemoryContextSnapshot, "projectContent"> | undefined;
   runtimeScope: ToolRuntimeScope;
   traceContext?: TraceContext;
   getMode: () => CollaborationMode;

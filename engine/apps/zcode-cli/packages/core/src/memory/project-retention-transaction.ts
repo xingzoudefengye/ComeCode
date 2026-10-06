@@ -15,6 +15,11 @@ import {
   type ProjectMemoryUsage,
 } from "./project-retention.js";
 import { resolveAllowedMemoryAgentPath } from "./memory-agent-loop.js";
+import {
+  planProjectMemoryForget,
+  type ProjectMemoryForgetPreview,
+  type ProjectMemoryForgetSelector,
+} from "./project-memory-forget.js";
 
 import {
   MAX_MIGRATION_FILE_BYTES,
@@ -55,22 +60,55 @@ export async function previewProjectMemoryRetention(
   };
 }
 
+export async function previewProjectMemoryForget(
+  port: FileSystemPort,
+  rootDir: string,
+  selector: ProjectMemoryForgetSelector,
+  options: ProjectMemoryTransactionOptions = {},
+): Promise<ProjectMemoryForgetPreview & { snapshots: Readonly<Record<ProjectMemoryFileName, MemorySnapshot>> }> {
+  const snapshots = await readMemoryFiles(port, rootDir, options.signal);
+  const preview = planProjectMemoryForget(
+    Object.fromEntries(PROJECT_MEMORY_FILES.map((file) => [file, snapshots[file]!.content])),
+    selector,
+  );
+  return { ...preview, snapshots };
+}
+
+export async function applyProjectMemoryForget(
+  port: FileSystemPort,
+  rootDir: string,
+  preview: ProjectMemoryForgetPreview & {
+    snapshots: Readonly<Record<ProjectMemoryFileName, MemorySnapshot>>;
+  },
+  options: ProjectMemoryTransactionOptions = {},
+): Promise<ProjectMemoryUsage> {
+  return applyProjectMemoryPlan(port, rootDir, preview.plan, preview.snapshots, options);
+}
+
 export async function applyProjectMemoryRetention(
   port: FileSystemPort,
   rootDir: string,
   preview: ProjectMemoryTransactionPreview,
   options: ProjectMemoryTransactionOptions = {},
 ): Promise<ProjectMemoryUsage> {
-  if (!preview.plan.fits)
-    throw new Error("Cannot apply project memory retention plan that does not fit");
+  return applyProjectMemoryPlan(port, rootDir, preview.plan, preview.snapshots, options);
+}
+
+async function applyProjectMemoryPlan(
+  port: FileSystemPort,
+  rootDir: string,
+  plan: ProjectMemoryRetentionPlan,
+  snapshots: Readonly<Record<ProjectMemoryFileName, MemorySnapshot>>,
+  options: ProjectMemoryTransactionOptions,
+): Promise<ProjectMemoryUsage> {
+  if (!plan.fits) throw new Error("Cannot apply project memory plan that does not fit");
   return withShortFileTransaction(join(rootDir, ".project-memory"), async () => {
     options.signal?.throwIfAborted();
-    // 未恢复的 journal 是未完成事务，不能被新的 preview 覆盖。
     if (await readJournal(port, rootDir, options.signal))
       throw new Error("Project memory retention recovery is pending");
     const current = await readMemoryFiles(port, rootDir, options.signal);
-    assertPreviewMatches(preview, current);
-    const entries = makeEntries(preview.plan, preview.snapshots);
+    assertSnapshotsMatch(snapshots, current);
+    const entries = makeEntries(plan, snapshots);
     if (entries.length === 0) return usageOf(current);
     const ordered = await preflightEntries(port, rootDir, entries, current, options.signal);
     await writeBackup(port, rootDir, entries, options.signal);
@@ -159,17 +197,18 @@ function usageAfter(
   for (const entry of entries) files[entry.file] = entry.next;
   return storageUsage(files);
 }
-function assertPreviewMatches(
-  preview: ProjectMemoryTransactionPreview,
+function assertSnapshotsMatch(
+  expectedSnapshots: Readonly<Record<ProjectMemoryFileName, MemorySnapshot>>,
   current: Readonly<Record<ProjectMemoryFileName, MemorySnapshot>>,
 ): void {
   for (const file of PROJECT_MEMORY_FILES) {
-    const expected = preview.snapshots[file]!;
+    const expected = expectedSnapshots[file]!;
     const actual = current[file]!;
     if (actual.content !== expected.content || !sameRevision(actual.revision, expected.revision))
       throw new Error(`Project memory external conflict: ${file}`);
   }
 }
+
 async function preflightEntries(
   _port: FileSystemPort,
   rootDir: string,

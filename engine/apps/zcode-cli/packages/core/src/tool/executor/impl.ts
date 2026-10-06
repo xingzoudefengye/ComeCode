@@ -78,6 +78,7 @@ export class ToolExecutorImpl implements ToolExecutor {
       deliveryKind: options.deliveryKind,
       getMemoryRoot: options.getMemoryRoot,
       getUserMemoryRoot: options.getUserMemoryRoot,
+      getMemorySnapshot: options.getMemorySnapshot,
       runtimeScope: options.runtimeScope ?? "main",
       traceContext: options.traceContext,
       getMode: options.getMode ?? (() => options.mode ?? "auto"),

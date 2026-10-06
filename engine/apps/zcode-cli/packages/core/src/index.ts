@@ -31,7 +31,16 @@ export {
   previewProjectMemoryRetention,
   applyProjectMemoryRetention,
   resumeProjectMemoryRetention,
+  previewProjectMemoryForget,
+  applyProjectMemoryForget,
 } from "./memory/project-retention-transaction.js";
+export {
+  planProjectMemoryForget,
+} from "./memory/project-memory-forget.js";
+export type {
+  ProjectMemoryForgetPreview,
+  ProjectMemoryForgetSelector,
+} from "./memory/project-memory-forget.js";
 export {
   USER_MEMORY_FILES,
   USER_MEMORY_TEMPLATE,

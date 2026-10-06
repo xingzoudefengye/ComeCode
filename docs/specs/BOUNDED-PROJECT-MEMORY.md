@@ -30,6 +30,17 @@
 
 CLI 打包时，对 CLI src 内相对 `.js` 导入优先解析同名 `.ts`/`.tsx` 源码；无对应源码时保留 JavaScript 解析。避免工作区旧生成 JS 覆盖新命令入口；不删除现有生成文件。
 
-## 验收
+## 主动遗忘
+
+项目记忆支持显式、可预览的主动遗忘，但不允许无条件清空或绕过有限容量写入门。`comecode memory forget` 只处理能够被结构化条目解析器确认的条目；未知旧 Markdown、代码块、普通段落和无法确认归属的内容默认保留。
+
+```text
+comecode memory forget --file decisions.md --id provider
+comecode memory forget --file bugs.md --date 2026-10-04 --apply
+comecode memory forget --file memory.md --query "一次性信息"
+```
+
+`--id`、`--date`、`--query` 至少指定一个；多个选择条件同时满足。默认只输出命中数量和原文/拟更新内容，只有显式 `--apply` 才写入。遗忘应用复用项目记忆的短锁、CAS revision、单一 journal、恢复副本和 `memory recover`，预览后若文件被外部修改则停止而不覆盖。当前命令只作用于项目 `.ai/` 五个文件，不操作用户稳定偏好或 managed chronicle。
+
 
 覆盖总字符/UTF-8字节、完整条目、近期/阶段/早期与容量提前粗化、保护条目、状态替换与验收分离、旧格式、无变化幂等、超限逐步缩减、普通及后台写入同根锁、并发 CAS、取消、单文件失败、多文件 journal 中断/恢复和外部改动冲突。测试临时目录/mock，不调用真实模型。旧用户记忆、提取游标、缓存请求、管理后台模型/会话入口不回退。类型/lint/架构/定向格式如实报告，运行产物只在完整 main 基线验证后构建，不自动提交/推送。

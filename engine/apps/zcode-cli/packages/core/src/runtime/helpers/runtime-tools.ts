@@ -223,6 +223,7 @@ function createRuntimeToolExecutor(
     getMemoryRoot: () =>
       deps.memoryRoot ?? resolveEnabledProjectMemoryRoot(runtime.config, runtime.workspaceRoot),
     getUserMemoryRoot: () => resolveEnabledUserMemoryRoot(runtime.config, runtime.workspaceRoot),
+    getMemorySnapshot: () => ({ projectContent: runtime.memoryIndexContent }),
     runtimeScope: runtime.config.taskType === "subagent_child" ? "subagent" : "main",
     permissionTimeoutMs: runtime.config.permissionTimeoutMs,
     sessionId: runtime.sessionId,

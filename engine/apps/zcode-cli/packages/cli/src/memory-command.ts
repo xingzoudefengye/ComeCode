@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { createNodeFileSystemAdapter } from "@zcode/adapters";
 import { createConfig, resolvePath } from "@zcode/adapters/config";
 import { getCliStorageRoot } from "@zcode/bootstrap";
 import {
@@ -15,16 +16,26 @@ import {
   loadUserMemoryChronicle,
   resolveUserMemoryRoot,
   resolveWorkspaceProjectMemoryRoot,
+  previewProjectMemoryForget,
+  applyProjectMemoryForget,
+  type ProjectMemoryFileName,
+  type ProjectMemoryForgetSelector,
 } from "@zcode/core";
 import type { GlobalOptions, RunContext } from "@zcode/shared-types";
 import type { RunDependencies } from "./cli-types.js";
 import { runMemoryRetentionCommand } from "./memory-retention-command.js";
 
 type MemoryScope = "user" | "project" | "both";
-type MemoryAction = "path" | "init" | "check" | "history" | "compact" | "recover";
+type MemoryAction = "path" | "init" | "check" | "history" | "compact" | "recover" | "forget";
+interface ParsedMemoryArgs {
+  action: MemoryAction;
+  scope: MemoryScope;
+  apply: boolean;
+  forget?: ProjectMemoryForgetSelector;
+}
 const USER_STABLE_FILES = ["profile.md", "preferences.md"] as const;
 const MEMORY_USAGE =
-  "用法: comecode memory <path|init|check> [--scope user|project|both]\n      comecode memory history [--scope user]\n      comecode memory compact [--apply] | recover [--scope project]\n";
+  "用法: comecode memory <path|init|check> [--scope user|project|both]\n      comecode memory history [--scope user]\n      comecode memory compact [--apply] | recover [--scope project]\n      comecode memory forget --file <name> (--id <id>|--date <YYYY-MM-DD>|--query <text>) [--apply]\n";
 
 export async function runMemoryCommand(
   ctx: RunContext,
@@ -46,6 +57,13 @@ export async function runMemoryCommand(
         ctx,
         resolveWorkspaceProjectMemoryRoot(workspace),
         action,
+        parsed.apply,
+      );
+    if (action === "forget")
+      return await runMemoryForgetCommand(
+        ctx,
+        resolveWorkspaceProjectMemoryRoot(workspace),
+        parsed.forget!,
         parsed.apply,
       );
     // 默认 project 命令不解析用户配置，保留原有路径与初始化行为。
@@ -174,12 +192,14 @@ export async function runMemoryCommand(
   }
 }
 
-function parseMemoryArgs(
-  args: readonly string[],
-): { action: MemoryAction; scope: MemoryScope; apply: boolean } | undefined {
+function parseMemoryArgs(args: readonly string[]): ParsedMemoryArgs | undefined {
   let action: MemoryAction | undefined;
   let scope: MemoryScope | undefined;
   let apply = false;
+  let file: ProjectMemoryFileName | undefined;
+  let id: string | undefined;
+  let date: string | undefined;
+  let query: string | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--apply") {
@@ -190,8 +210,21 @@ function parseMemoryArgs(
       const value = arg === "--scope" ? args[++index] : arg.slice("--scope=".length);
       if (value !== "user" && value !== "project" && value !== "both") return undefined;
       scope = value;
+    } else if (arg === "--file") {
+      if (file || ++index >= args.length || !PROJECT_MEMORY_FILES.includes(args[index] as ProjectMemoryFileName))
+        return undefined;
+      file = args[index] as ProjectMemoryFileName;
+    } else if (arg === "--id") {
+      if (id || ++index >= args.length) return undefined;
+      id = args[index];
+    } else if (arg === "--date") {
+      if (date || ++index >= args.length) return undefined;
+      date = args[index];
+    } else if (arg === "--query") {
+      if (query || ++index >= args.length) return undefined;
+      query = args[index];
     } else {
-      if (action || !["path", "init", "check", "history", "compact", "recover"].includes(arg))
+      if (action || !["path", "init", "check", "history", "compact", "recover", "forget"].includes(arg))
         return undefined;
       action = arg as MemoryAction;
     }
@@ -200,8 +233,48 @@ function parseMemoryArgs(
   scope ??= action === "history" ? "user" : "project";
   if (action === "history" && scope !== "user") return undefined;
   if ((action === "compact" || action === "recover") && scope !== "project") return undefined;
-  if (apply && action !== "compact") return undefined;
-  return { action, scope, apply };
+  if (action === "forget" && scope !== "project") return undefined;
+  if (apply && action !== "compact" && action !== "forget") return undefined;
+  if (action !== "forget" && (file || id || date || query)) return undefined;
+  if (action === "forget" && (!file || (id === undefined && date === undefined && query === undefined)))
+    return undefined;
+  return {
+    action,
+    scope,
+    apply,
+    ...(action === "forget" ? { forget: { file, id, date, query } } : {}),
+  };
+}
+
+async function runMemoryForgetCommand(
+  ctx: RunContext,
+  root: string,
+  selector: ProjectMemoryForgetSelector,
+  apply: boolean,
+): Promise<number> {
+  const port = createNodeFileSystemAdapter();
+  const preview = await previewProjectMemoryForget(port, root, selector);
+  const { plan } = preview;
+  ctx.stdout.write(`记忆遗忘${apply ? "应用" : "预览"}：${root}\n`);
+  ctx.stdout.write(`命中：${preview.matchedCount} 条；文件：${preview.matchedFiles.join(", ") || "无"}\n`);
+  for (const change of plan.changes) {
+    ctx.stdout.write(
+      `\n--- ${change.file}（原文）\n${plan.before[change.file]}\n+++ ${change.file}（拟更新）\n${plan.files[change.file]}\n`,
+    );
+  }
+  if (preview.preservedUnknownContent)
+    ctx.stdout.write("未识别的旧 Markdown 内容已保留，遗忘只作用于可确认的结构化条目。\n");
+  if (preview.matchedCount === 0) {
+    ctx.stdout.write("未找到匹配条目，未写入文件。\n");
+    return 0;
+  }
+  if (!apply) {
+    ctx.stdout.write("仅预览，未写入文件。使用 --apply 显式应用。\n");
+    return 0;
+  }
+  await applyProjectMemoryForget(port, root, preview);
+  ctx.stdout.write("已应用记忆遗忘；恢复副本为 .ai/.local/retention-backup.json。\n");
+  return 0;
 }
 
 function printChronicleSummary(

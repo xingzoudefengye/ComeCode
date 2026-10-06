@@ -60,6 +60,7 @@ import type {
   PersistedReadFileStateTool,
 } from "./read-file-state-metadata.js";
 import type { RuntimeTaskRegistry } from "../runtime-task/registry.js";
+import type { MemoryContextSnapshot } from "../memory/context-projection.js";
 
 // -----------------------------------------------
 // Tool Metadata
@@ -191,6 +192,8 @@ export interface ToolExecutionContext {
   clientMode?: "desktop-continuous" | "web-remote-replayable";
   deliveryKind?: "desktop-continuous" | "web-remote-replayable";
   memoryRoot?: string;
+  /** 当前 turn 边界冻结的记忆快照；工具步骤内不重新读盘。 */
+  memorySnapshot?: Pick<MemoryContextSnapshot, "projectContent">;
   /** 仅供 ReadSessionContext 读取 managed 史书，不参与普通文件权限。 */
   userMemoryRoot?: string;
   runtimeScope?: ToolRuntimeScope;
