@@ -15,7 +15,6 @@ import type {
 import type { AgentRuntimeInternal } from "../internal.js";
 import { ensureMemoryDirectoryExists } from "../../memory/directory.js";
 import {
-  formatProjectMemorySnapshot,
   projectMemoryFilePath,
   PROJECT_MEMORY_FILES,
   type ProjectMemoryFileName,
@@ -37,6 +36,8 @@ import {
 import { buildContextHistoryEntries } from "./context-history-entries.js";
 import { resolveRuntimeEmbeddedSearchEnabled } from "./embedded-search-branch.js";
 import { getContextSourceShellDisplayName } from "./session-shell-environment.js";
+import { prepareMemoryContextSnapshots } from "../../context/sections/memory.js";
+import { formatProjectMemoryContextSnapshot } from "../../memory/context-projection.js";
 
 export { buildContextHistoryEntries };
 
@@ -51,10 +52,16 @@ export async function reloadMemorySnapshot(
     loadProjectMemoryIndexContent(runtime, project),
     loadUserMemoryIndexContent(runtime, user),
   ]);
-  runtime.memoryRoot = project;
-  runtime.userMemoryRoot = user;
-  runtime.memoryIndexContent = projectContent;
-  runtime.userMemoryIndexContent = userContent;
+  const snapshot = prepareMemoryContextSnapshots({
+    projectRoot: project,
+    projectContent,
+    userRoot: user,
+    userContent,
+  });
+  runtime.memoryRoot = snapshot.projectRoot;
+  runtime.userMemoryRoot = snapshot.userRoot;
+  runtime.memoryIndexContent = snapshot.projectContent;
+  runtime.userMemoryIndexContent = snapshot.userContent;
 }
 
 export async function ensureContextInitialized(
@@ -273,7 +280,7 @@ async function loadProjectMemoryIndexContent(
       // 缺失的项目记忆文件不阻断启动，初始化命令或后续提取会补齐。
     }
   }
-  return formatProjectMemorySnapshot(files)?.content;
+  return formatProjectMemoryContextSnapshot(files);
 }
 
 export function logMemorySkipped(

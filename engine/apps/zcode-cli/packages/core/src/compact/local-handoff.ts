@@ -12,7 +12,6 @@ const MAX_TOOL_CHARS = 280;
 const MAX_RECENT_TOOLS = 4;
 const MAX_RECENT_ENTRIES = 80;
 const STATE_SOURCES = new Set([
-  "todo_reminder",
   "incoming_message",
   "goal_state_change",
   "resume_goal_state",
@@ -70,9 +69,13 @@ export function buildLocalCompactHandoff(input: {
           /最新用户要求：([\s\S]*?)(?=\s本次压缩要求：|\s历史概括仅在|\s历史仅在|\nContinue from|$)/u,
         )?.[1]
       : undefined;
-  const state = recent
-    .filter((entry) => entry.metadata && STATE_SOURCES.has(entry.metadata.source))
-    .slice(-3);
+  const state = [
+    ...new Map(
+      recent
+        .filter((entry) => entry.metadata && STATE_SOURCES.has(entry.metadata.source))
+        .map((entry) => [entry.metadata!.source, entry]),
+    ).values(),
+  ].slice(-3);
   const toolCalls = messages.flatMap((entry) =>
     entry.message.role === "assistant" ? (entry.message.toolCalls ?? []) : [],
   );
