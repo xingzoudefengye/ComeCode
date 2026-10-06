@@ -40,6 +40,7 @@ import {
   restoreWorkspaceFileRewindEntries,
 } from "./workspace-checkpoint-persistence.js";
 import { mainTurnCacheHitAggregateFromMessages } from "./turn-model-step-usage.js";
+import { resumeProjectMemoryExtraction } from "../helpers/project-memory-extraction.js";
 
 export function toScheduleState(
   this: AgentRuntimeInternal,
@@ -314,6 +315,7 @@ export async function resumeFromStore(
     status: "completed",
   });
 
+  resumeProjectMemoryExtraction(this, traceContext);
   return {
     ...hydration,
     directory: session.directory,

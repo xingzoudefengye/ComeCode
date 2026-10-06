@@ -5,7 +5,6 @@ import {
   createDenyPermissionBroker,
   createToolExecutor,
   defaultPermissionConfig,
-  traceContextToLogContext,
 } from "../deps.js";
 import type { RuntimeMessageEntry } from "../../agent/message-history.js";
 import type { ReadFileStateMap } from "../../tool/types.js";
@@ -26,8 +25,8 @@ import {
 import { MEMORY_EXTRACTION_MAX_INPUT_CHARS } from "../../memory/extraction.js";
 import { rollMemoryMarkdown } from "../../memory/project-files.js";
 
-import { createRefreshRuntimeHeadersBeforeModelAttempt } from "../methods/model-runtime-headers.js";
-import { createRuntimeModel, withModelInvocationContext } from "../methods/runtime-model.js";
+import { createRuntimeModel } from "../methods/runtime-model.js";
+import { createProjectMemoryUsageModel } from "./project-memory-usage.js";
 
 export interface ProjectMemoryAgentContext {
   causation?: AgentTelemetryCausation;
@@ -62,23 +61,7 @@ export function captureProjectMemoryAgentContext(
     createRuntimeModel(runtime, {
       selection: runtime.getSessionModelSelection(),
     });
-  const model = withModelInvocationContext(baseModel, (request) => ({
-    // Extraction 是 transcript 的消费者；不把它自己的请求写回同一 model-io 目录，
-    // 避免后台链路占用 rollout 槽位并在后续 Extraction 中自反馈。
-    metadata: {
-      ...traceContextToLogContext(input.traceContext),
-      querySource: input.operation,
-      skipTranscript: true,
-    },
-    modelRequestSessionType: "other",
-    modelCall: { operation: input.operation },
-    refreshRuntimeHeadersBeforeAttempt: createRefreshRuntimeHeadersBeforeModelAttempt(runtime, {
-      abortSignal: request.abortSignal,
-      model,
-      traceContext: input.traceContext,
-    }),
-    traceContext: input.traceContext,
-  }));
+  const model = createProjectMemoryUsageModel(runtime, baseModel, input);
   return {
     causation: runtime.agentTelemetry.captureCausation(),
     memoryRoot: input.memoryRoot,

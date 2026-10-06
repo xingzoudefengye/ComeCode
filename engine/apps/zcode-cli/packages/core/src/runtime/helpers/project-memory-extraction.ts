@@ -21,6 +21,8 @@ import {
   type MemoryAgentAllowedRoot,
 } from "../../memory/memory-agent-loop.js";
 import { createRuntimeModel } from "../methods/runtime-model.js";
+import { createMemoryExtractionProgressStore } from "../../memory/extraction-progress.js";
+import { MEMORY_EXTRACTION_BATCH_MAX_CHARS } from "../../memory/extraction-batch.js";
 
 const EXTRACTION_MAX_TURNS = 3;
 const EXTRACTION_DRAIN_TIMEOUT_MS = MEMORY_AGENT_TIMEOUT_MS;
@@ -41,6 +43,7 @@ export function scheduleProjectMemoryExtraction(
     model: ProjectMemoryAgentContext["model"];
     traceContext: TraceContext;
     force?: boolean;
+    resumeOnly?: boolean;
   },
 ): boolean {
   if (runtime.shuttingDown) return false;
@@ -94,11 +97,48 @@ export function scheduleProjectMemoryExtraction(
     },
   );
 
-  runtime.memoryExtractionScheduler ??= createMemoryExtractionScheduler((extraction) =>
-    executeProjectMemoryExtraction(runtime, extraction),
+  runtime.memoryExtractionScheduler ??= createMemoryExtractionScheduler(
+    (extraction) => executeProjectMemoryExtraction(runtime, extraction),
+    {
+      batch: true,
+      progressStore: createMemoryExtractionProgressStore(
+        runtime.sessionStore,
+        runtime.sessionId,
+        JSON.stringify(allowedRoots),
+      ),
+      onError: () =>
+        runtime.logger?.warn("后台记忆进度保存或恢复失败", {
+          event: "memory.extraction.progress_failed",
+          module: "core.runtime",
+        }),
+    },
   );
-  runtime.memoryExtractionScheduler.schedule(snapshot);
+  runtime.memoryExtractionScheduler.schedule(snapshot, {
+    force: input.force,
+    resumeOnly: input.resumeOnly,
+  });
   return true;
+}
+
+export function resumeProjectMemoryExtraction(
+  runtime: AgentRuntimeInternal,
+  traceContext: TraceContext,
+): void {
+  if (!isProjectMemoryEnabled.call(runtime) || runtime.shuttingDown) return;
+  const selection = runtime.getSessionModelSelection();
+  if (!selection) return;
+  try {
+    scheduleProjectMemoryExtraction(runtime, {
+      model: createRuntimeModel(runtime, { selection }),
+      traceContext,
+      resumeOnly: true,
+    });
+  } catch {
+    runtime.logger?.warn("后台记忆补跑未启动；会话恢复不受影响", {
+      event: "memory.extraction.resume_failed",
+      module: "core.runtime",
+    });
+  }
 }
 
 export async function saveProjectMemory(
@@ -167,7 +207,10 @@ async function executeProjectMemoryExtraction(
   return telemetry.run(async () => {
     try {
       // 固定白名单无需扫描历史目录；仅 Read 工具加载真正需要修改的文件。
-      const userInput = buildMemoryExtractionUserInput(input.snapshot.durableMessages);
+      const userInput = buildMemoryExtractionUserInput(input.snapshot.durableMessages).slice(
+        0,
+        MEMORY_EXTRACTION_BATCH_MAX_CHARS,
+      );
       if (!userInput) return "no-op" as const;
       const prompt = buildMemoryExtractionPrompt({
         manifest: [],
