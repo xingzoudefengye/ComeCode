@@ -6,6 +6,7 @@ import { readThirdPartyNotices, stageThirdPartyNotices } from "../../../../../sc
 import { basename, dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { createCliSourceImportsPlugin } from "./source-imports.mjs";
 import { stageBuiltinProviderConfig } from "../../../../../scripts/builtin-provider-config.mjs";
 
 const cliRoot = resolve(import.meta.dirname, "..");
@@ -270,7 +271,7 @@ export const buildCli = async ({
     logLevel: "info",
     minify,
     metafile: true,
-    plugins: [createZodDedupePlugin({ expectedV4Version: await readZodBuildVersion() })],
+    plugins: [createCliSourceImportsPlugin(resolve(cliDirectory, "src")), createZodDedupePlugin({ expectedV4Version: await readZodBuildVersion() })],
     outfile,
     platform: "node",
     sourcemap,

@@ -4,6 +4,19 @@ import { registerHooks } from "node:module";
 import ts from "typescript";
 
 function resolve(specifier, context, nextResolve) {
+  if (
+    context.parentURL?.includes("/packages/cli/src/") &&
+    specifier.startsWith(".") &&
+    specifier.endsWith(".js")
+  ) {
+    for (const extension of [".ts", ".tsx"]) {
+      try {
+        return nextResolve(specifier.slice(0, -3) + extension, context);
+      } catch (error) {
+        if (error.code !== "ERR_MODULE_NOT_FOUND") throw error;
+      }
+    }
+  }
   try {
     return nextResolve(specifier, context);
   } catch (error) {
