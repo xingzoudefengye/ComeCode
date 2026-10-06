@@ -8,6 +8,10 @@ tmp/
 /.pnpm-store/
 /comecode终端会话界面右侧.png
 
+# 构建输出（native-search-tools / SEA 打包产物）与 Windows 保留名误写文件
+artifacts/
+NUL
+
 .idea/
 
 /.ai/
