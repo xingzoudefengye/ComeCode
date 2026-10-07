@@ -45,7 +45,7 @@ export function MarkdownText({
     if (syntaxStyle) {
       return h("markdown", {
         conceal: true,
-        content,
+        content: normalizeMarkdownBlankLines(content),
         streaming,
         syntaxStyle,
         // 顶层块独立渲染，保留列表、编号列表和嵌套列表的层级。
@@ -71,7 +71,41 @@ export function MarkdownText({
   return h("text", { style: { fg: textColor } }, content);
 }
 
-/** 只压缩普通段落的布局换行，代码/列表等结构及原始回复不做字符串替换。 */
+function normalizeMarkdownBlankLines(content: string): string {
+  const lines = content.split(/\r?\n/u);
+  const normalized: string[] = [];
+  let fenceMarker: string | undefined;
+  let blankLines = 0;
+
+  for (const line of lines) {
+    const fence = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
+    if (fenceMarker) {
+      normalized.push(line);
+      if (fence && fence[0] === fenceMarker[0] && fence.length >= fenceMarker.length) {
+        fenceMarker = undefined;
+      }
+      continue;
+    }
+    if (fence) {
+      blankLines = 0;
+      normalized.push(line);
+      fenceMarker = fence;
+      continue;
+    }
+
+    if (line.trim().length === 0) {
+      blankLines += 1;
+      if (blankLines > 1) continue;
+    } else {
+      blankLines = 0;
+    }
+    normalized.push(line);
+  }
+
+  return normalized.join("\n");
+}
+
+/** 收敛普通 Markdown 的多余空行，代码围栏内部保持原样。 */
 const renderCompactMarkdownNode: NonNullable<MarkdownOptions["renderNode"]> = (token, context) => {
   const renderable = context.defaultRender();
   if (token.type === "paragraph" && renderable instanceof CodeRenderable) {

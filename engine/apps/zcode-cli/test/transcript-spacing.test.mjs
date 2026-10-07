@@ -100,6 +100,15 @@ test("Markdown 段落保留块间距，不修改原文并保留代码、列表�
   assert.ok(row(lines, "table-row") > row(lines, "item-two"));
 });
 
+test("Markdown 连续空行只保留一个段落间隔，代码围栏内部保持原样", async (t) => {
+  const content =
+    "正文第一段\n\n\n\n正文第二段\n\n```text\ncode-first\n\n\ncode-last\n```";
+  const view = await render(t, React.createElement(MarkdownText, { content, streaming: false }));
+  const lines = view.captureCharFrame().split("\n");
+  assert.equal(row(lines, "正文第二段") - row(lines, "正文第一段"), 2);
+  assert.equal(row(lines, "code-last") - row(lines, "code-first"), 3);
+});
+
 test("无关父级刷新不重新创建 Markdown 高亮样式", async (t) => {
   setActiveTuiThemeMode("dark");
   const view = await render(
