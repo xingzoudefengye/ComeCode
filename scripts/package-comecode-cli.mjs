@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -25,6 +25,13 @@ import { hostTarget } from "../engine/apps/zcode-cli/packages/cli/scripts/sea-ta
 
 const execFile = promisify(execFileCallback);
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+async function runPnpm(args, options) {
+  if (process.platform === "win32") {
+    return execFile(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", `pnpm ${args.join(" ")}`], options);
+  }
+  return execFile(pnpmCommand, args, options);
+}
 async function npmPack(cwd) {
   const args = ["pack", "--pack-destination", output];
   return execFile(npmCommand, args, {

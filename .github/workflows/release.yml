@@ -55,6 +55,10 @@ jobs:
         working-directory: engine
         run: pnpm -r build
 
+      - name: Build shared runtime package
+        working-directory: engine
+        run: pnpm --filter @zcode/shared build
+
       - name: Build CLI SEA
         working-directory: engine
         run: pnpm build:sea

@@ -56,6 +56,8 @@ jobs:
           node-version: 24.14.0
       - name: Install frozen workspace dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build shared runtime package
+        run: pnpm --filter @zcode/shared build
       - name: Build all runtime packages before CLI bundle
         run: pnpm -r build
       - name: Local mock regressions only
