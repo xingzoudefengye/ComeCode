@@ -75,6 +75,15 @@ export class SessionsIndexPublisher {
     );
   }
 
+  /** 用 Session store 最新摘要覆盖已有 projection，产生可重放的 upsert。 */
+  refreshStoredSummaries(
+    summaries: readonly Parameters<SessionsIndexProjection["seed"]>[0][],
+  ): boolean {
+    return this.record(
+      summaries.flatMap((summary) => this.projection.refreshStored(summary)),
+    );
+  }
+
   /** 某会话最新快照进入 → 更新 summary，产生的 delta 记账并推进 seq。返回是否有变化。 */
   ingestConversation(
     snapshot: ConversationSnapshot,

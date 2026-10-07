@@ -191,6 +191,14 @@ export class SessionsIndexProjection {
     return [{ op: "session.upserted", session: summary }];
   }
 
+  /** 用持久化 store 的最新摘要覆盖同一会话，供外部进程修改后的冷重读收敛。 */
+  refreshStored(summary: SessionSummary): SessionsIndexDelta[] {
+    const previous = this.summaries.get(summary.sessionId);
+    if (!previous || summariesEqual(previous, summary)) return [];
+    this.summaries.set(summary.sessionId, summary);
+    return [{ op: "session.upserted", session: summary }];
+  }
+
   /** 直接放入一条 summary（冷启动/无 live projection 的 store 会话）。 */
   seed(summary: SessionSummary): void {
     this.summaries.set(summary.sessionId, summary);
