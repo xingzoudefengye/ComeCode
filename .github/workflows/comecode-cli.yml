@@ -54,12 +54,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.14.0
-      - name: Install frozen CLI and bundled plugin dependency closure
-        run: pnpm --filter "@zcode/cli..." --filter "@zcode/browser-use-plugin..." --filter "@zcode/node-repl-host..." install --frozen-lockfile
-      - name: Build CLI dependencies before CLI bundle
-        run: pnpm --filter "@zcode/cli..." build
-      - name: Build bundled plugin runtimes
-        run: pnpm --filter @zcode/browser-use-plugin --filter @zcode/node-repl-host build
+      - name: Install frozen workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build all runtime packages before CLI bundle
+        run: pnpm -r build
       - name: Local mock regressions only
         run: >-
           node --import ./apps/zcode-cli/test/typescript-loader.mjs
