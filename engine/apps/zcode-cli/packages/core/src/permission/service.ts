@@ -132,6 +132,29 @@ export class PermissionService {
       return this.checkAlwaysAsk(context, capability, projectRules, rulePolicy);
     }
 
+    // auto 只绕过默认确认，不得绕过用户明确配置的硬拒绝规则。
+    // 这些检查必须位于自动放行分支之前，否则桌面端的 auto 会把禁止工具和项目 deny
+    // 错误地升级成 allow。
+    if (context.mode === "auto") {
+      if (this.config.disallowedTools.has(context.toolName)) {
+        return this.deny(
+          context,
+          capability,
+          "rule.disallowedTools",
+          `Tool ${context.toolName} is explicitly disallowed`,
+        );
+      }
+
+      if (this.matchesProjectRules(projectRules, "deny", context, capability, rulePolicy)) {
+        return this.deny(
+          context,
+          capability,
+          "rule.project.deny",
+          `Tool ${context.toolName} is denied by project permission rules`,
+        );
+      }
+    }
+
     const planEnabled = context.planEnabled ?? context.mode === "plan";
     if ((context.mode === "yolo" || context.mode === "auto") && !planEnabled) {
       return this.allow(

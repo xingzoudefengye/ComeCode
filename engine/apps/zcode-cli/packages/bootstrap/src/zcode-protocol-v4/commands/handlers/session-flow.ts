@@ -5,17 +5,16 @@ import type {
   CommandEnvelope,
   CommandPayloadMap,
   CommandResult,
-  SubmissionMode,
 } from "@zcode/shared/zcode-protocol-v4";
-import type { ModelSelection } from "@zcode/shared";
 import { createModelExecutionContext } from "../../../zcode-protocol/model-execution.js";
 import type { SteerTurnOptions } from "../../../app/types.js";
-import { parseProviderQualifiedModelSelection } from "../../../app/provider-registry-selection.js";
 import type { TurnAttachment } from "@zcode/core";
 import { mapAttachmentRefsToTurnAttachments } from "../attachment-refs.js";
 import { inputIntentMetadata } from "../input-intent.js";
 import { startPromptTurn, turnBackgroundAttributionOf } from "../prompt-turn.js";
 import { requireRecord } from "../record-access.js";
+import { resolveSubmittedExecutionState } from "./submitted-execution-state.js";
+export { resolveSubmittedExecutionState } from "./submitted-execution-state.js";
 import type { V4CommandCoreHost, V4SessionRecordView } from "../types.js";
 import { V4CommandNoopError } from "../../v4-gateway.js";
 
@@ -130,53 +129,6 @@ export async function applyHeldQueueDisposition(
   }
 }
 
-/**
- * 兼容 admission：新发送端显式提交 Selection/Mode；旧发送端在 CLI 接收边界把
- * 当前 Session 值固定进 canonical intent。固定完成后 Queue/Guide 不再读取可变 Session。
- */
-export function resolveSubmittedExecutionState(
-  record: V4SessionRecordView,
-  payload: {
-    modelSelection?: ModelSelection;
-    mode?: SubmissionMode;
-    planEnabled?: boolean;
-  },
-): { modelSelection: ModelSelection; mode: SubmissionMode; planEnabled: boolean } {
-  let modelSelection = payload.modelSelection;
-  if (!modelSelection) {
-    const runtimeSelection = record.app.runtime?.getSessionModelSelection?.();
-    const entrySelection = runtimeSelection
-      ? undefined
-      : parseProviderQualifiedModelSelection(record.app.getModel());
-    if (!runtimeSelection && !entrySelection) {
-      throw new Error(`Session model must be provider-qualified: ${record.app.getModel()}`);
-    }
-    // getThoughtLevel() 是 Active Model 的 effective 展示事实。把它补回
-    // canonical intent 会把 Config 默认值伪装成显式 pin；旧发送端只能固定 Session
-    // 已经持有的稀疏 Selection，不能在 admission 时重新解释它。
-    modelSelection = runtimeSelection
-      ? {
-          providerId: runtimeSelection.providerId,
-          modelId: runtimeSelection.modelId,
-          ...(runtimeSelection.options ? { options: { ...runtimeSelection.options } } : {}),
-        }
-      : {
-          providerId: entrySelection!.providerId,
-          modelId: entrySelection!.modelId,
-          ...(entrySelection!.options ? { options: { ...entrySelection!.options } } : {}),
-        };
-  }
-  const current = resolveExecutionState({
-    mode: record.app.getMode?.(),
-    planEnabled: record.app.runtime?.getPlanEnabled?.(),
-  });
-  const state = resolveExecutionState(payload, current);
-  return {
-    modelSelection,
-    mode: state.mode === "auto" ? "build" : state.mode,
-    planEnabled: state.planEnabled,
-  };
-}
 /**
  * sendText：只做协议/held/model/附件校验，start/queue 交给同一 session 的 Core admission。
  * held（choice）时仍按 heldQueueDisposition 裁决。
@@ -438,4 +390,3 @@ export async function preemptActiveTurnAndWait(
 }
 
 export const sessionFlowHandlers = { sendText, stop };
-import { resolveExecutionState } from "@zcode/shared";
