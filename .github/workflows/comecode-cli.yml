@@ -40,8 +40,8 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       ZCODE_ENV: production
-      ZCODE_DATA_BASE_DIR: ${{ runner.temp }}/comecode-ci-data
-      COMECODE_DATA_BASE_DIR: ${{ runner.temp }}/comecode-ci-data
+      ZCODE_DATA_BASE_DIR: ${{ github.workspace }}/.comecode-ci-data
+      COMECODE_DATA_BASE_DIR: ${{ github.workspace }}/.comecode-ci-data
     steps:
       - uses: actions/checkout@v4
         with:

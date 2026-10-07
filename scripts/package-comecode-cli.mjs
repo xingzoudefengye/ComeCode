@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { execFile as execFileCallback } from "node:child_process";
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -24,6 +24,16 @@ import {
 import { hostTarget } from "../engine/apps/zcode-cli/packages/cli/scripts/sea-targets.mjs";
 
 const execFile = promisify(execFileCallback);
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+async function npmPack(cwd) {
+  const args = ["pack", "--pack-destination", output];
+  return execFile(npmCommand, args, {
+    cwd,
+    shell: process.platform === "win32",
+    timeout: 120000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+}
 const root = resolve(import.meta.dirname, "..");
 const engine = join(root, "engine");
 const cli = join(engine, "apps/zcode-cli");
@@ -58,6 +68,30 @@ export function assertNoCredentials(value) {
       assertNoCredentials(child);
     }
   }
+}
+
+async function addBundledDependencies(packageDirectory) {
+  const dependenciesDirectory = join(packageDirectory, "node_modules");
+  const dependencies = {};
+  const bundledDependencies = [];
+  for (const entry of await readdir(dependenciesDirectory, { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) continue;
+    const packageDirectories = entry.name.startsWith("@")
+      ? (await readdir(join(dependenciesDirectory, entry.name), { withFileTypes: true }))
+          .filter((child) => child.isDirectory())
+          .map((child) => join(entry.name, child.name))
+      : [entry.name];
+    for (const packageName of packageDirectories) {
+      const metadata = JSON.parse(await readFile(join(dependenciesDirectory, packageName, "package.json"), "utf8"));
+      dependencies[packageName] = metadata.version;
+      bundledDependencies.push(packageName);
+    }
+  }
+  const packageFile = join(packageDirectory, "package.json");
+  const packageJson = JSON.parse(await readFile(packageFile, "utf8"));
+  packageJson.dependencies = dependencies;
+  packageJson.bundledDependencies = bundledDependencies;
+  await writeFile(packageFile, JSON.stringify(packageJson, null, 2) + "\n");
 }
 
 async function copy(source, destination, mode) {
@@ -99,12 +133,18 @@ try {
     join(stage, "package.json"),
     JSON.stringify(
       {
-        name: "comecode",
+        name: `@comecode/runtime-${target}`,
         version,
-        private: true,
+        description: "ComeCode platform runtime",
         license: "Apache-2.0",
-        bin: { comecode: "./comecode.cjs" },
+        repository: {
+          type: "git",
+          url: "https://github.com/xingzoudefengye/ComeCode.git",
+        },
         engines: { node: ">=24.14.0" },
+        os: [process.platform],
+        cpu: [process.arch],
+        files: ["**/*"],
       },
       null,
       2,
@@ -146,11 +186,41 @@ try {
       join(stage, plugin.rootPath),
     );
   }
+  await addBundledDependencies(stage);
   await writeFile(
     join(stage, "DISTRIBUTION.txt"),
     `ComeCode ${version}, ${target}\nRequires external Node.js 24.14.0 or newer Node 24.\nRun: node comecode.cjs --help\nKeep node_modules, provider and packages alongside comecode.cjs.\nThis is not a standalone executable. Native dependencies are OS/CPU specific.\nLinux requires glibc; browser binaries, signing and notarization are not included.\n`,
   );
   await mkdir(output, { recursive: true });
+  await npmPack(stage);
+  const runtimePackage = (await readdir(output)).find((file) => file.startsWith("comecode-runtime-") && file.endsWith(".tgz"));
+  if (!runtimePackage) throw new Error("npm did not produce a runtime package");
+  const entryStage = join(work, "entry");
+  await mkdir(entryStage, { recursive: true });
+  await copy(join(root, "scripts/comecode-entry.cjs"), join(entryStage, "comecode.cjs"), 0o755);
+  await copy(join(engine, "LICENSE"), join(entryStage, "LICENSE"));
+  await writeFile(
+    join(entryStage, "package.json"),
+    JSON.stringify(
+      {
+        name: "comecode",
+        version,
+        description: "ComeCode - vendor-neutral open-source coding agent",
+        license: "Apache-2.0",
+        repository: { type: "git", url: "https://github.com/xingzoudefengye/ComeCode.git" },
+        bin: { comecode: "./comecode.cjs" },
+        engines: { node: ">=24.14.0" },
+        optionalDependencies: {
+          "@comecode/runtime-linux-x64": version,
+          "@comecode/runtime-win-x64": version,
+          "@comecode/runtime-darwin-arm64": version,
+        },
+      },
+      null,
+      2,
+    ) + "\n",
+  );
+  await npmPack(entryStage);
   const archive = join(output, `${name}.tar.gz`);
   await execFile(tar, ["-czf", archive, "-C", work, name]);
   // 从实际归档解包，再在系统临时目录运行，不能借用仓库 node_modules 掩盖缺依赖。

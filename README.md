@@ -2,7 +2,7 @@
 
 一个不绑定厂商的开源 Coding Agent：以 CLI 为当前入口，规划提供共享会话的桌面版、本地管理后台和受控插件扩展。
 
-**当前状态（2026-10-03）：** CLI、多模型配置、项目记忆基础与本地模型管理页已有实现；尚未正式发布 npm 包/安装器。ComeCode 桌面改造、跨端会话共享、完整后台页面和自定义工具插件仍在路线中。实现与验收范围见 [实施计划](docs/PLAN.md)，不要把上游已有能力或目标功能当作已交付版本。
+**当前状态（2026-10-07）：** CLI、多模型配置、项目记忆基础与本地模型管理页已有实现；npm 打包和三平台 CI 已接入，但 npm 包尚未发布，GitHub Release 也需通过版本 tag 或手动工作流生成。ComeCode 桌面改造、跨端会话共享、完整后台页面和自定义工具插件仍在路线中。
 
 基于 [ZCode](https://github.com/zai-org/ZCode)（Apache-2.0，代码位于 [engine/](./engine)）二次开发，借鉴 [Codex](https://github.com/openai/codex)（Apache-2.0）的部分设计。许可与署名见 [LICENSE](./LICENSE)、[NOTICE](./NOTICE)。
 
@@ -25,19 +25,16 @@ curl -fsSL https://raw.githubusercontent.com/xingzoudefengye/ComeCode/main/insta
 iwr https://raw.githubusercontent.com/xingzoudefengye/ComeCode/main/install.ps1 | iex
 ```
 
-### npm 安装（即将支持）
+### npm 安装（发布后可用）
+
+需要 Node.js 24.14.0 或更新的 Node 24。当前仓库尚未将 `comecode` 发布到 npm；发布后安装命令为：
 
 ```bash
 npm install -g comecode
+comecode --version
 ```
 
-### 手动下载
-
-从 [Releases](https://github.com/xingzoudefengye/ComeCode/releases) 下载对应平台的二进制文件。
-
-### 从源码运行
-
-目前推荐从源码运行，详见 [开发指南](docs/dev-setup.md)。
+发布前可从源码运行，详见 [开发指南](docs/dev-setup.md)。
 
 ---
 
