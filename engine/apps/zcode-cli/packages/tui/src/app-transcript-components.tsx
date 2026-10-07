@@ -9,6 +9,14 @@ import { ThoughtTranscriptPartView } from "./app-thought-components.js";
 import { ToolTranscriptPartView } from "./app-tool-components.js";
 import { WorkflowRunCardView } from "./app-workflow-card.js";
 import type { TuiWorkflowCard } from "./app-workflow-mirror.js";
+import {
+  messageHasVisibleContent,
+  messageHasVisibleTool,
+  stripInternalThinkingTags,
+  ToolFailureSummary,
+  toolTranscriptVisibility,
+  WorkflowFailureSummary,
+} from "./app-transcript-visibility.js";
 
 const h = React.createElement as (
   type: React.ElementType | string,
@@ -47,6 +55,9 @@ export function ContentPane({
   version?: string;
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
 }): React.ReactElement {
+  const visibleMessages = messages.filter((message) =>
+    messageHasVisibleContent(message, workflowCardsByToolCallId),
+  );
   return h(
     "scrollbox",
     {
@@ -80,13 +91,20 @@ export function ContentPane({
         },
       },
     },
-    ...(messages.length === 0
+    ...(visibleMessages.length === 0
       ? [
           emptyText
             ? h("text", { key: "empty", style: { fg: palette.muted } }, emptyText)
-            : h(EmptyTranscriptLogo, { animated: animateEmptyLogo, cwd, effort, key: "empty-transcript-logo", model, version }),
+            : h(EmptyTranscriptLogo, {
+                animated: animateEmptyLogo,
+                cwd,
+                effort,
+                key: "empty-transcript-logo",
+                model,
+                version,
+              }),
         ]
-      : messages.map((message, index) =>
+      : visibleMessages.map((message, index) =>
           h(MessageRow, {
             copy,
             expandedWorkflowRunIds,
@@ -94,8 +112,11 @@ export function ContentPane({
             key: `${index}-${message.role}`,
             message,
             now,
-            previousRole: messages[index - 1]?.role,
-            previousHadTool: messages[index - 1]?.parts?.some((part) => part.type === "tool") ?? false,
+            previousRole: visibleMessages[index - 1]?.role,
+            previousHadTool: messageHasVisibleTool(
+              visibleMessages[index - 1],
+              workflowCardsByToolCallId,
+            ),
             workflowCardsByToolCallId,
           }),
         )),
@@ -152,10 +173,7 @@ export function MessageRow({
   const rowBackground = isUserMessage ? palette.userMessageBackground : palette.background;
   const assistantText = message.role === "agent";
   const displayContent = stripInternalThinkingTags(message.content);
-  const plainTextColor =
-    message.role === "system"
-      ? palette.warning
-      : palette.text;
+  const plainTextColor = message.role === "system" ? palette.warning : palette.text;
 
   return h(
     "box",
@@ -167,7 +185,10 @@ export function MessageRow({
         marginTop:
           isFinishMarker ||
           (index > 0 &&
-            (isUserMessage || previousRole === "user" || previousHadTool || parts.some((part) => part.type === "tool")))
+            (isUserMessage ||
+              previousRole === "user" ||
+              previousHadTool ||
+              parts.some((part) => part.type === "tool")))
             ? 1
             : 0,
         marginBottom: 0,
@@ -189,17 +210,25 @@ export function MessageRow({
           }),
         ]
       : parts.length === 0
-          ? [isUserMessage
-          ? h(UserMessageView, { content: displayContent, key: "user-content" })
-          : h("text", { key: "content", style: { fg: plainTextColor } }, displayContent)]
+        ? [
+            isUserMessage
+              ? h(UserMessageView, { content: displayContent, key: "user-content" })
+              : h("text", { key: "content", style: { fg: plainTextColor } }, displayContent),
+          ]
         : []),
     ...parts.map((part, partIndex) => {
       if (part.type === "tool") {
-        // 卡片 join 按 toolCallId（与 GUI buildWorkflowRunByToolCallId 同规）。命中即渲染实时卡：
-        // 工具行自己的 status 在 CreateWorkflow 上会在 run 还在飞的时候就变成 completed
-        // （工具一launch完 run 就返回），所以状态必须读镜像，不能读 part.status。
         const workflowCard = workflowCardsByToolCallId?.get(part.toolCallId);
         if (workflowCard) {
+          if (workflowCard.status === "completed") return null;
+          if (workflowCard.status === "errored" || workflowCard.status === "stopped") {
+            return h(WorkflowFailureSummary, {
+              card: workflowCard,
+              copy,
+              key: `workflow-failed-${part.toolCallId}`,
+              terminalWidth,
+            });
+          }
           return h(WorkflowRunCardView, {
             card: workflowCard,
             copy,
@@ -208,13 +237,22 @@ export function MessageRow({
             terminalWidth,
           });
         }
-        // 无命中就回落今日的文本投影（编过但没有 run、或镜像尚未补种）。
-        const toolView = h(ToolTranscriptPartView, {
-          copy,
-          part,
-          now,
-          terminalWidth,
-        });
+        const visibility = toolTranscriptVisibility(part);
+        if (visibility === "hidden") return null;
+        const toolView =
+          visibility === "failed_summary"
+            ? h(ToolFailureSummary, {
+                copy,
+                key: `tool-failed-${part.toolCallId}`,
+                part,
+                terminalWidth,
+              })
+            : h(ToolTranscriptPartView, {
+                copy,
+                part,
+                now,
+                terminalWidth,
+              });
         return partIndex > 0
           ? h(
               React.Fragment,
@@ -237,16 +275,21 @@ export function MessageRow({
           part,
         });
       }
-      const textView = assistantText && part.format !== "plain"
-        ? h(MarkdownText, {
-            backgroundColor: rowBackground,
-            content: part.text,
-            key: `text-${partIndex}`,
-            streaming: message.streaming,
-          })
-        : h("text", { key: `text-${partIndex}`, style: { fg: plainTextColor } }, part.text);
+      const textView =
+        assistantText && part.format !== "plain"
+          ? h(MarkdownText, {
+              backgroundColor: rowBackground,
+              content: part.text,
+              key: `text-${partIndex}`,
+              streaming: message.streaming,
+            })
+          : h("text", { key: `text-${partIndex}`, style: { fg: plainTextColor } }, part.text);
       // 思考标签与正文的间隔只归消息容器，避免与 Thought 外边距叠加。
-      return parts[partIndex - 1]?.type === "tool"
+      return parts[partIndex - 1]?.type === "tool" &&
+        messageHasVisibleTool(
+          { ...message, parts: parts.slice(0, partIndex) },
+          workflowCardsByToolCallId,
+        )
         ? h(
             "box",
             { key: `after-tool-${partIndex}`, style: { flexDirection: "column" } },
@@ -254,14 +297,17 @@ export function MessageRow({
             textView,
           )
         : parts[partIndex - 1]?.type === "thought"
-          ? h("box", { key: `after-thought-${partIndex}`, style: { marginTop: 1, flexDirection: "column" } }, textView)
+          ? h(
+              "box",
+              {
+                key: `after-thought-${partIndex}`,
+                style: { marginTop: 1, flexDirection: "column" },
+              },
+              textView,
+            )
           : textView;
     }),
   );
-}
-
-function stripInternalThinkingTags(content: string): string {
-  return content.replace(/<thinking>[^]*?<\/thinking>/giu, "").trim();
 }
 
 function CompactTimelineRow({

@@ -70,6 +70,23 @@ test("实时问答结果按 toolCallId 识别工具，选择和多题实际答�
   assert.match(frame, /CLI, 桌面/u);
 });
 
+test("普通工具完成隐藏但 AskUserQuestion 答案继续显示", async (t) => {
+  const messages = liveMessages(
+    'User has answered your questions: "继续?"="继续".',
+    "AskUserQuestion",
+  );
+  messages[0].parts.push({
+    type: "tool",
+    toolCallId: "ordinary",
+    toolName: "Bash",
+    status: "completed",
+    detailLines: ["command: hidden"],
+    output: "hidden ordinary output",
+  });
+  const frame = await render(t, messages);
+  assert.match(frame, /继续/u);
+  assert.doesNotMatch(frame, /hidden ordinary output|command: hidden/u);
+});
 test("恢复会话同样显示答案，长 Other 自定义回答在窄终端完整换行", async (t) => {
   const answer = "保留现有的所有会话和配置。".repeat(12) + "自定义回答结尾标记";
   const output = `User has answered your questions: "你想怎么处理?"="${answer}".`;

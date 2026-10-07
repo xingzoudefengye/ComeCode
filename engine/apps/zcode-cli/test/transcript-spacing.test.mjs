@@ -110,9 +110,7 @@ test("无关父级刷新不重新创建 Markdown 高亮样式", async (t) => {
   const firstSyntaxStyle = firstNode.syntaxStyle;
   assert.ok(firstSyntaxStyle);
 
-  await view.update(
-    React.createElement(MarkdownText, { content: "稳定正文", streaming: false }),
-  );
+  await view.update(React.createElement(MarkdownText, { content: "稳定正文", streaming: false }));
   const secondNode = view.renderer.root.getChildren()[0];
   assert.equal(secondNode.syntaxStyle, firstSyntaxStyle);
   assert.ok(view.captureCharFrame().includes("稳定正文"));
@@ -159,7 +157,7 @@ test("同回合工具与回答续段不叠加间隔，换行与 Markdown 硬换�
           toolCallId: "tool-1",
           toolName: "WebFetch",
           title: "WebFetch",
-          status: "completed",
+          status: "running",
           detailLines: ["url: https://example.test"],
           output: "tool-output",
         },
@@ -185,6 +183,87 @@ test("同回合工具与回答续段不叠加间隔，换行与 Markdown 硬换�
   assert.equal(JSON.stringify(messages), before);
 });
 
+test("完成的普通工具隐藏，失败工具只保留有界摘要，运行中工具持续显示", async (t) => {
+  const messages = [
+    {
+      role: "agent",
+      content: "",
+      parts: [
+        {
+          type: "tool",
+          toolCallId: "done",
+          toolName: "Bash",
+          status: "completed",
+          detailLines: ["command: secret"],
+          output: "completed-output",
+        },
+        {
+          type: "tool",
+          toolCallId: "failed",
+          toolName: "Read",
+          status: "failed",
+          detailLines: ["file: secret"],
+          error: "failure-detail ".repeat(40),
+          output: "large-output",
+        },
+        {
+          type: "tool",
+          toolCallId: "running",
+          toolName: "Edit",
+          status: "running",
+          detailLines: ["file: active.ts"],
+        },
+        { type: "text", text: "关键结论" },
+      ],
+    },
+  ];
+  const before = JSON.stringify(messages);
+  const view = await render(t, React.createElement(ContentPane, { focused: false, messages }));
+  const frame = view.renderer.root ? view.renderer.root : undefined;
+  const text = view.captureCharFrame();
+  assert.doesNotMatch(text, /secret|completed-output|large-output/u);
+  assert.match(text, /failed|失败/u);
+  assert.match(text, /failure-detail/u);
+  assert.match(text, /Edit/u);
+  assert.match(text, /active\.ts/u);
+  assert.match(text, /关键结论/u);
+  assert.equal(JSON.stringify(messages), before);
+  void frame;
+});
+test("只含已完成工具的消息不再占用垂直布局空间", async (t) => {
+  const withoutHiddenMessage = await render(
+    t,
+    React.createElement(ContentPane, {
+      focused: false,
+      messages: [{ role: "agent", content: "后续结论" }],
+    }),
+  );
+  const withHiddenMessage = await render(
+    t,
+    React.createElement(ContentPane, {
+      focused: false,
+      messages: [
+        {
+          role: "agent",
+          content: "",
+          parts: [
+            {
+              type: "tool",
+              toolCallId: "completed-only",
+              toolName: "Bash",
+              status: "completed",
+              output: "不应占位",
+            },
+          ],
+        },
+        { role: "agent", content: "后续结论" },
+      ],
+    }),
+  );
+  const baseline = row(withoutHiddenMessage.captureCharFrame().split("\n"), "后续结论");
+  const actual = row(withHiddenMessage.captureCharFrame().split("\n"), "后续结论");
+  assert.equal(actual, baseline);
+});
 
 test("用户消息使用引用标记，模型列表保留层级缩进", async (t) => {
   const userView = await render(
