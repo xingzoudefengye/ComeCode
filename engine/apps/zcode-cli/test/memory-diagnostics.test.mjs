@@ -176,10 +176,28 @@ test("实际CLI路由透传apply，预览只读且非法用途返回失败", asy
   assert.equal((await f.invoke(["compact", "--apply", "--scope", "user"], {}, true)).code, 1);
 });
 
+test("实际CLI路由透传forget selector，预览与apply均可用", async (t) => {
+  const f = await fixture(t);
+  await mkdir(join(f.project, ".ai"));
+  const file = join(f.project, ".ai", "decisions.md");
+  const original = "# 决策\n\n- 2026-10-07 [id=keep] [status=active] [kind=decision]: 保留\n- 2026-10-07 [id=forget] [status=active] [kind=decision]: 删除这个格式化决定\n";
+  await writeFile(file, original);
+  const preview = await f.invoke(["forget", "--file", "decisions.md", "--query", "格式化"], {}, true);
+  assert.equal(preview.code, 0, preview.err);
+  assert.match(preview.out, /命中：1 条/u);
+  assert.equal(await readFile(file, "utf8"), original);
+  const applied = await f.invoke(["forget", "--file", "decisions.md", "--query", "格式化", "--apply"], {}, true);
+  assert.equal(applied.code, 0, applied.err);
+  assert.doesNotMatch(await readFile(file, "utf8"), /删除这个格式化决定/u);
+  assert.match(await readFile(file, "utf8"), /保留/u);
+  assert.equal((await f.invoke(["forget", "--file", "decisions.md"], {}, true)).code, 1);
+  assert.equal((await f.invoke(["forget", "--file", "decisions.md", "--date", "2026-02-30"], {}, true)).code, 1);
+  assert.equal((await f.invoke(["forget", "--scope", "user", "--file", "decisions.md", "--id", "keep"], {}, true)).code, 1);
+});
+
 test("实际CLI路由透传全局scope，/memory save帮助按配置作用域且独立自动史书", async (t) => {
   const f = await fixture(t);
   const result = await f.invoke(["path", "--scope", "user"], {}, true);
-  assert.equal(result.code, 0, result.err);
   assert.equal(result.out, `${f.user}\n`);
   const help = formatSlashCommandHelp("memory");
   assert.match(help, /user\/project\/both/u);

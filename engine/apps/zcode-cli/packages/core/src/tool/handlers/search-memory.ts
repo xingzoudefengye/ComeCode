@@ -7,7 +7,7 @@ import {
   type SearchMemoryInput,
   type SearchMemoryOutput,
 } from "@zcode/contracts";
-import { searchMemorySnapshot } from "../../memory/memory-search.js";
+import { searchMemorySnapshotDetailed } from "../../memory/memory-search.js";
 import type { ToolEntry, ToolHandler } from "../types.js";
 
 const MAX_OUTPUT_BYTES = 80_000;
@@ -24,12 +24,14 @@ const searchMemoryHandler: ToolHandler = async (input, context) => {
       truncated: false,
     } satisfies SearchMemoryOutput;
   }
-  const results = searchMemorySnapshot(snapshot, parsed.query, { maxResults: parsed.maxResults });
+  const { results, truncated } = searchMemorySnapshotDetailed(snapshot, parsed.query, {
+    maxResults: parsed.maxResults,
+  });
   return {
     status: results.length ? "success" : "not_found",
     query: parsed.query,
     results,
-    truncated: results.length >= (parsed.maxResults ?? 5),
+    truncated,
   } satisfies SearchMemoryOutput;
 };
 

@@ -431,8 +431,20 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     return 0;
   }
 
+  const memorySelectorValues = [
+    parsed.values.file,
+    parsed.values.id,
+    parsed.values.date,
+    parsed.values.query,
+  ];
+  const hasMemorySelector = memorySelectorValues.some((value) => value !== undefined);
+  const isMemoryForget = parsed.positionals[0] === "memory" && parsed.positionals[1] === "forget";
+  if (hasMemorySelector && !isMemoryForget) {
+    ctx.stderr.write("--file/--id/--date/--query 仅用于 comecode memory forget。\n");
+    return 1;
+  }
   if (parsed.values.apply === true && parsed.positionals[0] !== "memory") {
-    ctx.stderr.write("--apply 仅用于 comecode memory compact。\n");
+    ctx.stderr.write("--apply 仅用于 comecode memory compact 或 forget。\n");
     return 1;
   }
 
@@ -580,6 +592,14 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
       return await runImportCommand(ctx, options, commandDeps, parsed.positionals[1], parsed.positionals.slice(2));
     case "memory": {
       const memoryArgs = parsed.positionals.slice(1);
+      for (const [name, value] of [
+        ["--file", parsed.values.file],
+        ["--id", parsed.values.id],
+        ["--date", parsed.values.date],
+        ["--query", parsed.values.query],
+      ] as const) {
+        if (typeof value === "string") memoryArgs.push(name, value);
+      }
       if (parsed.values.apply === true) memoryArgs.push("--apply");
       const scope = parsed.values.scope as string | undefined;
       if (scope && !memoryArgs.includes("--scope") && !memoryArgs.some((arg) => arg.startsWith("--scope="))) {

@@ -85,6 +85,18 @@ export const parseGlobalArgs = (argv: string[]) =>
       import: {
         type: "string",
       },
+      file: {
+        type: "string",
+      },
+      id: {
+        type: "string",
+      },
+      date: {
+        type: "string",
+      },
+      query: {
+        type: "string",
+      },
       verbose: {
         type: "boolean",
       },

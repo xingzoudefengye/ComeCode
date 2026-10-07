@@ -38,6 +38,14 @@ import { resolveRuntimeEmbeddedSearchEnabled } from "./embedded-search-branch.js
 import { getContextSourceShellDisplayName } from "./session-shell-environment.js";
 import { prepareMemoryContextSnapshots } from "../../context/sections/memory.js";
 import { formatProjectMemoryContextSnapshot } from "../../memory/context-projection.js";
+import {
+  MAX_MIGRATION_FILE_BYTES,
+} from "../../memory/project-retention-journal.js";
+import {
+  PROJECT_MEMORY_STORAGE_MAX_BYTES,
+  PROJECT_MEMORY_STORAGE_MAX_CHARS,
+  storageUsage,
+} from "../../memory/project-retention.js";
 
 export { buildContextHistoryEntries };
 
@@ -48,19 +56,20 @@ export async function reloadMemorySnapshot(
 ): Promise<void> {
   const project = await runtime.loadProjectMemoryRoot(trace);
   const user = await runtime.loadUserMemoryRoot(trace);
-  const [projectContent, userContent] = await Promise.all([
-    loadProjectMemoryIndexContent(runtime, project),
+  const [projectSnapshot, userContent] = await Promise.all([
+    loadProjectMemoryIndexContent(runtime, project, trace),
     loadUserMemoryIndexContent(runtime, user),
   ]);
   const snapshot = prepareMemoryContextSnapshots({
     projectRoot: project,
-    projectContent,
+    projectContent: projectSnapshot?.contextContent,
     userRoot: user,
     userContent,
   });
   runtime.memoryRoot = snapshot.projectRoot;
   runtime.userMemoryRoot = snapshot.userRoot;
   runtime.memoryIndexContent = snapshot.projectContent;
+  runtime.memorySearchContent = projectSnapshot?.searchContent;
   runtime.userMemoryIndexContent = snapshot.userContent;
 }
 
@@ -256,14 +265,19 @@ export async function loadProjectMemoryRoot(
 async function loadProjectMemoryIndexContent(
   runtime: AgentRuntimeInternal,
   memoryRoot: string | undefined,
-): Promise<string | undefined> {
+  trace: TraceContext,
+): Promise<{ contextContent?: string; searchContent?: string } | undefined> {
   const fileSystemPort = runtime.fileSystemPort;
   if (!fileSystemPort || !memoryRoot) return undefined;
   const files: Partial<Record<ProjectMemoryFileName, string>> = {};
   for (const fileName of PROJECT_MEMORY_FILES) {
     const filePath = projectMemoryFilePath(memoryRoot, fileName);
     try {
-      const read = await fileSystemPort.readTextFile({ path: filePath });
+      const read = await fileSystemPort.readTextFile({
+        path: filePath,
+        maxBytes: MAX_MIGRATION_FILE_BYTES,
+      });
+      if (read.truncated) throw new Error(`Project memory file exceeded ${MAX_MIGRATION_FILE_BYTES} bytes`);
       files[fileName] = read.content;
       runtime.readFileState.set(createReadFileStateKey(filePath, undefined, undefined), {
         content: read.content,
@@ -276,11 +290,32 @@ async function loadProjectMemoryIndexContent(
         revisionId: read.revision?.id,
         sizeBytes: read.sizeBytes,
       });
-    } catch {
-      // 缺失的项目记忆文件不阻断启动，初始化命令或后续提取会补齐。
+    } catch (error) {
+      if ((error as { code?: string })?.code === "not_found") continue;
+      runtime.logMemorySkipped(trace, "project_snapshot_unavailable", {
+        memoryRoot,
+        fileName,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
     }
   }
-  return formatProjectMemoryContextSnapshot(files);
+  const usage = storageUsage(files);
+  if (
+    usage.chars > PROJECT_MEMORY_STORAGE_MAX_CHARS ||
+    usage.bytes > PROJECT_MEMORY_STORAGE_MAX_BYTES
+  ) {
+    runtime.logMemorySkipped(trace, "project_snapshot_over_budget", {
+      memoryRoot,
+      chars: usage.chars,
+      bytes: usage.bytes,
+    });
+    return undefined;
+  }
+  return {
+    contextContent: formatProjectMemoryContextSnapshot(files),
+    searchContent: formatProjectMemoryContextSnapshot(files),
+  };
 }
 
 export function logMemorySkipped(

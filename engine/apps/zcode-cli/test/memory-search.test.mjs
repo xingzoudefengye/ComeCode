@@ -34,6 +34,14 @@ test("memory search supports Chinese bigrams and English terms", () => {
   assert.equal(searchMemorySnapshot(snapshot, "React")[0]?.file, "project.md");
 });
 
+test("memory search can find entries beyond the normal context projection", () => {
+  const longPrefix = Array.from({ length: 80 }, (_, index) => `- filler-${index}: unrelated project detail`).join("\n");
+  const fullSnapshot = `## .ai/project.md\n\n# 项目说明\n\n${longPrefix}\n\n## .ai/bugs.md\n\n- 2026-10-07: rare sentinel regression in the payment reconciler\n`;
+  const results = searchMemorySnapshot(fullSnapshot, "payment reconciler");
+  assert.equal(results[0]?.file, "bugs.md");
+  assert.match(results[0]?.excerpt ?? "", /payment reconciler/u);
+});
+
 test("memory search applies result and character bounds with stable empty results", () => {
   assert.equal(searchMemorySnapshot(snapshot, "量子纠缠").length, 0);
   assert.ok(searchMemorySnapshot(snapshot, "项目", { maxResults: 1 }).length <= 1);

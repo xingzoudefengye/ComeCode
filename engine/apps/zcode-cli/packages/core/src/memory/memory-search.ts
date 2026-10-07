@@ -13,6 +13,11 @@ export interface MemorySearchOptions {
   maxChars?: number;
 }
 
+export interface MemorySearchResponse {
+  results: MemorySearchResult[];
+  truncated: boolean;
+}
+
 interface SearchDocument {
   file: string;
   title?: string;
@@ -32,11 +37,19 @@ export function searchMemorySnapshot(
   query: string,
   options: MemorySearchOptions = {},
 ): MemorySearchResult[] {
+  return searchMemorySnapshotDetailed(snapshot, query, options).results;
+}
+
+export function searchMemorySnapshotDetailed(
+  snapshot: string | undefined,
+  query: string,
+  options: MemorySearchOptions = {},
+): MemorySearchResponse {
   const normalizedQuery = query.trim();
-  if (!snapshot?.trim() || !normalizedQuery) return [];
+  if (!snapshot?.trim() || !normalizedQuery) return { results: [], truncated: false };
   const documents = buildDocuments(snapshot);
   const queryTerms = tokenize(normalizedQuery);
-  if (!queryTerms.length || !documents.length) return [];
+  if (!queryTerms.length || !documents.length) return { results: [], truncated: false };
   const documentTerms = documents.map((document) => tokenize(document.text));
   const averageLength = documentTerms.reduce((sum, terms) => sum + terms.length, 0) / documentTerms.length;
   const documentFrequency = new Map<string, number>();
@@ -66,7 +79,10 @@ export function searchMemorySnapshot(
     results.push(result);
     chars += cost;
   }
-  return results;
+  return {
+    results,
+    truncated: results.length < scored.length,
+  };
 }
 
 export function tokenize(text: string): string[] {

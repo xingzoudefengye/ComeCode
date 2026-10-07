@@ -92,6 +92,7 @@ export interface AgentRuntimeInternal
   latestContextBuildResult?: ContextBuildResult;
   memoryRoot?: string;
   memoryIndexContent?: string;
+  memorySearchContent?: string;
   userMemoryRoot?: string;
   userMemoryIndexContent?: string;
   memoryExtractionScheduler?: ProjectMemoryExtractionScheduler;
