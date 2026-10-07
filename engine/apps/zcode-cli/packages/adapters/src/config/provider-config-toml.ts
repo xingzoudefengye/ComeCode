@@ -1,3 +1,5 @@
+import { compactSchema } from "./schema.js";
+import type { RuntimeConfigPatch } from "@zcode/contracts";
 import type {
   UnifiedConfigDocument,
   UnifiedConfigDiagnostics,
@@ -19,9 +21,28 @@ export function parseUnifiedConfigToml(
   let model: string | undefined;
   let provider: string | undefined;
   let section: string | undefined;
+  let runtimeSection: "compact" | "features" | undefined;
+  const compact: NonNullable<RuntimeConfigPatch["compact"]> = {};
+  const features: Pick<NonNullable<RuntimeConfigPatch["features"]>, "compact"> = {};
   const providers: Record<string, UnifiedProviderDefinition> = {};
 
   const assign = (key: string, value: unknown, line: number): void => {
+    if (runtimeSection === "compact") {
+      if (key !== "resumeInputTokenThreshold") {
+        warnings.push(`${filePath}:${line}: 忽略未知 compact 字段 ${key}`);
+      } else {
+        const parsed = compactSchema.safeParse({ resumeInputTokenThreshold: value });
+        if (parsed.success) Object.assign(compact, parsed.data);
+        else errors.push(`${filePath}:${line}: compact.resumeInputTokenThreshold 必须是非负整数`);
+      }
+      return;
+    }
+    if (runtimeSection === "features") {
+      if (key !== "compact") warnings.push(`${filePath}:${line}: 忽略未知 features 字段 ${key}`);
+      else if (typeof value !== "boolean") errors.push(`${filePath}:${line}: features.compact 必须是布尔值`);
+      else features.compact = value;
+      return;
+    }
     if (!section && key === "model") {
       if (typeof value !== "string") errors.push(`${filePath}:${line}: model 必须是字符串`);
       else model = value;
@@ -71,8 +92,14 @@ export function parseUnifiedConfigToml(
     const lineNumber = index + 1;
     const line = stripTomlComment(rawLine).trim();
     if (!line) continue;
+    if (line === "[compact]" || line === "[features]") {
+      runtimeSection = line === "[compact]" ? "compact" : "features";
+      section = undefined;
+      continue;
+    }
     const sectionMatch = /^\[providers\.([^\]]+)\]$/u.exec(line);
     if (sectionMatch) {
+      runtimeSection = undefined;
       const providerId = parseTomlKey(sectionMatch[1] ?? "");
       if (!providerId) {
         errors.push(`${filePath}:${lineNumber}: Provider ID 无效`);
@@ -84,7 +111,8 @@ export function parseUnifiedConfigToml(
       continue;
     }
     if (line.startsWith("[") && line.endsWith("]")) {
-      errors.push(`${filePath}:${lineNumber}: 只支持 [providers.<id>] 表`);
+      errors.push(`${filePath}:${lineNumber}: 只支持 [providers.<id>]、[compact] 和 [features] 表`);
+      runtimeSection = undefined;
       section = undefined;
       continue;
     }
@@ -107,7 +135,10 @@ export function parseUnifiedConfigToml(
     }
   }
   return {
-    document: Object.freeze({ model, provider, providers: Object.freeze(providers) }),
+    document: Object.freeze({ model, provider, providers: Object.freeze(providers),
+      ...(Object.keys(compact).length ? { compact } : {}),
+      ...(Object.keys(features).length ? { features } : {}),
+    }),
     diagnostics: Object.freeze({
       errors: Object.freeze(errors),
       warnings: Object.freeze(warnings),

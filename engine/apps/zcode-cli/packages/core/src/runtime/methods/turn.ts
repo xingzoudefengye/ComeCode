@@ -68,6 +68,7 @@ import { clearBrowserTurnState } from "../../repl/browser-turn-state.js";
 import { applySubmissionExecutionState, createTurnModel } from "./turn-model.js";
 import { rebuildContextPrefix } from "./context-refresh.js";
 import { reloadMemorySnapshot } from "./context.js";
+import { compactResumedHistoryIfNeeded } from "./resume-input-budget.js";
 
 const TARGET_RUN_HEARTBEAT_MS = 15_000;
 
@@ -229,6 +230,9 @@ export async function executeTurnCommand(
       }
       completeTurnPhase("context_initialization", phaseStartedAt);
       throwIfTurnAborted(turnAbortSignal);
+      const resumeHistoryEntries = this.resumeInputBudgetPending
+        ? [...this.messageHistory.borrowReadOnlyRuntimeEntries()]
+        : undefined;
       phaseStartedAt = startTurnPhase("session_start_hooks");
       const sessionStartHookResult = await this.runSessionStartHooks(
         "startup",
@@ -479,6 +483,20 @@ export async function executeTurnCommand(
           }
         }
         await this.persistPendingModelChangeTimeline(turnTraceContext);
+        if (options?.skipInputRecord !== true) {
+          await compactResumedHistoryIfNeeded(this, {
+            historicalEntries: resumeHistoryEntries,
+            pendingEntries: buildRuntimeUserEntriesFromTurn(input, resolvedAttachments, {
+              browserAmbientContext: options?.browserAmbientContext,
+            }),
+            model: submissionModel ?? admittedModel!,
+            toolDisallowlist: options?.toolDisallowlist,
+            traceContext: turnTraceContext,
+            events,
+            abortSignal: turnAbortSignal,
+            outputStyle: admittedOutputStyle,
+          });
+        }
         if (options?.skipInputRecord !== true && options?.inputVisibility === "model-only") {
           const inputSource = options.inputSource ?? "goal-continuation";
           const userContent = buildUserContentFromTurn(input, resolvedAttachments);

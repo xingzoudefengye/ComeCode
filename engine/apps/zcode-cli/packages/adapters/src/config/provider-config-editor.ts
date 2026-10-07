@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, writeFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { DEFAULT_ENVIRONMENT_MODELS } from "./provider-environment.js";
+import { compactSchema } from "./schema.js";
 import {
   parseUnifiedConfigJson, parseUnifiedConfigToml, resolveUnifiedConfig,
   resolveUnifiedConfigPaths, toPublicUnifiedConfig,
@@ -114,7 +115,7 @@ async function readSnapshot(options: UnifiedConfigLoadOptions) {
 }
 
 function serializeDocument(document: UnifiedConfigDocument) {
-  return { ...(document.provider ? { provider: document.provider } : {}), ...(document.model ? { model: document.model } : {}), providers: Object.entries(document.providers).map(([id, provider]) => ({ id, ...provider })) };
+  return { ...(document.provider ? { provider: document.provider } : {}), ...(document.model ? { model: document.model } : {}), ...(document.compact ? { compact: document.compact } : {}), ...(document.features ? { features: document.features } : {}), providers: Object.entries(document.providers).map(([id, provider]) => ({ id, ...provider })) };
 }
 function publicDocument(document: UnifiedConfigDocument) {
   const hide = (definition: Record<string, unknown>) => {
@@ -182,6 +183,14 @@ function restoreSecrets(
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ConfigEditError(400, "配置必须是对象");
   const raw = input as Record<string, unknown>;
   if (!Array.isArray(raw.providers)) throw new ConfigEditError(400, "providers 必须是数组");
+  // 旧网页只提交模型字段时沿用源配置；先严格校验，避免 null 或未知字段被解析器剥离后清空原值。
+  const compact = compactSchema.strict().optional().safeParse(raw.compact);
+  const features = z.object({ compact: z.boolean().optional() }).strict().optional().safeParse(raw.features);
+  if (!compact.success || !features.success) throw new ConfigEditError(422, "compact 或 features 字段类型或结构无效");
+  const runtimeFields = {
+    ...(current.compact || compact.data ? { compact: { ...current.compact, ...compact.data } } : {}),
+    ...(current.features || features.data ? { features: { ...current.features, ...features.data } } : {}),
+  };
   const restore = (value: unknown, previous: UnifiedProviderDefinition | undefined) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new ConfigEditError(400, "供应商和模型必须是对象");
     const { hasApiKey: _hasApiKey, clearApiKey, apiKeyFrom, ...definition } = value as Record<string, unknown>;
@@ -228,7 +237,7 @@ function restoreSecrets(
     }
     return provider;
   });
-  const parsed = parseUnifiedConfigJson(JSON.stringify({ ...raw, providers }), "网页配置");
+  const parsed = parseUnifiedConfigJson(JSON.stringify({ ...raw, ...runtimeFields, providers }), "网页配置");
   if (parsed.diagnostics.errors.length) throw new ConfigEditError(422, parsed.diagnostics.errors.join("；"));
   return parsed.document;
 }

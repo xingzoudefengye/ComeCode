@@ -41,10 +41,16 @@ export function mergeConfigs(...configs: PrioritizedConfig[]): RuntimeConfigPatc
           })()
         : inputConfig;
     const previousHooks = result.hooks;
+    const previousCompact = result.compact;
+    const previousFeatures = result.features;
     const previousPlugins = result.plugins;
     Object.assign(result, config);
 
     // Deep merge nested objects
+    if (config.compact) {
+      // Object.assign 已覆盖当前对象；保留较低优先级层中未被覆盖的恢复参数。
+      result.compact = { ...previousCompact, ...config.compact };
+    }
     if (config.modelStream) {
       result.modelStream = { ...result.modelStream, ...config.modelStream };
     }
@@ -58,7 +64,8 @@ export function mergeConfigs(...configs: PrioritizedConfig[]): RuntimeConfigPatc
       result.network = { ...result.network, ...config.network };
     }
     if (config.features) {
-      result.features = { ...result.features, ...config.features };
+      // Object.assign 已覆盖 features；须保留所有未被高优先级显式修改的功能开关。
+      result.features = { ...previousFeatures, ...config.features };
     }
     if (config.memory) {
       result.memory = { ...result.memory, ...config.memory };

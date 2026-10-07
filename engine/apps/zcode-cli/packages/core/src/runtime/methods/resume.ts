@@ -315,6 +315,7 @@ export async function resumeFromStore(
     status: "completed",
   });
 
+  this.resumeInputBudgetPending = hydration.appliedMessageCount > 0;
   resumeProjectMemoryExtraction(this, traceContext);
   return {
     ...hydration,

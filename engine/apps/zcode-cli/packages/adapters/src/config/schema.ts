@@ -30,6 +30,10 @@ const networkSchema = z.object({
   timeout: positiveNumberSchema.optional(),
 });
 
+export const compactSchema = z.object({
+  resumeInputTokenThreshold: z.number().int().nonnegative().optional(),
+});
+
 const featuresSchema = z.object({
   compact: z.boolean().optional(),
   rewind: z.boolean().optional(),
@@ -292,6 +296,7 @@ export const ZCodeConfigFileSchema = z
     storage: storageSchema.optional(),
     network: networkSchema.optional(),
     features: featuresSchema.optional(),
+    compact: compactSchema.optional(),
     memory: memorySchema.optional(),
     mcp: mcpSchema.optional(),
     plugins: pluginsSchema.optional(),
@@ -404,6 +409,7 @@ function parsedConfigFileToRuntimePatch(parsed: ZCodeConfigFile): RuntimeConfigP
   if (parsed.storage) config.storage = parsed.storage;
   if (parsed.network) config.network = parsed.network;
   if (parsed.features) config.features = parsed.features;
+  if (parsed.compact) config.compact = parsed.compact;
   if (parsed.memory) config.memory = parsed.memory;
   if (parsed.mcp) config.mcp = parsed.mcp;
   if (parsed.plugins) config.plugins = normalizePluginConfig(parsed.plugins);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { compactSchema } from "./schema.js";
 import type { UnifiedConfigDiagnostics, UnifiedConfigDocument } from "./provider-config.js";
 
 const nonBlank = z.string().trim().min(1);
@@ -24,6 +25,8 @@ const documentSchema = z
     model: nonBlank.optional(),
     provider: nonBlank.optional(),
     providers: z.array(providerSchema).optional(),
+    compact: compactSchema.optional(),
+    features: z.object({ compact: z.boolean().optional() }).optional(),
   })
   .strict();
 
@@ -72,13 +75,13 @@ export function parseUnifiedConfigJson(
     }
   }
   return {
-    document: { model: parsed.data.model, provider: parsed.data.provider, providers, ...(parsed.data.providers ? { ownsProviderMembership: true } : {}) },
+    document: { model: parsed.data.model, provider: parsed.data.provider, providers, ...(parsed.data.compact ? { compact: parsed.data.compact } : {}), ...(parsed.data.features ? { features: parsed.data.features } : {}), ...(parsed.data.providers ? { ownsProviderMembership: true } : {}) },
     diagnostics: { errors, warnings: [] },
   };
 }
 
 /** 保留字符串中的 URL 和注释符号；只移除字符串外的注释和尾逗号。 */
-function normalizeJsonc(source: string): string {
+export function normalizeJsonc(source: string): string {
   let result = "";
   let quoted = false;
   let escaped = false;
