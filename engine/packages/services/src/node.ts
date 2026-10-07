@@ -1525,6 +1525,7 @@ export function createLocalServices(options: {
   const providerConfigRuntime = createProviderConfigRuntime({
     prepare: () => sharedProviderSnapshot.prepare(),
     personalFilePath: sharedProviderSnapshot.filePath,
+    unifiedConfigDataRoot: getZCodeDataRootDir(),
     zcodeBuiltinFilePath: options.zcodeBuiltinProviderConfigFilePath,
     // ComeCode 默认只消费随包目录，不通过厂商 CDN 刷新模型配置。
     onZCodeBuiltinRefreshError: (error) => {
