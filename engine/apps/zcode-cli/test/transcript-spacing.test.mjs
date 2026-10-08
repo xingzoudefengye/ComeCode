@@ -117,6 +117,30 @@ test("思考与正文之间夹着已完成工具时仍保留间距", async (t) =
   assert.equal(row(lines, "最终正文") - row(lines, "Thought"), 2);
 });
 
+test("正文后紧接新的思考段时保留分隔间距", async (t) => {
+  const view = await render(
+    t,
+    React.createElement(ContentPane, {
+      focused: false,
+      messages: [
+        {
+          role: "agent",
+          content: "",
+          parts: [
+            { type: "thought", status: "thought", text: "第一段思考", contentCharCount: 5 },
+            { type: "text", text: "前一段正文" },
+            { type: "thought", status: "thought", text: "第二段思考", contentCharCount: 5 },
+            { type: "text", text: "后一段正文" },
+          ],
+        },
+      ],
+    }),
+  );
+  const lines = view.captureCharFrame().split("\n");
+  const thoughtRows = lines.flatMap((line, index) => (line.includes("+ Thought") ? [index] : []));
+  assert.equal(thoughtRows[1] - row(lines, "前一段正文"), 2);
+});
+
 test("Markdown 段落保留块间距，不修改原文并保留代码、列表、表格内容", async (t) => {
   const content =
     "正文第一段\n\n正文第二段\n\n```text\ncode-first\n\ncode-last\n```\n\n- item-one\n- item-two\n\n| column | value |\n| --- | --- |\n| table-row | 42 |";

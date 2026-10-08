@@ -365,9 +365,23 @@ export function MessageRow({
       if (part.type === "thought") {
         // 一组连续思考只在起始索引渲染一次，其余 part 让位给同一行。
         const run = thoughtRuns.get(partIndex);
-        return run
-          ? h(ThoughtRunView, { copy, key: `thought-${partIndex}`, parts: run })
-          : null;
+        if (!run) return null;
+        const previousVisiblePart = findPreviousVisiblePart(
+          parts,
+          partIndex,
+          workflowCardsByToolCallId,
+        );
+        const thoughtView = h(ThoughtRunView, { copy, key: `thought-${partIndex}`, parts: run });
+        return previousVisiblePart?.type === "text"
+          ? h(
+              "box",
+              {
+                key: `before-thought-${partIndex}`,
+                style: { marginTop: 1, flexDirection: "column" },
+              },
+              thoughtView,
+            )
+          : thoughtView;
       }
       const textView =
         assistantText && part.format !== "plain"
