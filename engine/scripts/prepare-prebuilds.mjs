@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import process from "node:process";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -172,27 +172,71 @@ function readZCodeAgentRuntimeVersion() {
   return match[1];
 }
 
-async function download(url, destinationPath) {
-  const response = await fetch(url, { redirect: "follow" });
-  if (!response.ok) {
-    throw new Error(`Download failed: HTTP ${response.status} (${url})`);
-  }
-  if (!response.body) {
-    throw new Error(`Download failed: empty response body (${url})`);
-  }
+/**
+ * 单次下载的「无进展」上限。镜像或 CDN 挂死时 fetch 既不 resolve 也不 reject，
+ * 默认无限等待；CI 上曾因此在 mock-cdn 的 Node 分发下载上空转 39 分钟，直到
+ * job 级 timeout 把整个 Windows 构建取消。用 `ZCODE_DOWNLOAD_STALL_TIMEOUT_MS` 覆盖。
+ */
+export const DEFAULT_DOWNLOAD_STALL_TIMEOUT_MS = 60_000;
 
-  // 原实现使用 response.pipe(file) + finish 监听，网络中断时可能既不 resolve 也不 reject，
-  // 最终触发 Node 24 的 unsettled top-level await。改为 pipeline，确保异常路径可观测且可失败退出。
-  await pipeline(
-    Readable.fromWeb(response.body),
-    createWriteStream(destinationPath, { flags: "w" }),
-  );
+export function resolveDownloadStallTimeoutMs(env = process.env) {
+  const raw = env.ZCODE_DOWNLOAD_STALL_TIMEOUT_MS?.trim();
+  if (!raw) {
+    return DEFAULT_DOWNLOAD_STALL_TIMEOUT_MS;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DOWNLOAD_STALL_TIMEOUT_MS;
 }
 
-async function downloadWithRetry(url, destinationPath, maxAttempts = 3) {
+export async function download(url, destinationPath, options = {}) {
+  const stallTimeoutMs = options.stallTimeoutMs ?? resolveDownloadStallTimeoutMs();
+  const controller = new AbortController();
+  let watchdog;
+
+  // 按「有没有字节进展」判活：慢但持续下载不会误杀，真挂死的连接会被中止并交给上层重试。
+  const armWatchdog = () => {
+    clearTimeout(watchdog);
+    watchdog = setTimeout(() => {
+      controller.abort(new Error(`Download stalled: no progress for ${stallTimeoutMs}ms (${url})`));
+    }, stallTimeoutMs);
+    watchdog.unref?.();
+  };
+
+  armWatchdog();
+  try {
+    const response = await fetch(url, { redirect: "follow", signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Download failed: HTTP ${response.status} (${url})`);
+    }
+    if (!response.body) {
+      throw new Error(`Download failed: empty response body (${url})`);
+    }
+
+    const progress = new Transform({
+      transform(chunk, _encoding, callback) {
+        armWatchdog();
+        callback(null, chunk);
+      },
+    });
+
+    // 原实现使用 response.pipe(file) + finish 监听，网络中断时可能既不 resolve 也不 reject，
+    // 最终触发 Node 24 的 unsettled top-level await。改为 pipeline，确保异常路径可观测且可失败退出。
+    await pipeline(
+      Readable.fromWeb(response.body),
+      progress,
+      createWriteStream(destinationPath, { flags: "w" }),
+    );
+  } finally {
+    clearTimeout(watchdog);
+  }
+}
+
+export async function downloadWithRetry(url, destinationPath, options = {}) {
+  const { maxAttempts = 3, stallTimeoutMs } = options;
+
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      await download(url, destinationPath);
+      await download(url, destinationPath, { stallTimeoutMs });
       return;
     } catch (error) {
       if (attempt >= maxAttempts) {

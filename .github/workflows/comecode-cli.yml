@@ -59,6 +59,8 @@ jobs:
       - name: Build shared runtime package
         run: pnpm --filter @zcode/shared build
       - name: Build all runtime packages before CLI bundle
+        # 这里保留全量构建：本工作流是 CI 里唯一覆盖桌面端与 web 构建的入口
+        # （Release 只构建 CLI 依赖闭包，见 release.yml）。
         run: pnpm -r build
       - name: Local mock regressions only
         run: >-
@@ -68,6 +70,7 @@ jobs:
           ./apps/zcode-cli/test/model-request-headers.test.mjs
           ./apps/zcode-cli/test/network-defaults.test.mjs
           ./apps/zcode-cli/test/comecode-env.test.mjs
+          ./apps/zcode-cli/test/prepare-prebuilds-download.test.mjs
       - name: CLI help startup
         run: node ./apps/zcode-cli/packages/cli/dist/zcode.cjs --help
       - name: Package and smoke-test extracted distribution
