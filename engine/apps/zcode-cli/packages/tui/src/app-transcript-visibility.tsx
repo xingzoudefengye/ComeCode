@@ -21,11 +21,7 @@ export function messageHasVisibleContent(
   const parts = message.parts ?? [];
   if (parts.length === 0) return stripInternalThinkingTags(message.content).length > 0;
   return parts.some((part) => {
-    if (part.type === "tool") {
-      const workflowCard = workflowCardsByToolCallId?.get(part.toolCallId);
-      if (workflowCard) return workflowCard.status !== "completed";
-      return toolTranscriptVisibility(part) !== "hidden";
-    }
+    if (part.type === "tool") return !toolPartHidden(part, workflowCardsByToolCallId);
     return Boolean(part.text);
   });
 }
@@ -35,13 +31,20 @@ export function messageHasVisibleTool(
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>,
 ): boolean {
   return Boolean(
-    message?.parts?.some((part) => {
-      if (part.type !== "tool") return false;
-      const workflowCard = workflowCardsByToolCallId?.get(part.toolCallId);
-      if (workflowCard) return workflowCard.status !== "completed";
-      return toolTranscriptVisibility(part) !== "hidden";
-    }),
+    message?.parts?.some(
+      (part) => part.type === "tool" && !toolPartHidden(part, workflowCardsByToolCallId),
+    ),
   );
+}
+
+// 完成的工具行不占版面；工作流卡片只有未完成时才有可见状态。
+export function toolPartHidden(
+  part: ToolTranscriptPart,
+  workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>,
+): boolean {
+  const workflowCard = workflowCardsByToolCallId?.get(part.toolCallId);
+  if (workflowCard) return workflowCard.status === "completed";
+  return toolTranscriptVisibility(part) === "hidden";
 }
 
 export function stripInternalThinkingTags(content: string): string {

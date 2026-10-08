@@ -14,34 +14,38 @@ const h = React.createElement as (
 const COLLAPSED_MARKER = "+";
 const EXPANDED_MARKER = "-";
 
-export function ThoughtTranscriptPartView({
+// 一个回合的每个 step 都会产出一条 reasoning part，而完成的工具行是隐藏的，
+// 逐条渲染会让对话里出现一串完全相同的 “+ Thought”。同一段连续思考只保留一行，
+// 展开后按顺序显示该组内的全部思考正文。
+export function ThoughtRunView({
   copy = DEFAULT_TUI_COPY,
-  part,
+  parts,
 }: {
   copy?: TuiCopy;
-  part: ThoughtTranscriptPart;
+  parts: ThoughtTranscriptPart[];
 }): React.ReactElement {
   const [expanded, setExpanded] = React.useState(false);
-  return h(ThoughtTranscriptPartFrame, {
+  return h(ThoughtRunFrame, {
     copy,
     expanded,
     onToggle: () => setExpanded((current) => !current),
-    part,
+    parts,
   });
 }
 
-function ThoughtTranscriptPartFrame({
+function ThoughtRunFrame({
   copy = DEFAULT_TUI_COPY,
   expanded,
   onToggle,
-  part,
+  parts,
 }: {
   copy?: TuiCopy;
   expanded: boolean;
   onToggle: () => void;
-  part: ThoughtTranscriptPart;
+  parts: ThoughtTranscriptPart[];
 }): React.ReactElement {
-  const label = thoughtPlaceholderLabel(part, copy);
+  const thinking = parts.some((part) => part.status === "thinking");
+  const label = thoughtPlaceholderLabel(thinking, copy);
   const theme = activeTuiTheme();
   const marker = expanded ? EXPANDED_MARKER : COLLAPSED_MARKER;
 
@@ -61,27 +65,36 @@ function ThoughtTranscriptPartFrame({
       "text",
       {
         selectable: false,
-        style: { fg: part.status === "thinking" ? palette.accent : theme.info },
+        style: { fg: thinking ? palette.accent : theme.info },
       },
       `${marker} ${label}`,
     ),
     ...(expanded
-      ? [
+      ? parts.map((part, index) =>
           h(
-            "text",
+            "box",
             {
-              key: "thought-content",
-              style: { fg: theme.textMuted, width: "100%", wrapMode: "word" },
+              key: `thought-content-${index}`,
+              style: {
+                backgroundColor: "transparent",
+                flexDirection: "column",
+                marginTop: index > 0 ? 1 : 0,
+                width: "100%",
+              },
             },
-            part.text.trim(),
+            h(
+              "text",
+              {
+                style: { fg: theme.textMuted, width: "100%", wrapMode: "word" },
+              },
+              part.text.trim(),
+            ),
           ),
-        ]
+        )
       : []),
   );
 }
 
-function thoughtPlaceholderLabel(part: ThoughtTranscriptPart, copy: TuiCopy): string {
-  return part.status === "thinking"
-    ? copy.transcript.thought.thinking
-    : copy.transcript.thought.complete;
+function thoughtPlaceholderLabel(thinking: boolean, copy: TuiCopy): string {
+  return thinking ? copy.transcript.thought.thinking : copy.transcript.thought.complete;
 }

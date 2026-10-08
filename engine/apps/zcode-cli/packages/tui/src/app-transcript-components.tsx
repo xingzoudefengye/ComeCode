@@ -1,11 +1,11 @@
 import React from "react";
 import type { TuiCopy } from "@zcode/i18n";
-import type { Message } from "./app-model.js";
+import type { Message, ThoughtTranscriptPart, TranscriptPart } from "./app-model.js";
 import { palette } from "./app-model.js";
 import { EmptyTranscriptLogo } from "./app-empty-transcript.js";
 import { DEFAULT_TUI_COPY } from "./app-locale.js";
 import { MarkdownText } from "./app-markdown.js";
-import { ThoughtTranscriptPartView } from "./app-thought-components.js";
+import { ThoughtRunView } from "./app-thought-components.js";
 import { ToolTranscriptPartView } from "./app-tool-components.js";
 import { WorkflowRunCardView } from "./app-workflow-card.js";
 import type { TuiWorkflowCard } from "./app-workflow-mirror.js";
@@ -13,6 +13,7 @@ import {
   messageHasVisibleContent,
   messageHasVisibleTool,
   stripInternalThinkingTags,
+  toolPartHidden,
   ToolFailureSummary,
   toolTranscriptVisibility,
   WorkflowFailureSummary,
@@ -55,8 +56,9 @@ export function ContentPane({
   version?: string;
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
 }): React.ReactElement {
-  const visibleMessages = messages.filter((message) =>
-    messageHasVisibleContent(message, workflowCardsByToolCallId),
+  const visibleMessages = coalesceThoughtOnlyMessages(
+    messages.filter((message) => messageHasVisibleContent(message, workflowCardsByToolCallId)),
+    workflowCardsByToolCallId,
   );
   return h(
     "scrollbox",
@@ -123,6 +125,84 @@ export function ContentPane({
   );
 }
 
+// 每个 step 的 reasoning 各自成一条消息，而完成的工具行不渲染，导致一回合里
+// 相邻多条只含思考的消息在版面上只剩一串 “+ Thought”。这里先按相邻关系合成
+// 一条，配合 ThoughtRunView 渲染成单行；中间夹着可见内容（正文、运行中工具）时保持断开。
+export function coalesceThoughtOnlyMessages(
+  messages: Message[],
+  workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>,
+): Message[] {
+  const coalesced: Message[] = [];
+  let run: Message[] = [];
+  const flushRun = () => {
+    if (run.length === 0) return;
+    coalesced.push(run.length === 1 ? run[0]! : mergeThoughtOnlyMessages(run));
+    run = [];
+  };
+  for (const message of messages) {
+    if (isThoughtOnlyMessage(message, workflowCardsByToolCallId)) {
+      run.push(message);
+    } else {
+      flushRun();
+      coalesced.push(message);
+    }
+  }
+  flushRun();
+  return coalesced;
+}
+
+function mergeThoughtOnlyMessages(run: Message[]): Message {
+  const first = run[0]!;
+  return {
+    ...(first.id ? { id: first.id } : {}),
+    content: "",
+    parts: run.flatMap((message) => message.parts ?? []),
+    role: "agent",
+    ...(run.some((message) => message.streaming) ? { streaming: true } : {}),
+  };
+}
+
+// 一个 step 的 part 顺序是「思考 + 已完成工具」，隐藏的工具 part 不占用版面，
+// 因此不能打断思考分组。返回以起始索引为键的连续思考分组。
+function groupThoughtRuns(
+  parts: TranscriptPart[],
+  workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>,
+): Map<number, ThoughtTranscriptPart[]> {
+  const runs = new Map<number, ThoughtTranscriptPart[]>();
+  let headIndex = -1;
+  let run: ThoughtTranscriptPart[] = [];
+  for (const [index, part] of parts.entries()) {
+    if (part.type === "thought") {
+      if (headIndex === -1) {
+        headIndex = index;
+        run = [];
+      }
+      run.push(part);
+      continue;
+    }
+    if (part.type === "tool" && toolPartHidden(part, workflowCardsByToolCallId)) continue;
+    if (headIndex !== -1) {
+      runs.set(headIndex, run);
+      headIndex = -1;
+    }
+  }
+  if (headIndex !== -1) runs.set(headIndex, run);
+  return runs;
+}
+
+function isThoughtOnlyMessage(
+  message: Message,
+  workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>,
+): boolean {
+  if (message.role !== "agent") return false;
+  if (stripInternalThinkingTags(message.content).length > 0) return false;
+  const parts = message.parts ?? [];
+  if (parts.length === 0) return false;
+  return parts.every((part) =>
+    part.type === "thought" ? true : part.type === "tool" && toolPartHidden(part, workflowCardsByToolCallId),
+  );
+}
+
 function UserMessageView({ content }: { content: string }): React.ReactElement {
   const paragraphs = content.split(/\r?\n\s*\r?\n/u);
   return h(
@@ -164,6 +244,7 @@ export function MessageRow({
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
 }): React.ReactElement {
   const parts = message.parts ?? [];
+  const thoughtRuns = groupThoughtRuns(parts, workflowCardsByToolCallId);
   if (message.role === "timeline") {
     return h(CompactTimelineRow, { copy, message, terminalWidth });
   }
@@ -269,11 +350,11 @@ export function MessageRow({
           : toolView;
       }
       if (part.type === "thought") {
-        return h(ThoughtTranscriptPartView, {
-          copy,
-          key: `thought-${partIndex}`,
-          part,
-        });
+        // 一组连续思考只在起始索引渲染一次，其余 part 让位给同一行。
+        const run = thoughtRuns.get(partIndex);
+        return run
+          ? h(ThoughtRunView, { copy, key: `thought-${partIndex}`, parts: run })
+          : null;
       }
       const textView =
         assistantText && part.format !== "plain"
