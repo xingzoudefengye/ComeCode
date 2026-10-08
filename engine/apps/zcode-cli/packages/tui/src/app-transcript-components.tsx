@@ -203,6 +203,19 @@ function isThoughtOnlyMessage(
   );
 }
 
+function findPreviousVisiblePart(
+  parts: TranscriptPart[],
+  partIndex: number,
+  workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>,
+): TranscriptPart | undefined {
+  for (let index = partIndex - 1; index >= 0; index -= 1) {
+    const part = parts[index]!;
+    if (part.type === "tool" && toolPartHidden(part, workflowCardsByToolCallId)) continue;
+    return part;
+  }
+  return undefined;
+}
+
 function UserMessageView({ content }: { content: string }): React.ReactElement {
   const paragraphs = content.split(/\r?\n\s*\r?\n/u);
   return h(
@@ -365,19 +378,20 @@ export function MessageRow({
               streaming: message.streaming,
             })
           : h("text", { key: `text-${partIndex}`, style: { fg: plainTextColor } }, part.text);
+      const previousVisiblePart = findPreviousVisiblePart(
+        parts,
+        partIndex,
+        workflowCardsByToolCallId,
+      );
       // 思考标签与正文的间隔只归消息容器，避免与 Thought 外边距叠加。
-      return parts[partIndex - 1]?.type === "tool" &&
-        messageHasVisibleTool(
-          { ...message, parts: parts.slice(0, partIndex) },
-          workflowCardsByToolCallId,
-        )
+      return previousVisiblePart?.type === "tool"
         ? h(
-            "box",
-            { key: `after-tool-${partIndex}`, style: { flexDirection: "column" } },
+            React.Fragment,
+            { key: `after-tool-${partIndex}` },
             h("box", { style: { backgroundColor: palette.background, height: 1, width: "100%" } }),
             textView,
           )
-        : parts[partIndex - 1]?.type === "thought"
+        : previousVisiblePart?.type === "thought"
           ? h(
               "box",
               {
@@ -387,6 +401,7 @@ export function MessageRow({
               textView,
             )
           : textView;
+
     }),
   );
 }

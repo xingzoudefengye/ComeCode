@@ -89,6 +89,34 @@ test("原生对话渲染：用户与模型分层，Thought 和正文段落保持
   }
 });
 
+test("思考与正文之间夹着已完成工具时仍保留间距", async (t) => {
+  const view = await render(
+    t,
+    React.createElement(ContentPane, {
+      focused: false,
+      messages: [
+        {
+          role: "agent",
+          content: "",
+          parts: [
+            { type: "thought", status: "thought", text: "先思考", contentCharCount: 3 },
+            {
+              type: "tool",
+              toolCallId: "completed-hidden",
+              toolName: "Bash",
+              status: "completed",
+              output: "隐藏工具输出",
+            },
+            { type: "text", text: "最终正文" },
+          ],
+        },
+      ],
+    }),
+  );
+  const lines = view.captureCharFrame().split("\n");
+  assert.equal(row(lines, "最终正文") - row(lines, "Thought"), 2);
+});
+
 test("Markdown 段落保留块间距，不修改原文并保留代码、列表、表格内容", async (t) => {
   const content =
     "正文第一段\n\n正文第二段\n\n```text\ncode-first\n\ncode-last\n```\n\n- item-one\n- item-two\n\n| column | value |\n| --- | --- |\n| table-row | 42 |";
