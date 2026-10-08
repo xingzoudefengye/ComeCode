@@ -104,7 +104,8 @@ export function applySessionEventToState(
       applyTurnSteerFinishedEvent(payload, handlers.setQueuedInputs);
       break;
     case SessionEventType.AssistantMessage:
-      applyAssistantMessageEvent(payload, handlers.setMessages);
+      // assistant_message 是模型过程产物；最终正文由 turn_complete.response 或 submit result 投影。
+      // 直接追加会把中间 step 文本误当成最终回答，切断 Thought 后又产生新的 Thought 标题。
       break;
     case SessionEventType.ModelRequest:
       handlers.setStatus(copy.status.modelCalling);
