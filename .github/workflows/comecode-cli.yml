@@ -71,6 +71,7 @@ jobs:
           ./apps/zcode-cli/test/network-defaults.test.mjs
           ./apps/zcode-cli/test/comecode-env.test.mjs
           ./apps/zcode-cli/test/prepare-prebuilds-download.test.mjs
+          ./apps/zcode-cli/test/transcript-thought-run.test.mjs
       - name: CLI help startup
         run: node ./apps/zcode-cli/packages/cli/dist/zcode.cjs --help
       - name: Package and smoke-test extracted distribution
