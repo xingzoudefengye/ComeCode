@@ -1,7 +1,6 @@
 import type React from "react";
 import type { Message } from "./app-model.js";
 import {
-  appendStreamingTextDelta,
   appendStreamingThoughtDelta,
   markStreamingMessageComplete,
   markStreamingThoughtComplete,
@@ -52,16 +51,8 @@ export function applyModelStreamingEvent(
     return;
   }
   if (kind === "text_delta" || (!kind && delta)) {
-    const assistantMessageId = stringField(payload, "assistantMessageId");
-    if (assistantMessageId) {
-      // a global live text buffer renders below tool rows; assistant-scoped deltas
-      // keep text/tool/text in the provider's original transcript order.
-      handlers.setMessages((current) =>
-        appendStreamingTextDelta(current, assistantMessageId, delta),
-      );
-    } else {
-      handlers.setLiveModelText((current) => `${current}${delta}`);
-    }
+    // text_delta 可能来自中间 model step；最终正文由 turn_complete.response 或 submit result 投影。
+    // 不把过程文本写入 transcript，否则会提前结束 Thought，后续 step 又产生新的 Thought 标题。
     handlers.setStatus("Streaming model response...");
     return;
   }
