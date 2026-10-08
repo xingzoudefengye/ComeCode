@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 const targets = {
-  'linux-x64': '@comecode/runtime-linux-x64',
-  'win32-x64': '@comecode/runtime-win-x64',
-  'darwin-arm64': '@comecode/runtime-darwin-arm64',
+  'linux-x64': 'comecode-runtime-linux-x64',
+  'win32-x64': 'comecode-runtime-win-x64',
+  'darwin-arm64': 'comecode-runtime-darwin-arm64',
 };
 const key = `${process.platform}-${process.arch}`;
 const packageName = targets[key];

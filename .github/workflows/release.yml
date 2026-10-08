@@ -23,10 +23,13 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: linux-x64
+            npm_entry: "1"
           - os: windows-2022
             target: win-x64
+            npm_entry: "0"
           - os: macos-14
             target: darwin-arm64
+            npm_entry: "0"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
 
@@ -66,6 +69,8 @@ jobs:
       - name: Package distribution
         run: node ../scripts/package-comecode-cli.mjs
         working-directory: engine
+        env:
+          COMECODE_SKIP_NPM_ENTRY: ${{ matrix.npm_entry == '1' && '0' || '1' }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -92,6 +97,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::warning::未配置 NPM_TOKEN，跳过 npm 发布；GitHub Release 仍会正常生成。"
+            exit 0
+          fi
           shopt -s nullglob
           packages=(artifacts/*/comecode-runtime-*.tgz)
           ((${#packages[@]} > 0))
@@ -102,9 +111,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::warning::未配置 NPM_TOKEN，跳过 npm 发布；GitHub Release 仍会正常生成。"
+            exit 0
+          fi
           package=$(find artifacts -type f -name 'comecode-*.tgz' ! -name 'comecode-runtime-*.tgz' -print -quit)
           test -n "$package"
           npm publish "$package" --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release:
     name: Create GitHub Release
@@ -147,18 +162,20 @@ jobs:
 
             ### 手动下载
 
-            从下方选择对应平台的压缩包下载：
+            从下方选择对应平台的压缩包下载（需要本机已安装 Node.js 24.14.0 或更高版本）：
             - `comecode-*-linux-x64.tar.gz` - Linux x64
-            - `comecode-*-windows-x64.zip` - Windows x64
+            - `comecode-*-windows-x64.tar.gz` - Windows x64
             - `comecode-*-darwin-arm64.tar.gz` - macOS Apple Silicon
 
-            解压后将可执行文件添加到 PATH。
+            解压后运行 `node comecode-*-\<platform\>/comecode.cjs --help`，或按上文脚本安装到 PATH。
 
-            ### npm 安装（即将支持）
+            ### npm 安装
 
             ```bash
             npm install -g comecode
             ```
+
+            如果该命令返回 404，说明尚未配置 npm 发布凭据，请先使用上面的安装脚本或手动下载。
 
             ## 📖 使用文档
 

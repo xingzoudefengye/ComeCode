@@ -86,7 +86,8 @@ async function addBundledDependencies(packageDirectory) {
     const packageDirectories = entry.name.startsWith("@")
       ? (await readdir(join(dependenciesDirectory, entry.name), { withFileTypes: true }))
           .filter((child) => child.isDirectory())
-          .map((child) => join(entry.name, child.name))
+          // npm 只认正斜杠的 scoped 包名；用 path.join 会得到 @scope\name 并被当作非法 bundledDependency 丢弃。
+          .map((child) => `${entry.name}/${child.name}`)
       : [entry.name];
     for (const packageName of packageDirectories) {
       const metadata = JSON.parse(await readFile(join(dependenciesDirectory, packageName, "package.json"), "utf8"));
@@ -140,7 +141,7 @@ try {
     join(stage, "package.json"),
     JSON.stringify(
       {
-        name: `@comecode/runtime-${target}`,
+        name: `comecode-runtime-${target}`,
         version,
         description: "ComeCode platform runtime",
         license: "Apache-2.0",
@@ -203,31 +204,34 @@ try {
   const runtimePackage = (await readdir(output)).find((file) => file.startsWith("comecode-runtime-") && file.endsWith(".tgz"));
   if (!runtimePackage) throw new Error("npm did not produce a runtime package");
   const entryStage = join(work, "entry");
-  await mkdir(entryStage, { recursive: true });
-  await copy(join(root, "scripts/comecode-entry.cjs"), join(entryStage, "comecode.cjs"), 0o755);
-  await copy(join(engine, "LICENSE"), join(entryStage, "LICENSE"));
-  await writeFile(
-    join(entryStage, "package.json"),
-    JSON.stringify(
-      {
-        name: "comecode",
-        version,
-        description: "ComeCode - vendor-neutral open-source coding agent",
-        license: "Apache-2.0",
-        repository: { type: "git", url: "https://github.com/xingzoudefengye/ComeCode.git" },
-        bin: { comecode: "./comecode.cjs" },
-        engines: { node: ">=24.14.0" },
-        optionalDependencies: {
-          "@comecode/runtime-linux-x64": version,
-          "@comecode/runtime-win-x64": version,
-          "@comecode/runtime-darwin-arm64": version,
+  // 平台矩阵中只允许一个任务产出入口包，否则同名资产会在 Release 上冲突。
+  if (process.env.COMECODE_SKIP_NPM_ENTRY !== "1") {
+    await mkdir(entryStage, { recursive: true });
+    await copy(join(root, "scripts/comecode-entry.cjs"), join(entryStage, "comecode.cjs"), 0o755);
+    await copy(join(engine, "LICENSE"), join(entryStage, "LICENSE"));
+    await writeFile(
+      join(entryStage, "package.json"),
+      JSON.stringify(
+        {
+          name: "comecode",
+          version,
+          description: "ComeCode - vendor-neutral open-source coding agent",
+          license: "Apache-2.0",
+          repository: { type: "git", url: "https://github.com/xingzoudefengye/ComeCode.git" },
+          bin: { comecode: "./comecode.cjs" },
+          engines: { node: ">=24.14.0" },
+          optionalDependencies: {
+            "comecode-runtime-linux-x64": version,
+            "comecode-runtime-win-x64": version,
+            "comecode-runtime-darwin-arm64": version,
+          },
         },
-      },
-      null,
-      2,
-    ) + "\n",
-  );
-  await npmPack(entryStage);
+        null,
+        2,
+      ) + "\n",
+    );
+    await npmPack(entryStage);
+  }
   const archive = join(output, `${name}.tar.gz`);
   await execFile(tar, ["-czf", archive, "-C", work, name]);
   // 从实际归档解包，再在系统临时目录运行，不能借用仓库 node_modules 掩盖缺依赖。
