@@ -12,6 +12,7 @@ import { ContentPane } from "./app-transcript-components.js";
 import { FileMentionPanel } from "./app-file-mention-panel.js";
 import type { FileMentionState } from "./app-file-mentions.js";
 import { EffortSuggestionPanel } from "./app-effort-suggestion-panel.js";
+import { inputFloodNotice } from "./app-input-flood.js";
 import { InputPane, type PromptInputEditor } from "./app-input-pane.js";
 import { InputActiveStatus } from "./app-input-status.js";
 import { QueuedInputPanel } from "./app-queued-inputs.js";
@@ -95,6 +96,7 @@ export function AppView(props: {
   queuedInputs?: QueuedInput[];
   selection?: SelectionState;
   setDraftValue: (value: string) => void;
+  setStatus: React.Dispatch<React.SetStateAction<string>>;
   sidebarLayout: SidebarLayout;
   sidebarSections: SidebarSectionExpansion;
   slashCommands: readonly NonNullable<TuiOptions["slashCommands"]>[number][];
@@ -226,7 +228,7 @@ export function AppView(props: {
             cacheHitRate: props.cacheStats?.hitRate,
             focused: !readOnly,
             busy: props.busy,
-            clipboardStatus: props.status?.startsWith("图片：") ? props.status : undefined,
+            clipboardStatus: composerStatusText(props.status),
             imagePasteAvailable: Boolean(props.options.readClipboardImage),
             contentWidth: actionPanelContentWidth,
             contextUsage: props.contextUsage,
@@ -245,6 +247,9 @@ export function AppView(props: {
             sessionId: props.sessionId,
             modelOptions: props.modelOptions,
             modelSelection: props.modelSelection,
+            onInputFlood: readOnly
+              ? undefined
+              : (char: string, count: number) => props.setStatus(inputFloodNotice(char, count)),
             queuedInputs,
             selection: composerSelection,
             setDraftValue: readOnly ? () => {} : props.setDraftValue,
@@ -258,9 +263,18 @@ export function AppView(props: {
   );
 }
 
+// 输入框上方的提示行只承载输入相关状态，其余状态留在状态栏。
+const COMPOSER_STATUS_PREFIXES = ["图片：", "输入异常："];
+
+function composerStatusText(status: string | undefined): string | undefined {
+  return status && COMPOSER_STATUS_PREFIXES.some((prefix) => status.startsWith(prefix))
+    ? status
+    : undefined;
+}
+
 function ComposerInputArea(props: {
   approval?: ApprovalPrompt;
-  clipboardStatus?: string;
+  composerStatus?: string;
   imagePasteAvailable?: boolean;
   runtimeActivity?: RuntimeActivity;
   backgroundCount?: number;
@@ -284,6 +298,7 @@ function ComposerInputArea(props: {
   sessionId?: string;
   modelOptions: readonly NonNullable<TuiOptions["modelOptions"]>[number][];
   modelSelection?: ModelCommandSelectionState;
+  onInputFlood?: (char: string, count: number) => void;
   queuedInputs: QueuedInput[];
   selection?: SelectionState;
   setDraftValue: (value: string) => void;
@@ -353,8 +368,8 @@ function ComposerInputArea(props: {
       copy: props.copy,
       inputs: props.queuedInputs,
     }),
-    // 图片结果在主界面可见，不再依赖默认隐藏的侧栏。
-    props.clipboardStatus ? h("text", { style: { fg: palette.muted, height: 1 } }, props.clipboardStatus) : null,
+    // 输入相关提示（图片结果、畸形连发）在主界面可见，不再依赖默认隐藏的侧栏。
+    props.composerStatus ? h("text", { style: { fg: palette.muted, height: 1 } }, props.composerStatus) : null,
     h(InputPane, {
       busy: props.busy,
       imagePasteAvailable: props.imagePasteAvailable,
@@ -363,6 +378,7 @@ function ComposerInputArea(props: {
       editorRef: props.editorRef,
       focused: !props.approval && (props.focused ?? true),
       onInput: props.setDraftValue,
+      onInputFlood: props.onInputFlood,
       onSubmit: props.submitValue,
       resetCursorToEndVersion: props.inputCursorToEndVersion,
       value: props.draft,

@@ -425,6 +425,7 @@ export function TuiApp({
     modeSelection: modeCommand.selection,
     slashCommands: filteredSlashCommands,
     slashSelection,
+    setStatus,
     status,
     statusDetails,
     submitValue,

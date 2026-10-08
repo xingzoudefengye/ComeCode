@@ -1,6 +1,7 @@
 import type { TextareaRenderable } from "@mbears/opentui-core";
 import type { TuiCopy } from "@zcode/i18n";
 import React from "react";
+import { assessInputFlood, type InputFloodState } from "./app-input-flood.js";
 import { DEFAULT_TUI_COPY } from "./app-locale.js";
 import { palette } from "./app-model.js";
 import { wordWrappedLineCount } from "./app-terminal-width.js";
@@ -55,6 +56,7 @@ export function InputPane({
   copy = DEFAULT_TUI_COPY,
   focused,
   onInput,
+  onInputFlood,
   onSubmit,
   editorRef,
   resetCursorToEndVersion,
@@ -67,6 +69,8 @@ export function InputPane({
   editorRef?: React.MutableRefObject<PromptInputEditor | null>;
   focused: boolean;
   onInput: (value: string) => void;
+  /** 整段畸形连发被丢弃时回调一次，供上层提示。 */
+  onInputFlood?: (char: string, count: number) => void;
   onSubmit: (value: string) => void;
   resetCursorToEndVersion: number;
   value: string;
@@ -74,6 +78,8 @@ export function InputPane({
   const textareaRef = React.useRef<TextareaRenderable | null>(null);
   const appliedCursorToEndVersionRef = React.useRef(0);
   const syncingValueRef = React.useRef(false);
+  const floodStateRef = React.useRef<InputFloodState | undefined>(undefined);
+  const revertedTextRef = React.useRef<string | undefined>(undefined);
   const editorRows = inputPaneEditorRows(value, contentWidth);
 
   const setTextareaRef = React.useCallback(
@@ -96,17 +102,23 @@ export function InputPane({
     };
   }, [editorRef]);
 
-  React.useLayoutEffect(() => {
+  // 受控值与回退共用同一条写入路径：同步标记必须覆盖 setText，否则 OpenTUI 的回显
+  // 会被当成用户输入重新提交给上层。
+  const applyControlledText = React.useCallback((text: string) => {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
     syncingValueRef.current = true;
     try {
-      syncTextareaValue(textarea, value);
+      syncTextareaValue(textarea, text);
     } finally {
       syncingValueRef.current = false;
     }
-  }, [value]);
+  }, []);
+
+  React.useLayoutEffect(() => {
+    applyControlledText(value);
+  }, [applyControlledText, value]);
 
   React.useLayoutEffect(() => {
     if (resetCursorToEndVersion <= 0) return;
@@ -120,11 +132,28 @@ export function InputPane({
     if (syncingValueRef.current) return;
     const textarea = textareaRef.current;
     if (!textarea) return;
+    // 丢弃整段连发时的回退写入会以内容变更回显回来。它看起来像一次大规模删除，
+    // 若当成用户编辑处理就会清空连发计数，下一次按键立刻被当作全新输入放行。
+    const revertedTo = revertedTextRef.current;
+    revertedTextRef.current = undefined;
+    if (revertedTo !== undefined && textarea.plainText === revertedTo) return;
+
+    const verdict = assessInputFlood(floodStateRef.current, value, textarea.plainText, Date.now());
+    floodStateRef.current = verdict.state;
+    if (verdict.blocked) {
+      // 卡键/输入法异常会把同一个字符灌进来几百次：整段丢弃，编辑器与草稿一起回退到
+      // 连发开始前的内容，避免整段垃圾留在输入框甚至被直接提交。
+      revertedTextRef.current = verdict.acceptedText;
+      applyControlledText(verdict.acceptedText);
+      if (verdict.acceptedText !== value) onInput(verdict.acceptedText);
+      if (verdict.notice) onInputFlood?.(verdict.notice.char, verdict.notice.count);
+      return;
+    }
     // OpenTUI can echo a controlled setText as content-change after
     // sync finishes; treating that as user input exits history navigation.
     if (!shouldEmitTextareaInput(value, textarea.plainText)) return;
     onInput(textarea.plainText);
-  }, [onInput, value]);
+  }, [applyControlledText, onInput, onInputFlood, value]);
 
   const handleSubmit = React.useCallback(() => {
     onSubmit(textareaRef.current?.plainText ?? value);
