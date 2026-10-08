@@ -54,9 +54,12 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
-      - name: Build all dependencies
+      # 只构建 CLI 及其工作区依赖：`pnpm -r build` 会把桌面端与 web 一起构建，
+      # 其中的 mock-cdn 远端资产下载对 CLI 分发包毫无贡献，却在 Windows runner 上
+      # 挂死过（无进展 39 分钟后被 job 超时取消，见 release run 37778112941）。
+      - name: Build CLI dependencies
         working-directory: engine
-        run: pnpm -r build
+        run: pnpm --filter "@zcode/cli..." build
 
       - name: Build shared runtime package
         working-directory: engine
