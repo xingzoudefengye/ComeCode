@@ -128,6 +128,7 @@ export interface AgentRuntimeInternal
   lastAssistantCompletedAtMs?: number;
   lastEmittedLocalDate?: string;
   autoCompactConsecutiveFailures: number;
+  resumeInputBudgetPending: boolean;
   runtimeCommandQueue: RuntimeCommandQueue;
   runtimeCommandDrainActive: boolean;
   activeForegroundExecution?: ActiveForegroundExecutionState;

@@ -12,6 +12,8 @@ import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import type { RuntimeConfigPatch, UiLocale } from "@zcode/contracts";
 import { z } from "zod";
+import { normalizeJsonc } from "./provider-config-json.js";
+import { parseUnifiedConfigToml } from "./provider-config-toml.js";
 import { resolveComeCodeDataRoot } from "./comecode-env.js";
 import {
   CANONICAL_CUA_PLUGIN_ID,
@@ -25,6 +27,7 @@ import {
 interface FileConfigOptions {
   baseDir?: string;
   configFileName?: string;
+  migratePlugins?: boolean;
 }
 
 export interface LoadedConfig {
@@ -92,9 +95,11 @@ export function loadFileConfig(filePath?: string, options: FileConfigOptions = {
   }
 
   try {
-    const content = readFileSync(resolvedPath, "utf-8");
-    const parsed = JSON.parse(content);
-    const migrated = migratePluginConfigInFile(parsed);
+    const content = readFileSync(resolvedPath, "utf-8").replace(/^\uFEFF/u, "");
+    const toml = resolvedPath.endsWith(".toml") ? parseUnifiedConfigToml(content, resolvedPath) : undefined;
+    if (toml?.diagnostics.errors.length) throw new Error(toml.diagnostics.errors.join("; "));
+    const parsed = toml?.document ?? JSON.parse(resolvedPath.endsWith(".jsonc") ? normalizeJsonc(content) : content);
+    const migrated = toml || options.migratePlugins === false ? undefined : migratePluginConfigInFile(parsed);
     if (migrated) {
       // 仅装载态归一化会让旧 key 永久留在磁盘，后续版本无法安全删除迁移逻辑。
       persistPluginConfigMigration(resolvedPath, migrated);

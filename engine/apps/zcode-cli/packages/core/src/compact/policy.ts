@@ -16,6 +16,7 @@ export const MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3;
 
 export interface AutoCompactPolicyConfig {
   enabled?: boolean;
+  resumeInputTokenThreshold?: number;
   contextWindow?: number;
   maxOutputTokens?: number;
   modelContextBudgetStrategy?: "legacy" | "preflight-v1";

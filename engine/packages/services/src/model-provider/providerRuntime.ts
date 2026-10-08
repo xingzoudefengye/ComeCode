@@ -24,6 +24,9 @@ import {
   type ModelSelectionConfiguredDefaultSource,
   type ProviderSettingsConnectivityTester,
 } from "./providerFacadeServices.js";
+import {
+  createUnifiedProviderSettingsMutationTarget,
+} from "./unifiedProviderSettingsMutation.js";
 
 export interface ProviderRuntimeOptions extends ProviderConfigRuntimeOptions {
   readonly accountSource?: RefreshableProviderSource<AccountProviderConfigSnapshot>;
@@ -94,11 +97,26 @@ export class ProviderRuntime {
       configSource: this.configService,
       accountSource,
     });
-    const mutations = createSettingsMutationTarget(
-      this.#configRuntime,
-      this.registryService,
-      accountSource,
-    );
+    const unifiedMutations = createUnifiedProviderSettingsMutationTarget({
+      targetProviderFile: this.#configRuntime.personalFilePath,
+      unifiedConfigDataRoot: this.#configRuntime.unifiedConfigDataRoot,
+    });
+    const mutations: ProviderSettingsMutationTarget = {
+      ...unifiedMutations,
+      refresh: (reason) => this.registryService.refresh(reason),
+      refreshSources: async (reason) => {
+        const sourceResults = await Promise.allSettled([
+          this.#configRuntime.refreshZCodeBuiltin({ force: true }),
+          accountSource.refresh?.(reason) ?? Promise.resolve(),
+        ]);
+        const snapshot = await this.registryService.refresh(reason);
+        const failed = sourceResults.find(
+          (result): result is PromiseRejectedResult => result.status === "rejected",
+        );
+        if (failed) throw failed.reason;
+        return snapshot;
+      },
+    };
     const ensureReady = () => this.start();
     const settingsFacade = new ProviderSettingsFacade(this.registryService, mutations);
     this.providerSettings = createProviderSettingsService(
@@ -135,62 +153,6 @@ export class ProviderRuntime {
     this.#disposeModelSelectionConfiguredDefaultSource?.();
     this.#configRuntime.dispose();
   }
-}
-
-function createSettingsMutationTarget(
-  configRuntime: ProviderConfigRuntime,
-  registryService: ProviderRegistryService,
-  accountSource: RefreshableProviderSource<AccountProviderConfigSnapshot>,
-): ProviderSettingsMutationTarget {
-  const configService = configRuntime.configService;
-  return {
-    createPersonalProvider: (input) => configService.createPersonalProvider(input),
-    savePersonalProviderOverlay: (providerId, config, membership, metadata) =>
-      configService.savePersonalProviderOverlay(providerId, config, membership, metadata),
-    deletePersonalProvider: (providerId) => configService.deletePersonalProvider(providerId),
-    reorderPersonalProviders: (providerIds) => configService.reorderPersonalProviders(providerIds),
-    reorderPersonalModels: (providerId, modelIds, membership) =>
-      configService.reorderPersonalModels(providerId, modelIds, membership),
-    // 手工四参数转发曾丢掉新增的配置模式；直接绑定完整签名，避免装配层截断写入意图。
-    addPersonalModel: configService.addPersonalModel.bind(configService),
-    renamePersonalModel: (providerId, currentModelId, nextModelId, membership) =>
-      configService.renamePersonalModel(providerId, currentModelId, nextModelId, membership),
-    deletePersonalModel: (providerId, modelId, membership) =>
-      configService.deletePersonalModel(providerId, modelId, membership),
-    setPersonalModelEnabled: (providerId, modelId, enabled, membership) =>
-      configService.setPersonalModelEnabled(providerId, modelId, enabled, membership),
-    savePersonalModelDraft: (
-      providerId,
-      originalModelId,
-      nextModelId,
-      config,
-      expectedPersonalRevision,
-      useRecommendedConfig,
-      membership,
-    ) =>
-      configService.savePersonalModelDraft(
-        providerId,
-        originalModelId,
-        nextModelId,
-        config,
-        expectedPersonalRevision,
-        useRecommendedConfig,
-        membership,
-      ),
-    refresh: (reason) => registryService.refresh(reason),
-    refreshSources: async (reason) => {
-      const sourceResults = await Promise.allSettled([
-        configRuntime.refreshZCodeBuiltin({ force: true }),
-        accountSource.refresh?.(reason) ?? Promise.resolve(),
-      ]);
-      const snapshot = await registryService.refresh(reason);
-      const failed = sourceResults.find(
-        (result): result is PromiseRejectedResult => result.status === "rejected",
-      );
-      if (failed) throw failed.reason;
-      return snapshot;
-    },
-  };
 }
 
 export function createProviderRuntime(options: ProviderRuntimeOptions): ProviderRuntime {

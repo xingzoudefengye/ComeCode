@@ -19,6 +19,7 @@ export interface ProviderConfigRuntimeOptions {
   readonly onPersonalConfigRecovery?: (event: PersonalProviderConfigRecoveryEvent) => void;
   readonly onPersonalConfigPollingError?: (error: unknown) => void;
   readonly personalFilePath?: string;
+  readonly unifiedConfigDataRoot?: string;
   readonly personalPollingIntervalMs?: number | false;
   readonly readLegacyProviders?: () => Promise<readonly ModelProviderConfig[]>;
   readonly watch?: boolean;
@@ -30,11 +31,17 @@ export interface ProviderConfigRuntimeOptions {
  */
 export class ProviderConfigRuntime {
   readonly configService: NodeProviderConfigRuntime["configService"];
+  readonly personalFilePath: string;
+  readonly unifiedConfigDataRoot: string;
   readonly #prepare: (() => Promise<void>) | undefined;
   readonly #runtime: NodeProviderConfigRuntime;
 
   constructor(options: ProviderConfigRuntimeOptions) {
     this.#prepare = options.prepare;
+    const personalFilePath =
+      options.personalFilePath ?? join(getAppConfigDir(), PERSONAL_PROVIDER_CONFIG_FILE_NAME);
+    this.personalFilePath = personalFilePath;
+    this.unifiedConfigDataRoot = options.unifiedConfigDataRoot ?? getAppConfigDir();
     const runtimeOptions: NodeProviderConfigRuntimeOptions = {
       zcodeBuiltinFilePath: options.zcodeBuiltinFilePath,
       zcodeBuiltinActiveFilePath: options.zcodeBuiltinActiveFilePath,

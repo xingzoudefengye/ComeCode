@@ -1,3 +1,4 @@
+import type { RuntimeConfigPatch } from "@zcode/contracts";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { parse, resolve, dirname, join } from "node:path";
@@ -36,6 +37,8 @@ export interface UnifiedProviderDefinition extends Omit<UnifiedModelDefinition, 
   readonly models?: readonly (string | UnifiedModelDefinition)[];
 }
 export interface UnifiedConfigDocument {
+  readonly compact?: RuntimeConfigPatch["compact"];
+  readonly features?: Pick<NonNullable<RuntimeConfigPatch["features"]>, "compact">;
   readonly model?: string;
   readonly provider?: string;
   readonly providers: Readonly<Record<string, UnifiedProviderDefinition>>;
@@ -343,6 +346,8 @@ function mergeDocuments(base: UnifiedConfigDocument, next: UnifiedConfigDocument
   }
   return {
     providers,
+    ...(base.compact || next.compact ? { compact: { ...base.compact, ...next.compact } } : {}),
+    ...(base.features || next.features ? { features: { ...base.features, ...next.features } } : {}),
     ownsProviderMembership: next.ownsProviderMembership ?? base.ownsProviderMembership,
     ...(next.model !== undefined
       ? { model: next.model }

@@ -74,6 +74,13 @@ class ConfigStore {
   }
 
   merge(config: RuntimeConfigPatch, scope: ConfigScope): void {
+    if (config.compact?.resumeInputTokenThreshold !== undefined) {
+      this.set(
+        ConfigKey.CompactResumeInputTokenThreshold,
+        config.compact.resumeInputTokenThreshold,
+        scope,
+      );
+    }
     if (config.modelStream?.idleTimeoutMs !== undefined) {
       this.set(ConfigKey.ModelStreamIdleTimeout, config.modelStream.idleTimeoutMs, scope);
     }
@@ -258,7 +265,9 @@ export class ConfigPortImpl implements ConfigPort {
   }
 
   getAll(): RuntimeConfig {
+    const resumeInputTokenThreshold = this.store.get(ConfigKey.CompactResumeInputTokenThreshold);
     return {
+      ...(resumeInputTokenThreshold === undefined ? {} : { compact: { resumeInputTokenThreshold } }),
       modelStream: {
         idleTimeoutMs:
           this.store.get(ConfigKey.ModelStreamIdleTimeout) ??

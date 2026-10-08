@@ -24,6 +24,7 @@ import { createConfigPort } from "./index.js";
 import { loadFileConfig, getDefaultConfigPath, type LoadedConfig } from "./file-config.adapter.js";
 import { parseEnvConfig } from "./env-config.adapter.js";
 import { resolveComeCodeStorageRoot } from "./comecode-env.js";
+import { resolveUnifiedConfigPaths } from "./provider-config.js";
 import { mergeConfigs, createPrioritizedConfig } from "./config-merger.js";
 import { createNodeLoggerFactory } from "../logging/index.js";
 import {
@@ -159,6 +160,31 @@ export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
     );
   }
 
+  // 标准配置与旧 cli/config.json 共存；本次只投影恢复阈值及旧 compact 开关。
+  const unifiedPaths = resolveUnifiedConfigPaths({
+    env: options.env,
+    cwd: options.workingDirectory,
+    includeProject: Boolean(options.workingDirectory) && !options.projectConfigPath,
+  });
+  const standardUser = !options.skipUserConfig && !options.userConfigPath
+    ? loadFileConfig(unifiedPaths.user, { migratePlugins: false })
+    : undefined;
+  const standardProject = unifiedPaths.project
+    ? loadFileConfig(unifiedPaths.project, { migratePlugins: false })
+    : undefined;
+  for (const [loaded, scope] of [
+    [standardUser, ConfigScope.User],
+    [standardProject, ConfigScope.Project],
+  ] as const) {
+    if (!loaded?.loaded) continue;
+    configs.push(createPrioritizedConfig({
+      ...(loaded.config.compact ? { compact: loaded.config.compact } : {}),
+      ...(loaded.config.features?.compact === undefined
+        ? {}
+        : { features: { compact: loaded.config.features.compact } }),
+    }, scope));
+  }
+
   // 3. Project config files
   const discoveredProjectConfigs: ProjectConfigDiscovery = options.workingDirectory
     ? loadProjectConfigs(options.workingDirectory, options.projectConfigPath)
@@ -182,8 +208,8 @@ export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
   logConfigDiagnostics({
     env: options.env,
     loggerFactory: options.loggerFactory,
-    projectDiagnostics,
-    userDiagnostics: userConfigResult.diagnostics,
+    projectDiagnostics: [...projectDiagnostics, ...(standardProject?.diagnostics ?? [])],
+    userDiagnostics: [...userConfigResult.diagnostics, ...(standardUser?.diagnostics ?? [])],
   });
   const projectConfigResult: OptionalPathLoadedConfig =
     summarizeOptionalProjectConfig(projectConfigFiles);
@@ -265,7 +291,7 @@ export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
     config: configPort.getAll(),
     sources: {
       user: {
-        diagnostics: userConfigResult.diagnostics,
+        diagnostics: [...userConfigResult.diagnostics, ...(standardUser?.diagnostics ?? [])],
         path: userConfigResult.path,
         loaded: userConfigResult.loaded,
         hasMcpServers: userConfigResult.config.mcp?.servers !== undefined,
@@ -274,7 +300,7 @@ export function createConfig(options: ConfigFactoryOptions = {}): ConfigResult {
         mcpServerNames: Object.keys(userConfigResult.config.mcp?.servers ?? {}),
       },
       project: {
-        diagnostics: projectDiagnostics,
+        diagnostics: [...projectDiagnostics, ...(standardProject?.diagnostics ?? [])],
         path: projectConfigResult.path,
         paths: projectSummary.paths,
         loaded: projectConfigResult.loaded,

@@ -5,6 +5,7 @@
 - 桌面设置的模型页通过 `IPlatformService.executeDesktopCommand(OpenAdminConsole)` 打开管理窗口。UI 不访问 Repo、不启动 Agent、不自行构造配置路径。
 - Main 只管理 sandbox 窗口和独立 CLI `admin desktop-stdio --no-browser` 管理进程；进程不创建 Agent。复用 CLI 命令解析器和现有 admin HTTP 页面/API。
 - CLI 管理进程读取用户全局 `config.json`，不得以 Host 临时 provider/runtime 投影作为配置源，也不得注入当前远程 workspace。全局配置持久化归统一配置 editor。
+- 桌面设置页与 Web/内置管理控制台共享用户级 `config.json` 作为唯一模型配置事实源。桌面设置页的新增、编辑、删除、启停和排序均通过 Host 的统一配置编辑边界写入该文件；`v2/provider_config.json` 只作为 Registry 的兼容物化投影，不再作为桌面编辑事实源。
 
 ```text
 设置 → 平台命令 → Main 管理窗口/进程 → CLI admin → config editor → 全局 config.json

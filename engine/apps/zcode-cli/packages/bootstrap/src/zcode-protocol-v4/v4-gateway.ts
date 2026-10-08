@@ -1224,9 +1224,9 @@ export class ConversationV4Gateway {
         : null;
     const existing = this.indexPublishers.get(workspaceId);
     if (existing) {
-      // claim 不能绑定到首次构造：空种子一旦进 Map 就永久挡住重试。
-      // 重读只补缺失项，避免冷存储默认态覆盖已有 live projection。
-      if (refreshed && existing.mergeMissingStoredSummaries(refreshed)) {
+      // 外部 Admin 可能已直接更新 Session store；重读时同步已有摘要的标题，
+      // 但不改变 live projection 的其他字段语义。
+      if (refreshed && existing.refreshStoredSummaries(refreshed)) {
         this.flushIndex(workspaceId);
       }
       return existing;

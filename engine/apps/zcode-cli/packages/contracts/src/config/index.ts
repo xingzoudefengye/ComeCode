@@ -11,6 +11,7 @@ import type { PluginConfig, PluginOptionValues } from "../plugins/index.js";
 
 export const ConfigKey = {
   ModelStreamIdleTimeout: "modelStream.idleTimeoutMs",
+  CompactResumeInputTokenThreshold: "compact.resumeInputTokenThreshold",
 
   // Permission
   PermissionMode: "permission.mode",
@@ -86,7 +87,7 @@ export type ConfigKey = (typeof ConfigKey)[keyof typeof ConfigKey];
 // Config Value Types
 // ============================================================
 
-export type ConfigValue<K extends ConfigKey> = K extends "modelStream.idleTimeoutMs"
+export type ConfigValue<K extends ConfigKey> = K extends "modelStream.idleTimeoutMs" | "compact.resumeInputTokenThreshold"
   ? number
   : K extends "permission.mode"
     ? CollaborationMode
@@ -204,6 +205,7 @@ export interface SkillCommandOverride {
 
 export interface RuntimeConfig {
   modelStream: ModelStreamConfig;
+  compact?: { resumeInputTokenThreshold?: number };
   permission: {
     mode: CollaborationMode;
     allowedTools: string[];
@@ -263,6 +265,7 @@ export interface RuntimeConfig {
 
 export interface RuntimeConfigPatch {
   modelStream?: Partial<ModelStreamConfig>;
+  compact?: RuntimeConfig["compact"];
   permission?: Partial<RuntimeConfig["permission"]>;
   storage?: Partial<RuntimeConfig["storage"]>;
   network?: Partial<RuntimeConfig["network"]>;

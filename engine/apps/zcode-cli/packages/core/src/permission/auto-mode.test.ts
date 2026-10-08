@@ -34,6 +34,55 @@ test("auto mode approves ExitPlanMode without asking", () => {
   assert.equal(decision.ruleId, "mode.auto.plan");
 });
 
+test("auto mode still asks for tools marked alwaysAsk", () => {
+  const decision = service.checkPermission(
+    {
+      input: { command: "git push" },
+      mode: "auto",
+      riskLevel: "high",
+      toolName: "Bash",
+    },
+    { alwaysAsk: true },
+  );
+
+  assert.equal(decision.decision, "ask");
+  assert.equal(decision.ruleId, "tool.alwaysAsk");
+});
+
+test("auto mode still denies explicitly disallowed tools", () => {
+  const autoService = new PermissionService({
+    allowedTools: new Set(),
+    disallowedTools: new Set(["Bash"]),
+    autoApproveHighRisk: false,
+    allowMediumRiskInAutoMode: false,
+  });
+  const decision = autoService.checkPermission({
+    input: { command: "rm -rf ./dist" },
+    mode: "auto",
+    riskLevel: "high",
+    toolName: "Bash",
+  });
+
+  assert.equal(decision.decision, "deny");
+  assert.equal(decision.ruleId, "rule.disallowedTools");
+});
+
+test("auto mode still denies project deny rules", () => {
+  const decision = service.checkPermission(
+    {
+      input: { command: "rm -rf ./dist" },
+      mode: "auto",
+      riskLevel: "high",
+      toolName: "Bash",
+    },
+    undefined,
+    { version: 1, deny: [{ toolName: "Bash" }] },
+  );
+
+  assert.equal(decision.decision, "deny");
+  assert.equal(decision.ruleId, "rule.project.deny");
+});
+
 test("yolo still asks before exiting plan mode", () => {
   const decision = service.checkPermission(
     {
