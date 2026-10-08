@@ -12,6 +12,7 @@ import { estimateTokens } from "../packages/core/src/context/utils.ts";
 import { reloadMemorySnapshot } from "../packages/core/src/runtime/methods/context.ts";
 import { rebuildContextPrefix } from "../packages/core/src/runtime/methods/context-refresh.ts";
 import { MessageHistoryImpl } from "../packages/core/src/agent/message-history.ts";
+import { FileSystemPortError } from "../packages/contracts/dist/interfaces/file-system.port.js";
 
 const snapshot = (file, body) => `## .ai/${file}\n\n${body}`;
 
@@ -71,17 +72,22 @@ test("本地投影近期优先、重复去重、超大条目只留来源且不�
 test("刷新直接替换最新快照，不追加更新消息，冷初始化不复用旧记忆", async () => {
   let fileContent = "# 约束\n\n- 原来约束";
   const envInfo = { cwd: ".", platform: "test", shell: "test", osVersion: "test" };
+  const skipped = [];
   const runtime = {
     loadProjectMemoryRoot: async () => "/fixture/.ai",
     loadUserMemoryRoot: async () => undefined,
     fileSystemPort: {
       readTextFile: async ({ path }) => {
-        if (!path.endsWith("project.md")) throw new Error("missing");
+        // 真实端口用 not_found 表示文件缺失，缺失的记忆文件应被静默跳过。
+        if (!path.endsWith("project.md")) {
+          throw new FileSystemPortError({ code: "not_found", message: "missing", path });
+        }
         return { content: fileContent, sizeBytes: fileContent.length };
       },
     },
     readFileState: new Map(),
     now: () => new Date(),
+    logMemorySkipped: (_trace, reason) => skipped.push(reason),
     contextInitialized: true,
     contextSourceSnapshot: { envInfo },
     contextBuilder: createContextBuilder({ envInfo }),
@@ -126,6 +132,7 @@ test("刷新直接替换最新快照，不追加更新消息，冷初始化不�
       .some((entry) => String(entry.message?.content).includes("更新后约束")),
     false,
   );
+  assert.deepEqual(skipped, [], "缺失的记忆文件只跳过，不记为读取失败");
 });
 
 test("缺失记忆和无法容纳包装的预算不生成半段指令", () => {
