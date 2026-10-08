@@ -169,16 +169,44 @@ comecode
 
 ### 项目记忆
 
-ComeCode 会自动学习和记住项目信息，存储在 `.ai/` 目录：
+ComeCode 会自动学习和记住项目信息，存储在项目根目录的 `.ai/` 下：
 
-- `.ai/memories/` - 项目知识和上下文
-- `.ai/AGENTS.md` - 项目特定的 Agent 规则
+- `.ai/project.md` - 项目目标、技术栈、目录约定和团队约束
+- `.ai/decisions.md` - 已确认的架构、协议、兼容性与取舍，每条注明日期
+- `.ai/tasks.md` - 跨会话仍未完成的任务
+- `.ai/bugs.md` - 仍存在的问题、复现条件与规避方案
+- `.ai/memory.md` - 不适合归入以上分类、但后续会话仍有价值的信息
+- `.ai/.local/` - 记忆整理的内部文件，不提交（`memory init` 会自动加入 `.gitignore`）
 
-建议将 `.ai/` 目录提交到 git，与团队共享。
+运行 `comecode memory init` 补齐缺失的模板文件（不覆盖已有内容），用 `comecode memory check` 检查文件与容量预算。建议将 `.ai/` 目录提交到 git，与团队共享。
 
 ### 自定义 Agent 规则
 
-创建 `.comecode/AGENTS.md` 或 `CLAUDE.md`:
+规则文件分两层，会同时注入，项目层在后：
+
+| 位置 | 生效范围 | 文件名 |
+| --- | --- | --- |
+| `~/.comecode/` | 所有项目（全局指令） | `AGENTS.md` 或 `CLAUDE.md` |
+| 项目根目录 | 当前项目 | `AGENTS.md`、`CLAUDE.md` 或 `.comecode/AGENTS.md` |
+
+全局指令设置一次、所有项目通用，适合放固定的回复语言和工作方式：
+
+```bash
+# Windows PowerShell
+notepad $env:USERPROFILE\.comecode\AGENTS.md
+
+# Linux / macOS
+mkdir -p ~/.comecode && $EDITOR ~/.comecode/AGENTS.md
+```
+
+```markdown
+# 全局指令
+
+请始终使用简体中文回复。
+处理代码需求时先复述需求，列出简短 checklist，只做最小改动。
+```
+
+项目规则写在项目根目录，随仓库提交、与团队共享：
 
 ```markdown
 # 项目规则
@@ -188,12 +216,16 @@ ComeCode 会自动学习和记住项目信息，存储在 `.ai/` 目录：
 - UI 组件使用 Tailwind CSS
 ```
 
+没有内置命令创建全局文件，需要手动新建。规则在会话启动时读取，修改后要重开会话才生效；单个规则文件上限 100KB。
+
 ### 权限模式
 
 ```bash
 # 查看当前权限模式
-/config
+/mode
 
+# 切换模式
+/mode plan
 # 可选模式：
 # - plan: 需要审批执行计划
 # - build: 自动执行，谨慎修改
