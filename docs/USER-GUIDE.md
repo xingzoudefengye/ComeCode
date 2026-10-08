@@ -33,10 +33,18 @@ comecode config setup
 也可以启动本地管理页：
 
 ```bash
+comecode admin --no-browser
+```
+
+`comecode admin` 会在本进程启动管理服务并打印地址，`--no-browser` 表示不自动打开浏览器；服务默认只监听 `127.0.0.1`，端口用 `--port <port>` 指定（`--web-port` 是兼容别名）。管理页负责 Provider/模型配置与会话列表；无图形环境时按终端打印的地址访问。
+
+需要网页对话时用 `--web`，它启动本地网页对话工作台并复用同一个 Agent 与会话存储：
+
+```bash
 comecode --web
 ```
 
-`--web` 会在同一 CLI 进程中启动本地管理服务并尝试打开浏览器；地址和一次性访问 token 会打印到终端。服务默认只监听 `127.0.0.1`。无图形环境可使用 `comecode admin --no-browser`，通过终端显示的地址访问。端口可用 `--web-port <port>` 指定，`--no-web` 显式关闭后台。
+地址会打印到终端，默认监听 `127.0.0.1` 并自动打开浏览器；`--port <port>` 指定端口，`--no-browser` 不打开浏览器。用 `--host` 监听非本机地址时会默认生成访问令牌并写入地址，可用 `--no-token` 显式关闭（此时同网段任何人可访问，请自行确认网络环境）。
 
 在管理页的 Provider/模型页面中添加或编辑 Provider，填写协议（`openai-chat`、`openai-responses` 或 `anthropic`）、Base URL、模型 ID 和 API Key，保存后选择默认模型。页面显示的密钥会脱敏；不要把真实密钥提交到 Git。也可以使用 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY` 等标准环境变量，或查看脱敏配置：
 
@@ -79,15 +87,16 @@ comecode admin --no-browser
 comecode memory init
 ```
 
-更多参数以 `comecode --help` 为准。当前管理页主要用于 Provider/模型配置；不要把未交付的会话、记忆或完整 Web 工作台功能当作已上线能力。
+更多参数以 `comecode --help` 为准。`comecode --web` 提供网页对话工作台，`comecode admin` 提供 Provider/模型配置与会话列表，两者与 CLI、桌面读写同一份 `~/.comecode` 配置和会话存储；桌面端与插件能力以 PLAN 的交付进度为准。
 
 ### CLI 参数
 
 ```bash
 comecode --help              # 查看完整帮助
-comecode --web               # 启动并打开浏览器
-comecode --no-web            # 不启动 Web 服务
-comecode --web-port 8080     # 指定端口
+comecode --web               # 启动网页对话工作台并打开浏览器
+comecode admin               # 启动管理页（Provider/模型配置与会话列表）
+comecode --port 8080         # --web / admin 指定端口（--web-port 为兼容别名）
+comecode --host 0.0.0.0      # --web 监听非本机地址，默认生成访问令牌
 comecode --resume            # 恢复上次会话
 comecode config check        # 检查配置
 comecode config setup        # 配置向导

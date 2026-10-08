@@ -61,6 +61,14 @@ jobs:
         working-directory: engine
         run: pnpm --filter "@zcode/cli..." build
 
+      # `comecode --web` 由 @zcode/server 托管 @zcode/web 静态产物，两者必须随包分发。
+      # 仍然使用定向 filter：mock-cdn 下载属于桌面端构建，不能被 `pnpm -r build` 带进来。
+      - name: Build web chat runtime
+        working-directory: engine
+        run: |
+          pnpm --filter "@zcode/server..." build
+          pnpm --filter @zcode/web build
+
       - name: Build shared runtime package
         working-directory: engine
         run: pnpm --filter @zcode/shared build

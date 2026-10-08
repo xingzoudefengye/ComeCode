@@ -21,6 +21,7 @@ export function isTuiInvocation(argv: readonly string[]): boolean {
   if (
     parsed.values.help === true ||
     parsed.values.version === true ||
+    parsed.values.web === true ||
     parsed.values.import !== undefined ||
     typeof parsed.values.prompt === "string" ||
     typeof parsed.values.target === "string"

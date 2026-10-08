@@ -250,7 +250,7 @@ T5.5 CLI 发布基础 + M6 功能验收 → T6.4 桌面打包 → T5.8 分发扩
 - 依赖：T1.1
 - 做法：
   - TUI 启动时在同一进程启动 server，监听 `127.0.0.1`，端口默认 `4545`，被占用时自动 +1；启动时生成随机 token，终端打印 `http://127.0.0.1:4545/?token=...`。
-  - 参数：`--web`（自动打开浏览器）、`--no-web`、`--web-port`；无头 `--prompt` 模式默认不启动。
+  - 参数：`--web`（自动打开浏览器）、`--no-web`、`--web-port`；无头 `--prompt` 模式默认不启动。**2026-10-09 调整**：TUI 不再在同一进程内嵌管理页，`--no-web` 移除，端口参数统一为 `--port`（`--web-port` 保留为兼容别名）；管理页入口仍是 `comecode admin`，`--web` 改为启动网页对话工作台，见 T4.11。
   - 多个实例各自使用本地端口；先满足单实例管理，不规划额外 Hub、实例注册或 token 协调系统。
   - 所有 API 校验 token；拒绝非本机 Origin，防止 CSRF。
 - 验收：启动后浏览器能访问；不带 token 返回 401；集成测试覆盖。
@@ -301,6 +301,16 @@ T5.5 CLI 发布基础 + M6 功能验收 → T6.4 桌面打包 → T5.8 分发扩
 - 配置/日志：凭据不回传明文，修改前备份并原子写入；原始模型请求/响应默认不全量保存，显式调试也要脱敏、限量和可清理。后台仅管理，不增加另一套对话执行入口；权限批准仍由当前会话控制端处理。
 - 契约：先盘点现有 admin 接口与 ZCode protocol，复用已有 schema/事件；不要为每个前端另建状态库，也不为了页面重复建设通用 RPC 或 Hub。
 - 验收：本地 mock 覆盖无 token、恶意 Origin/Host、跨路径读写、配置并发修改与敏感字段脱敏；桌面/CLI 同源状态一致。
+
+### T4.11 网页对话工作台（`comecode --web`，2026-10-09 已实现）
+
+- 目标：不装桌面端也能用浏览器与同一 Agent 对话，且不新增第二套会话、配置或记忆。
+- 做法：CLI 校验参数后启动 `@zcode/server` 的 HTTP/WebSocket 入口，静态资源用 `@zcode/web` 构建产物，Agent 由 CLI 自身以 `app-server --stdio` 子进程承担；`ZCODE_SERVER_WORKSPACE`、`ZCODE_AGENT_SERVER_COMMAND` 等经环境变量注入，子进程 cwd 固定为用户工作区。
+- 参数：`--port`（`--web-port` 兼容别名；未指定时自动挑空闲端口）、`--host`、`--open`/`--no-browser`、`--token`/`--no-token`、`--workspace`；与位置参数、`--prompt`、`--target`、`--import` 同时使用时直接报错。
+- 安全与生命周期：监听非本机地址默认生成访问令牌；子进程退出走 SIGTERM → 1.5 秒 → SIGKILL；解析不到运行时资源时打印构建指引并返回失败。
+- 分发：release 工作流新增 `@zcode/server...` 与 `@zcode/web` 构建，打包脚本把 `web/`、`server/` 及 server 侧 node_modules 收进安装包，并对解包产物真实启动一次 `--web` 冒烟 `/api/server-info`。
+- 验收：`apps/zcode-cli/test/web-command.test.mjs` 5 项、CLI typecheck、CLI 全量回归 468/468 通过（2026-10-09）；monorepo 布局下实启 `--web` 后 `/` 与 `/api/server-info` 均返回 200。
+- 已知边界：网页 UI 是上游产物，仍含 Z.ai 登录、分享、插件市场 CDN 等未去耦入口与文案（ComeCode 默认不触发，仅用户主动点击才会请求）；视觉与实机交互验收待用户确认。
 
 ---
 

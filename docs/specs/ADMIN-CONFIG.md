@@ -4,7 +4,16 @@
 
 - 仅实现三种执行协议的配置管理：OpenAI Chat Completions、OpenAI Responses、Anthropic Messages。不新增 Gemini 原生执行；旧 Gemini 配置保持可识别且不允许执行。
 - 网页提供供应商/模型增删改、默认选择、协议/地址/凭据继承、显示名/窗口/输出上限/工具及视觉能力。会话、记忆、日志按实际需要扩展；不建设多实例 Hub。
-- 使用 `comecode admin` 独立打开配置管理（不启动模型）；TUI 同进程可用 `--web` 启用并自动打开浏览器，`--no-web` 显式禁用，`--web-port` 指定端口。后台默认不启动，避免新增未请求的监听端口；后续再决定默认启用策略。无头/协议/help 不启动后台。
+- 使用 `comecode admin` 独立打开配置管理（不启动模型），端口用 `--port`（`--web-port` 为兼容别名）；TUI 不再同进程内嵌管理页，`--no-web` 已移除。网页对话工作台是另一条入口，由 `comecode --web` 提供（见下节），本文档的管理页只在显式执行 `admin` 时监听，不新增未请求的端口。无头/协议/help 不启动后台。
+
+## 网页对话工作台 `--web`（2026-10-09）
+
+- `comecode --web` 启动网页对话工作台：CLI 自身以 `app-server --stdio` 子进程承担 Agent，`@zcode/server` 提供 HTTP/WebSocket，`@zcode/web` 提供静态产物；管理页仍只由 `comecode admin` 提供。三者与 CLI、桌面读写同一份 `~/.comecode` 配置与会话存储，不新建第二套会话、记忆或状态。
+- 参数：`--port`（`--web-port` 兼容别名；0 或未指定时自动挑空闲端口）、`--host`（默认 `127.0.0.1`）、`--open`/`--no-browser`、`--token`/`--no-token`、`--workspace`。`--web` 不与位置参数、`--prompt`、`--target`、`--import` 同时使用，冲突时直接报错退出。
+- 鉴权：监听本机地址默认不带令牌；`--host` 指向非本机地址时默认生成随机令牌并写进打印的地址，`--no-token` 显式关闭。启动子进程时显式写入 `ZCODE_SERVER_AUTH_TOKEN`（关闭时为空串），避免继承的旧值意外开启后端鉴权。
+- 生命周期：网页服务是子进程，退出时先 SIGTERM、1.5 秒内未退出再 SIGKILL；Ctrl+C/SIGTERM 转发为子进程退出。stdout/stderr 直接转发，不缓冲日志。
+- 资源解析：优先安装包布局 `<root>/{web,server,agent}`，其次 monorepo `packages/{web/dist,server/dist}` 与 CLI `dist/zcode.cjs`；缺少任一项时打印构建指引并返回失败，不启动半成品服务。
+- 验收：`apps/zcode-cli/test/web-command.test.mjs` 覆盖 TUI 判定、参数与帮助文案、打包/回落布局解析、缺资源失败；发行打包脚本对解包产物真实启动一次 `--web` 并请求 `/api/server-info` 冒烟。
 
 ## 所有者与边界
 

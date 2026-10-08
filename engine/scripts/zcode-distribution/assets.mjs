@@ -153,7 +153,7 @@ async function copyRuntimePackageTree({ packageName, packageRoot, requireFrom, s
   }
 }
 
-export async function copyRuntimeNodeModules(packageRoot) {
+export async function copyServerRuntimeNodeModules(packageRoot) {
   const requireFromServer = createRequire(resolve(root, "packages", "server", "package.json"));
   const seen = new Set();
   for (const packageName of runtimePackageNames) {
@@ -164,6 +164,10 @@ export async function copyRuntimeNodeModules(packageRoot) {
       seen,
     });
   }
+}
+
+export async function copyRuntimeNodeModules(packageRoot) {
+  await copyServerRuntimeNodeModules(packageRoot);
   // CLI 的浏览器运行时同样是外部依赖，不能依赖开发仓库的 hoisted node_modules。
   await copyRuntimePackageTree({
     packageName: "playwright-core",
@@ -173,11 +177,25 @@ export async function copyRuntimeNodeModules(packageRoot) {
   });
 }
 
-export async function patchNodePtyPrebuilds(packageRoot) {
+/**
+ * `@lydell/node-pty-*` 只提供 darwin/linux 预编译产物，Windows 依赖 node-pty 包内自带的 win32 prebuild。
+ * 传入 target 时只复制该平台，避免每个安装包携带其余三个平台的二进制。
+ */
+const lydellPackageForTarget = {
+  "darwin-arm64": "@lydell/node-pty-darwin-arm64",
+  "darwin-x64": "@lydell/node-pty-darwin-x64",
+  "linux-arm64": "@lydell/node-pty-linux-arm64",
+  "linux-x64": "@lydell/node-pty-linux-x64",
+};
+
+export async function patchNodePtyPrebuilds(packageRoot, { target } = {}) {
   const requireFromServer = createRequire(resolve(root, "packages", "server", "package.json"));
   const nodePtyPrebuildRoot = resolve(packageRoot, "node_modules", "node-pty", "prebuilds");
+  const packages = target
+    ? [lydellPackageForTarget[target]].filter(Boolean)
+    : lydellNodePtyPackages;
 
-  for (const packageName of lydellNodePtyPackages) {
+  for (const packageName of packages) {
     let packageJsonPath;
     try {
       packageJsonPath = await resolvePackageJsonPath(requireFromServer, packageName);

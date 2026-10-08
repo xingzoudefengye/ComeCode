@@ -520,6 +520,49 @@ export const run = async (ctx: RunContext, deps: RunDependencies = {}): Promise<
     },
   };
 
+  if (parsed.values.web === true) {
+    if (parsed.positionals.length > 0) {
+      ctx.stderr.write("--web 不能与命令位置参数同时使用。\n");
+      return 1;
+    }
+    if (
+      typeof parsed.values.prompt === "string" ||
+      parsed.values.target !== undefined ||
+      parsed.values.import !== undefined
+    ) {
+      ctx.stderr.write("--web 不能与 --prompt、--target 或 --import 同时使用。\n");
+      return 1;
+    }
+    const rawPort = parsed.values.port ?? parsed.values["web-port"];
+    let webPort: number | undefined;
+    if (rawPort !== undefined) {
+      webPort = Number(rawPort);
+      if (!/^\d+$/u.test(rawPort) || webPort > 65535) {
+        ctx.stderr.write("--port 必须为 0–65535 的整数。\n");
+        return 1;
+      }
+    }
+    const { runWebCommand } = await import("./web-command.js");
+    return await runWebCommand(ctx, commandDeps, {
+      host: parsed.values.host,
+      open:
+        parsed.values.open === true
+          ? true
+          : parsed.values["no-open"] === true || parsed.values["no-browser"] === true
+            ? false
+            : undefined,
+      port: webPort,
+      token: parsed.values.token,
+      tokenEnabled:
+        parsed.values["no-token"] === true
+          ? false
+          : parsed.values.token !== undefined
+            ? true
+            : undefined,
+      workspace: parsed.values.workspace,
+    });
+  }
+
   const importSource = parsed.values.import as string | undefined;
   if (importSource !== undefined) {
     if (parsed.positionals.length > 0) {

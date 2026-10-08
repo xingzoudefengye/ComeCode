@@ -15,9 +15,17 @@ export const parseGlobalArgs = (argv: string[]) =>
       "output-format": {
         type: "string",
       },
+      // --web 启动网页对话工作台（管理页改由 `comecode admin` 提供）。
+      // --web-port 保留为 --port 的兼容别名。
       web: { type: "boolean" },
-      "no-web": { type: "boolean" },
       "web-port": { type: "string" },
+      host: { type: "string" },
+      port: { type: "string" },
+      token: { type: "string" },
+      "no-token": { type: "boolean" },
+      open: { type: "boolean" },
+      "no-open": { type: "boolean" },
+      workspace: { type: "string" },
       "no-color": {
         type: "boolean",
       },

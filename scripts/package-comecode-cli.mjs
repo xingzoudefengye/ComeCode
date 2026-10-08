@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { execFile as execFileCallback } from "node:child_process";
-import { access, chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { execFile as execFileCallback, spawn as spawnChild } from "node:child_process";
+import { access, chmod, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -22,6 +22,10 @@ import {
   seaOfficialPluginAssetPrefix,
 } from "../engine/apps/zcode-cli/packages/cli/scripts/sea-official-plugin-assets.mjs";
 import { hostTarget } from "../engine/apps/zcode-cli/packages/cli/scripts/sea-targets.mjs";
+import {
+  copyServerRuntimeNodeModules,
+  patchNodePtyPrebuilds,
+} from "../engine/scripts/zcode-distribution/assets.mjs";
 
 const execFile = promisify(execFileCallback);
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -102,6 +106,26 @@ async function addBundledDependencies(packageDirectory) {
   await writeFile(packageFile, JSON.stringify(packageJson, null, 2) + "\n");
 }
 
+const isSourceMap = (path) => path.endsWith(".map");
+const isTypeDeclaration = (path) => /\.d\.ts(?:\.map)?$/u.test(path);
+
+/**
+ * 复制网页与 server 构建产物。两者都是运行 `comecode --web` 的必需品：
+ * web 是 Vite 静态站点（服务在源根，不能挂在子路径），server 是 HTTP/WebSocket 入口。
+ * source map 与 .d.ts 只服务构建期，`hidden` 模式也不被 JS 引用，随包只会放大体积。
+ */
+async function copyRuntimeDirectory(source, destination, exclude) {
+  const present = await access(source).then(
+    () => true,
+    () => false,
+  );
+  if (!present) {
+    throw new Error(`Missing build output: ${source}. Build @zcode/web and @zcode/server before packaging.`);
+  }
+  await mkdir(destination, { recursive: true });
+  await cp(source, destination, { force: true, recursive: true, filter: (from) => !exclude(from) });
+}
+
 async function copy(source, destination, mode) {
   await mkdir(dirname(destination), { recursive: true });
   await copyFile(source, destination);
@@ -126,6 +150,58 @@ async function copyAssets(result, prefix, destination) {
     )
       continue;
     await copy(source, join(destination, path));
+  }
+}
+
+/**
+ * 真正从解包产物启动一次网页对话服务，确认静态站点、server 入口与包内 node_modules 都可用。
+ * 只等 `/api/server-info`；该阶段不会拉起 Agent 子进程，因此不依赖用户模型凭据。
+ */
+async function smokeWebServer(unpacked, env) {
+  const child = spawnChild(
+    process.execPath,
+    [join(unpacked, "comecode.cjs"), "--web", "--no-browser"],
+    { cwd: unpacked, env, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  let stderr = "";
+  const deadline = Date.now() + 60000;
+  const url = await new Promise((resolveUrl, rejectUrl) => {
+    const timer = setTimeout(() => rejectUrl(new Error(`--web did not report a URL:\n${stderr}`)), 60000);
+    const onStderr = (chunk) => {
+      stderr += chunk.toString();
+      const match = /本地: (http:\/\/\S+)/u.exec(stderr);
+      if (match) {
+        clearTimeout(timer);
+        resolveUrl(match[1]);
+      }
+    };
+    child.stderr.on("data", onStderr);
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      rejectUrl(error);
+    });
+    child.once("exit", (code) => {
+      clearTimeout(timer);
+      rejectUrl(new Error(`--web exited before serving (code ${code}):\n${stderr}`));
+    });
+  });
+
+  try {
+    // 终端先打印地址、server 随后才完成监听，这里必须重试而不是只请求一次。
+    for (;;) {
+      try {
+        const response = await fetch(new URL("/api/server-info", url));
+        if (!response.ok) throw new Error(`/api/server-info responded ${response.status}`);
+        const info = await response.json();
+        if (!info || typeof info !== "object") throw new Error("server-info payload is not an object");
+        return;
+      } catch (error) {
+        if (Date.now() > deadline) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+  } finally {
+    child.kill("SIGTERM");
   }
 }
 
@@ -194,10 +270,19 @@ try {
       join(stage, plugin.rootPath),
     );
   }
+  await copyRuntimeDirectory(join(engine, "packages/web/dist"), join(stage, "web"), isSourceMap);
+  await copyRuntimeDirectory(
+    join(engine, "packages/server/dist"),
+    join(stage, "server"),
+    (path) => isSourceMap(path) || isTypeDeclaration(path),
+  );
+  // tsup 把 server 的第三方依赖外置，脱离仓库后必须能在包内 node_modules 解析到。
+  await copyServerRuntimeNodeModules(stage);
+  await patchNodePtyPrebuilds(stage, { target });
   await addBundledDependencies(stage);
   await writeFile(
     join(stage, "DISTRIBUTION.txt"),
-    `ComeCode ${version}, ${target}\nRequires external Node.js 24.14.0 or newer Node 24.\nRun: node comecode.cjs --help\nKeep node_modules, provider and packages alongside comecode.cjs.\nThis is not a standalone executable. Native dependencies are OS/CPU specific.\nLinux requires glibc; browser binaries, signing and notarization are not included.\n`,
+    `ComeCode ${version}, ${target}\nRequires external Node.js 24.14.0 or newer Node 24.\nRun: node comecode.cjs --help\nKeep node_modules, provider, packages, server and web alongside comecode.cjs.\nThis is not a standalone executable. Native dependencies are OS/CPU specific.\nLinux requires glibc; browser binaries, signing and notarization are not included.\n`,
   );
   await mkdir(output, { recursive: true });
   await npmPack(stage);
@@ -239,6 +324,11 @@ try {
   await mkdir(extracted);
   await execFile(tar, ["-xzf", archive, "-C", extracted]);
   const unpacked = join(extracted, name);
+  for (const required of ["web/index.html", "server/entry-http.js"]) {
+    await access(join(unpacked, required)).catch(() => {
+      throw new Error(`Packaged distribution is missing ${required}`);
+    });
+  }
   const env = {
     ...process.env,
     NODE_PATH: "",
@@ -264,6 +354,7 @@ try {
     ],
     options,
   );
+  await smokeWebServer(unpacked, env);
   const digest = createHash("sha256")
     .update(await readFile(archive))
     .digest("hex");
