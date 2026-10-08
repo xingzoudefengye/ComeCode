@@ -91,7 +91,7 @@ test("一回合多个 step 的思考只占一行，工具行仍然隐藏", async
   const lines = view.captureCharFrame().split("\n");
   assert.equal(countThoughtRows(lines), 1, lines.join("\n"));
   assert.equal(row(lines, "+ Thought") - row(lines, "先做两处修复"), 2);
-  assert.equal(row(lines, "现在做决定性检查") - row(lines, "+ Thought"), 1);
+  assert.equal(row(lines, "现在做决定性检查") - row(lines, "+ Thought"), 2);
   // 折叠时不展开任何一段思考正文，也不泄漏被隐藏的工具细节。
   assert.doesNotMatch(lines.join("\n"), /第 0 段思考|hidden-detail|hidden-output/u);
   assert.equal(JSON.stringify(messages), before);
@@ -126,6 +126,26 @@ test("可见工具打断思考分组，正文分隔的两组思考各自成行",
   assert.equal(countThoughtRows(lines), 4, lines.join("\n"));
   assert.ok(row(lines, "active.ts") > row(lines, "+ Thought"));
   await view.close();
+});
+
+test("正文后的连续纯思考消息合并为一个 Thought 标题", async (t) => {
+  setActiveTuiThemeMode("dark");
+  const view = await render(
+    t,
+    React.createElement(ContentPane, {
+      focused: false,
+      messages: [
+        { role: "agent", content: "前一段正文" },
+        { role: "agent", content: "", parts: [thought("第一段思考"), completedTool("hidden-a")] },
+        { role: "agent", content: "", parts: [thought("第二段思考"), completedTool("hidden-b")] },
+        { role: "agent", content: "后一段正文" },
+      ],
+    }),
+  );
+  const lines = view.captureCharFrame().split("\n");
+  assert.equal(countThoughtRows(lines), 1, lines.join("\n"));
+  assert.equal(row(lines, "+ Thought") - row(lines, "前一段正文"), 2);
+  assert.equal(row(lines, "后一段正文") - row(lines, "+ Thought"), 2);
 });
 
 test("展开合并后的思考行显示该组全部思考正文", async (t) => {

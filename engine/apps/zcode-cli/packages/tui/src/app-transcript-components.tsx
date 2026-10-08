@@ -119,6 +119,10 @@ export function ContentPane({
               visibleMessages[index - 1],
               workflowCardsByToolCallId,
             ),
+            previousHadThought: isThoughtOnlyMessage(
+              visibleMessages[index - 1],
+              workflowCardsByToolCallId,
+            ),
             workflowCardsByToolCallId,
           }),
         )),
@@ -191,10 +195,10 @@ function groupThoughtRuns(
 }
 
 function isThoughtOnlyMessage(
-  message: Message,
+  message: Message | undefined,
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>,
 ): boolean {
-  if (message.role !== "agent") return false;
+  if (!message || message.role !== "agent") return false;
   if (stripInternalThinkingTags(message.content).length > 0) return false;
   const parts = message.parts ?? [];
   if (parts.length === 0) return false;
@@ -243,6 +247,7 @@ export function MessageRow({
   now,
   previousRole,
   previousHadTool,
+  previousHadThought,
   terminalWidth = 100,
   workflowCardsByToolCallId,
 }: {
@@ -253,6 +258,7 @@ export function MessageRow({
   now?: number;
   previousRole?: Message["role"];
   previousHadTool?: boolean;
+  previousHadThought?: boolean;
   terminalWidth?: number;
   workflowCardsByToolCallId?: ReadonlyMap<string, TuiWorkflowCard>;
 }): React.ReactElement {
@@ -282,6 +288,7 @@ export function MessageRow({
             (isUserMessage ||
               previousRole === "user" ||
               previousHadTool ||
+              previousHadThought ||
               parts.some((part) => part.type === "tool")))
             ? 1
             : 0,
