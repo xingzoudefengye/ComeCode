@@ -12,6 +12,7 @@ import {
   completeModelCommand,
   completeSlashCommand,
   createCtrlCExitGuard,
+  ESC_DRAFT_CLEARED_STATUS,
   escapeActionFor,
   type CtrlCExitGuard,
   isModeSwitchKey,
@@ -282,9 +283,11 @@ export function useTuiKeyboardControls({
             return;
           }
           if (busy) {
-            if (escapeActionFor({ busy, draftValue }) === "guide") {
-              // 运行中有草稿时，Esc 沿用 Claude Code/Codex 的快捷交互，立即引导当前任务。
-              void submitValue(draftValue);
+            // Bug 根因：之前 Esc 在有草稿时会立即发送引导消息，导致用户想中断却误触发送，任务反而继续跑。
+            // 修复：先清空草稿，第二次 Esc 才中断。避免误操作，同时保留 Ctrl+U 的显式清空。
+            if (escapeActionFor({ busy, draftValue }) === "clear") {
+              setDraftValue("");
+              setStatus(ESC_DRAFT_CLEARED_STATUS);
               return;
             }
             abortControllerRef.current?.abort();

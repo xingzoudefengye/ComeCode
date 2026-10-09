@@ -6,8 +6,8 @@ import { queuedInputsForDisplay } from "../packages/tui/src/app-queued-inputs.ts
 import { resolveAppFollowupMode } from "../../../packages/ui/src/v4/composer/followupModeSettings.ts";
 
 // 纯函数测试覆盖 Esc 的三种状态，不依赖 OpenTUI 的终端事件注入。
-test("运行中 Esc 有草稿引导、空草稿中止，空闲不处理", () => {
-  assert.equal(escapeActionFor({ busy: true, draftValue: "继续处理" }), "guide");
+test("运行中 Esc 有草稿先清空、空草稿中止，空闲不处理", () => {
+  assert.equal(escapeActionFor({ busy: true, draftValue: "继续处理" }), "clear");
   assert.equal(escapeActionFor({ busy: true, draftValue: "   " }), "abort");
   assert.equal(escapeActionFor({ busy: false, draftValue: "继续处理" }), "noop");
 });

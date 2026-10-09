@@ -97,12 +97,14 @@ export function workflowExpansionActionFor({
   return undefined;
 }
 
-export function escapeActionFor({ busy, draftValue }: { busy: boolean; draftValue: string }): "guide" | "abort" | "noop" {
+export function escapeActionFor({ busy, draftValue }: { busy: boolean; draftValue: string }): "clear" | "abort" | "noop" {
   if (!busy) return "noop";
-  return draftValue.trim() ? "guide" : "abort";
+  // 运行中有草稿时先清空，避免用户想中断却把草稿当成引导消息发送出去。
+  return draftValue.trim() ? "clear" : "abort";
 }
 
 export const PROMPT_DRAFT_CLEARED_STATUS = "Ready.";
+export const ESC_DRAFT_CLEARED_STATUS = "Draft cleared. Press Esc again to pause.";
 export const CTRL_C_EXIT_PROMPT = "Press Ctrl-C again to exit.";
 export const CTRL_C_EXIT_CONFIRMATION_WINDOW_MS = 2_000;
 
