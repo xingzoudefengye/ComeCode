@@ -227,6 +227,11 @@ function findPreviousVisiblePart(
   return undefined;
 }
 
+// 对齐 Claude Code CLI：用户消息只在首段前加 "> "，后续段落用等宽空格缩进，
+// 不再逐段重复提示符（多段输入时每段一个 ">" 会被误读成多条独立消息）。
+const USER_MESSAGE_PROMPT = "> ";
+const USER_MESSAGE_CONTINUATION_INDENT = "  ";
+
 function UserMessageView({ content }: { content: string }): React.ReactElement {
   const paragraphs = content.split(/\r?\n\s*\r?\n/u);
   return h(
@@ -239,7 +244,11 @@ function UserMessageView({ content }: { content: string }): React.ReactElement {
           key: `user-paragraph-${index}`,
           style: { flexDirection: "row", marginTop: index > 0 ? 1 : 0, width: "100%" },
         },
-        h("text", { style: { fg: palette.accent, flexShrink: 0 } }, "> "),
+        h(
+          "text",
+          { style: { fg: palette.accent, flexShrink: 0 } },
+          index === 0 ? USER_MESSAGE_PROMPT : USER_MESSAGE_CONTINUATION_INDENT,
+        ),
         h("text", { style: { fg: palette.text, flexGrow: 1 } }, paragraph),
       ),
     ),

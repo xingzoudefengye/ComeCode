@@ -335,8 +335,11 @@ test("用户消息使用引用标记，模型列表保留层级缩进", async (t
     }),
   );
   const userLines = userView.captureCharFrame().split("\n");
+  // 对齐 Claude Code CLI：只有首段带 "> "，后续段落用空格缩进，
+  // 避免多段输入被误读成多条独立消息。
   assert.ok(userLines.some((line) => line.includes("> 第一段")));
-  assert.ok(userLines.some((line) => line.includes("> 第二段")));
+  assert.ok(userLines.some((line) => line.includes("  第二段")));
+  assert.ok(!userLines.some((line) => line.includes("> 第二段")));
 
   const markdown = await render(
     t,
