@@ -15,6 +15,7 @@ import {
   isTurnCancellationError,
   modelContentForToolResult,
   stringifyToolResultOutput,
+  throwIfTurnAborted,
   toRecordInput,
 } from "../helpers/index.js";
 import { persistToolResultMediaAttachments } from "../helpers/tool-result-media-persistence.js";
@@ -232,6 +233,10 @@ export async function executeToolCallsForModelStep(
     pendingExecutionResults = execution.results;
     state.events.push(...execution.events);
   }
+  // Bug 根因：工具执行完成后，runtime 需要经过 190+ 行代码（结果聚合、DB 持久化、checkpoint、事件推送）
+  // 才到下一个 abort 检查点。如果工具跑了几分钟、输出很大，持久化可能再卡几十秒，导致用户按 Esc 后无响应。
+  // 修复：工具执行完成后立即检查 abort，避免进入长耗时的持久化路径。
+  throwIfTurnAborted(state.turnAbortSignal);
   const resultById = new Map<string, ToolExecutionResult>();
   for (const streamed of streamedResultsById.values()) {
     resultById.set(streamed.result.toolCallId, streamed.result);
