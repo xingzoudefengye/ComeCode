@@ -86,6 +86,11 @@ export function ContentPane({
           // 箭头会与 thumb 各自成块，让右侧滚动条看起来像三段拼接；
           // 会话滚动只保留单一 thumb，鼠标滚轮/键盘仍可翻页。
           showArrows: false,
+          // ScrollBar 的 track 由 slider 的 backgroundColor 绘制，
+          // 把它设成正文底色即可隐藏轨道，只留下 thumb 滑块。
+          trackOptions: {
+            backgroundColor: palette.background,
+          },
         },
         viewportOptions: {
           backgroundColor: palette.background,
