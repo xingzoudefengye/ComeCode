@@ -17,7 +17,7 @@ Usage:
 With no command, ${CLI_COMMAND} opens the full-screen TUI.
 
 Commands:
-  app-server Run the ZCode Protocol stdio app server
+  app-server Run the ComeCode Protocol stdio app server
   commands   List custom slash commands (\`commands list\`)
   config     Manage unified Provider config (\`config setup|path|show|check\`)
   doctor     Inspect runtime and packaging assumptions

@@ -17,7 +17,7 @@ export const zhCN: ZCodeCopy = {
 不传 command 时，${CLI_COMMAND} 会打开全屏 TUI。
 
 命令:
-  app-server 运行 ZCode Protocol stdio app server
+  app-server 运行 ComeCode Protocol stdio app server
   commands   列出自定义 slash commands（\`commands list\`）
   config     管理统一 Provider 配置（\`config setup|path|show|check\`）
   doctor     检查运行时和打包假设
