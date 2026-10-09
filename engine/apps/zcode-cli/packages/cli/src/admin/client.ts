@@ -5,7 +5,7 @@ export const ADMIN_SCRIPT = String.raw`
 const fragment = new URLSearchParams(location.hash.slice(1));
 let token = fragment.get('token') || sessionStorage.getItem('comecode-admin-token');
 if (fragment.has('token')) { sessionStorage.setItem('comecode-admin-token', token); history.replaceState(null, '', location.pathname); }
-let snapshot, draft, busy = false, editing = null;
+let snapshot, draft, busy = false, editing = null, pendingNewProviderId = null;
 const $ = id => document.getElementById(id);
 const status = (text, error = false) => { $('status').textContent = text; $('status').className = error ? 'error' : ''; };
 const node = (tag, text, className) => { const element = document.createElement(tag); if (text !== undefined) element.textContent = text; if (className) element.className = className; return element; };
@@ -72,9 +72,40 @@ function findProvider(targetDraft, baseUrl, except) {
   return targetDraft.providers.find(provider => provider !== except && normalizeUrl(provider.baseUrl) === normalizeUrl(baseUrl));
 }
 function nextProviderId(targetDraft) {
-  const ids = new Set(targetDraft.providers.map(provider => provider.id)); let id = 'provider'; let number = 2;
-  while (ids.has(id)) id = 'provider-' + number++;
+  // Provider ID 是内部稳定主键，绝不由名称派生，也不随改名/改地址变化。
+  // 与桌面端 personal-<uuid> 命名规则统一，避免同名供应商共用可读顺序名而互相错认。
+  const ids = new Set(targetDraft.providers.map(provider => provider.id));
+  let id = '';
+  do { id = 'personal-' + randomId(); } while (ids.has(id));
   return id;
+}
+function randomId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, ch => {
+    const rand = Math.random() * 16 | 0;
+    return (ch === 'x' ? rand : (rand & 0x3 | 0x8)).toString(16);
+  });
+}
+function shortProviderId(id) { return typeof id === 'string' && id.length > 10 ? id.slice(-6) : id || ''; }
+function allocateNewProviderId(targetDraft) {
+  // 同一对话框会话（预览测试 → 保存）必须复用同一 Provider ID；
+  // 否则测试连接识别出的 ID 与最终落盘的 ID 不一致，跨端操作就会按旧 ID 找不到配置。
+  if (pendingNewProviderId && !targetDraft.providers.some(provider => provider.id === pendingNewProviderId)) return pendingNewProviderId;
+  pendingNewProviderId = nextProviderId(targetDraft);
+  return pendingNewProviderId;
+}
+function providerNameCounts() {
+  const counts = new Map();
+  for (const provider of draft.providers) {
+    const key = provider.name || provider.id;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+function providerDisplayName(provider, counts) {
+  const base = provider.name || provider.id || '供应商';
+  // 同名供应商追加 id 尾段消歧：名称可重复，但界面上必须能分辨具体是哪一个 Provider。
+  return counts.get(base) > 1 ? base + '（' + shortProviderId(provider.id) + '）' : base;
 }
 function nextProviderName() { return '模型服务'; }
 function inputField(parent, id, title, value, type, placeholder) {
@@ -176,6 +207,7 @@ function selectModelEndpoint() {
 }
 function openModelDialog(entry) {
   editing = entry || null;
+  pendingNewProviderId = null;
   const provider = entry && entry.provider;
   const model = entry && entry.model;
   $('model-dialog-title').textContent = entry ? '编辑模型' : '添加模型';
@@ -197,7 +229,7 @@ function openModelDialog(entry) {
   $('model-more').open = false;
   $('model-dialog').showModal();
 }
-function closeModelDialog() { $('model-key').value = ''; editing = null; $('model-dialog').close(); }
+function closeModelDialog() { $('model-key').value = ''; editing = null; pendingNewProviderId = null; $('model-dialog').close(); }
 function readOptionalNumber(id) { const value = $(id).value.trim(); return value ? Number(value) : undefined; }
 function assignOptional(object, key, value) { if (value === undefined || value === '') delete object[key]; else object[key] = value; }
 function applyModelDialogDraft(candidateDraft) {
@@ -214,8 +246,8 @@ function applyModelDialogDraft(candidateDraft) {
   const wasDefault = Boolean(oldProvider && oldModel && candidateDraft.provider === oldProvider.id && candidateDraft.model === oldModel.id);
   const target = !editing ? modelConnectionProvider(candidateDraft) : findProvider(candidateDraft, baseUrl, oldProvider);
   if (target) provider = target;
-  else if (!provider || (editing && normalizeUrl(provider.baseUrl) !== normalizeUrl(baseUrl))) provider = { id: nextProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
-  if (!provider) provider = { id: nextProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
+  else if (!provider || (editing && normalizeUrl(provider.baseUrl) !== normalizeUrl(baseUrl))) provider = { id: allocateNewProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
+  if (!provider) provider = { id: allocateNewProviderId(candidateDraft), name: nextProviderName(), type, baseUrl, models: [], hasApiKey: false };
   const isNewProvider = !candidateDraft.providers.includes(provider);
   // 复用已有 Provider 时保留它的默认协议；不同协议只记录在当前模型上。
   if (isNewProvider) { provider.type = type; provider.baseUrl = baseUrl; }
@@ -243,6 +275,9 @@ function applyModelDialogDraft(candidateDraft) {
   }
   if (editing && oldProvider && oldProvider !== provider && oldModel) {
     oldProvider.models = (oldProvider.models || []).filter(item => item !== oldModel);
+    // 模型已迁移到新 Provider：旧 Provider 若已无模型则立即移除，
+    // 否则会留下同名空壳，让后续操作按旧 id 找不到配置。
+    if (oldProvider.models.length === 0) candidateDraft.providers = candidateDraft.providers.filter(item => item !== oldProvider);
     if (wasDefault) { candidateDraft.provider = provider.id; candidateDraft.model = model.id; }
   }
   if (!candidateDraft.providers.includes(provider)) candidateDraft.providers.push(provider);

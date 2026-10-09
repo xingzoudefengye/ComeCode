@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import {
   resolveUnifiedConfig,
@@ -153,11 +154,18 @@ export async function materializeUnifiedConfig(
   };
   if (resolved.hasSource && (!resolved.provider || !resolved.model)) delete (nextConfig as Record<string, unknown>).defaultModelSelection;
   await mkdir(dirname(options.targetProviderFile), { recursive: true });
-  await writeFile(
-    options.targetProviderFile,
-    `${JSON.stringify({ schemaVersion: 1, config: nextConfig }, null, 2)}\n`,
-    { encoding: "utf8", mode: 0o600 },
-  );
+  // 写临时文件再替换：Registry 侧持续轮询该文件，直接覆盖会让轮询读到半份 JSON。
+  const temporary = `${options.targetProviderFile}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(
+      temporary,
+      `${JSON.stringify({ schemaVersion: 1, config: nextConfig }, null, 2)}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    await rename(temporary, options.targetProviderFile);
+  } finally {
+    await rm(temporary, { force: true });
+  }
   await writeFile(`${options.targetProviderFile}.comecode-managed.json`, JSON.stringify(resolved.managedProviderIds.filter((id) => resolved.providers.some((provider) => provider.id === id))), { encoding: "utf8", mode: 0o600 });
   return resolved;
 }

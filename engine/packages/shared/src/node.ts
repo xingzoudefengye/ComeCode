@@ -4,6 +4,11 @@
  * This subpath must not be imported by renderer/browser bundles.
  */
 export { acquireFileLock } from "./node/atomicFileLock.js";
+export {
+  readDataBaseDirFromSettingFile,
+  resetDataBaseDirBootstrapCacheForTest,
+  resolveDataBaseDirSettingFilePath,
+} from "./node/dataBaseDirBootstrap.js";
 export { scanOfficialPluginCacheRoots } from "./node/officialPluginCache.js";
 export {
   migrateUserSubagentMarkdown,

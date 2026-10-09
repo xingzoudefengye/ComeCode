@@ -391,3 +391,40 @@ test("列表测试按钮直接发起请求、不弹确认且防重复点击，�
     assert.equal(f.get("status").textContent, outcome === "success" ? "连接成功" : outcome === "network-failure" ? "网络连接失败" : "响应协议不匹配");
   }
 });
+
+test("Provider 内部 ID 稳定唯一且与显示名分离", () => {
+  // 同名供应商：ID 必须互不相同，显示层才能区分到底是哪一个 Provider。
+  const f = form({
+    providers: [
+      { id: "first", name: "重名接口", type: "openai-chat", baseUrl: "https://a.example/v1", models: [{ id: "m1" }] },
+      { id: "second", name: "重名接口", type: "openai-chat", baseUrl: "https://b.example/v1", models: [{ id: "m2" }] },
+    ],
+  });
+  const generated = JSON.parse(
+    f.run("JSON.stringify([nextProviderId(draft), nextProviderId(draft)])"),
+  );
+  assert.match(generated[0], /^personal-/u);
+  assert.match(generated[1], /^personal-/u);
+  assert.notEqual(generated[0], generated[1]);
+  const labels = JSON.parse(
+    f.run(
+      "JSON.stringify(draft.providers.map(provider => providerDisplayName(provider, providerNameCounts())))",
+    ),
+  );
+  assert.equal(labels.length, 2);
+  assert.notEqual(labels[0], labels[1]);
+  for (const label of labels) assert.match(label, /^重名接口（.+）$/u);
+});
+
+test("编辑供应商只改名称与地址，不改内部 ID", async () => {
+  const f = form(providers(), true);
+  f.run("openProviderDialog(draft.providers[0])");
+  assert.equal(f.get("provider-edit-id").value, "first");
+  f.get("provider-edit-name").value = "改名后";
+  f.get("provider-edit-url").value = "https://changed.example/v1";
+  await f.run("saveProviderDialog({preventDefault(){}})");
+  const updated = f.draft().providers.find(provider => provider.name === "改名后");
+  assert.equal(updated.id, "first");
+  assert.equal(updated.baseUrl, "https://changed.example/v1");
+  assert.match(f.get("status").textContent, /已保存/u);
+});

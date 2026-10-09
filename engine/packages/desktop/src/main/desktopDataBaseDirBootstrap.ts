@@ -1,46 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { readDataBaseDirFromSettingFile } from "@zcode/shared/node";
 import { setDataBaseDir } from "@zcode/services/node";
-
-function resolveBootstrapSettingsFile(homePath: string = homedir()): string {
-  return join(homePath, ".comecode", "v2", "setting.json");
-}
-
-function extractBootstrapDataBaseDir(rawValue: unknown): string | null {
-  if (!rawValue || typeof rawValue !== "object") {
-    return null;
-  }
-
-  const dataBaseDir = (rawValue as { dataBaseDir?: unknown }).dataBaseDir;
-  if (typeof dataBaseDir !== "string") {
-    return null;
-  }
-
-  const trimmed = dataBaseDir.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function readBootstrapDataBaseDirFromDisk(
-  settingsFile: string = resolveBootstrapSettingsFile(),
-): string | null {
-  if (!existsSync(settingsFile)) {
-    return null;
-  }
-
-  try {
-    const raw = readFileSync(settingsFile, "utf-8");
-    return extractBootstrapDataBaseDir(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
 
 export function applyEarlyDataBaseDirBootstrap(): string | null {
   const dataBaseDir =
     process.env.COMECODE_DATA_BASE_DIR?.trim() ||
     process.env.ZCODE_DATA_BASE_DIR?.trim() ||
-    readBootstrapDataBaseDirFromDisk();
+    // 与 Web/CLI 共用同一份引导读取：三端必须解析到同一个数据根，否则各写各的 config.json。
+    readDataBaseDirFromSettingFile(homedir());
   if (dataBaseDir) {
     // 启动早期就把 dataBaseDir 注入进来，避免 logger / crashReporter 先按默认 HOME 建目录，
     // 导致后续再切换到自定义目录时，日志和 crash dump 落在两套路径里。

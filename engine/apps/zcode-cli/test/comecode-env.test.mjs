@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { homedir } from "node:os";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 import {
@@ -56,4 +57,28 @@ test("数据父目录优先级、空白和 tilde 展开", () => {
     resolveComeCodeDataRoot({ COMECODE_DATA_BASE_DIR: "  ", ZCODE_DATA_BASE_DIR: "~/test" }),
     join(homedir(), "test", ".comecode"),
   );
+});
+
+test("setting.json 的自定义 dataBaseDir 与桌面 bootstrap 对齐", () => {
+  const home = mkdtempSync(join(tmpdir(), "comecode-home-"));
+  const custom = mkdtempSync(join(tmpdir(), "comecode-custom-"));
+  mkdirSync(join(home, ".comecode", "v2"), { recursive: true });
+  writeFileSync(
+    join(home, ".comecode", "v2", "setting.json"),
+    JSON.stringify({ dataBaseDir: custom }),
+  );
+  try {
+    // 未设置任何数据目录 env 时，回退 setting.json，保证与桌面读写同一份 config.json。
+    assert.equal(resolveComeCodeDataRoot({ HOME: home }), join(resolve(custom), ".comecode"));
+    // env 显式数据目录优先于 setting.json。
+    assert.equal(
+      resolveComeCodeDataRoot({ HOME: home, ZCODE_DATA_BASE_DIR: "~" }),
+      join(homedir(), ".comecode"),
+    );
+    // 显式构造的隔离 env（无 HOME）不读盘，保持纯函数语义。
+    assert.equal(resolveComeCodeDataRoot({}), join(homedir(), ".comecode"));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(custom, { recursive: true, force: true });
+  }
 });

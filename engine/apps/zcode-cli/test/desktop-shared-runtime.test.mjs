@@ -284,3 +284,45 @@ test("Host 统一配置非法时明确失败，不覆盖来源", async () => {
     await rm(base, { recursive: true, force: true });
   }
 });
+
+test("外部改写 config.json 后 Host 快照自动重新投影", async () => {
+  const base = await mkdtemp(join(tmpdir(), "comecode-host-watch-"));
+  const root = join(base, ".comecode");
+  let snapshot;
+  try {
+    await mkdir(root, { recursive: true });
+    const writeConfig = (id) =>
+      writeFile(
+        join(root, "config.json"),
+        JSON.stringify({
+          providers: [
+            {
+              id,
+              type: "openai-chat",
+              baseUrl: `https://${id}.example/v1`,
+              apiKey: "fake-key",
+              models: [`${id}-model`],
+            },
+          ],
+        }),
+      );
+    await writeConfig("first");
+    snapshot = createSharedProviderSnapshot({ dataRoot: root, env: {} });
+    await snapshot.prepare();
+    assert.ok((await readFile(snapshot.filePath, "utf8")).includes("first"));
+    // 模拟 Web / CLI 端直接改写统一配置（其它进程，不经本进程 mutation）。
+    await writeConfig("second");
+    const deadline = Date.now() + 8000;
+    let text = "";
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      text = await readFile(snapshot.filePath, "utf8");
+      if (text.includes("second")) break;
+    }
+    assert.ok(text.includes("second"), "外部变更未触发快照重新投影");
+    assert.ok(!text.includes("first"), "旧 Provider 未随外部变更移除");
+  } finally {
+    await snapshot?.dispose();
+    await rm(base, { recursive: true, force: true });
+  }
+});

@@ -7,6 +7,7 @@ import {
 import {
   type ModelConfig,
   ProviderConfig,
+  ProviderMutationStaleError,
   type ProviderSettingsMutationTarget,
 } from "@zcode/provider";
 import type { ProviderConfigRule } from "@zcode/provider";
@@ -43,14 +44,29 @@ export function createUnifiedProviderSettingsMutationTarget(options: {
 
   const mutate = async (change: (document: UnifiedDocument) => UnifiedDocument): Promise<void> => {
     const snapshot = await editor.read();
-    const document = change(structuredClone(snapshot.config) as UnifiedDocument);
+    const input = structuredClone(snapshot.config) as UnifiedDocument;
+    const document = change(input);
+    // 幂等无变更（例如删除目标已不存在）不重写配置，避免无意义落盘与投影。
+    if (document === input) return;
     await editor.save({ revision: snapshot.revision, config: document, migrate: true });
     await materializeUnifiedConfig({ ...load, targetProviderFile });
   };
 
-  const updateProvider = (document: UnifiedDocument, providerId: string, change: (provider: UnifiedProvider) => UnifiedProvider) => {
+  const updateProvider = (
+    document: UnifiedDocument,
+    providerId: string,
+    change: (provider: UnifiedProvider) => UnifiedProvider,
+    options: { allowMissing?: boolean } = {},
+  ) => {
     const index = document.providers.findIndex((provider) => provider.id === providerId);
-    if (index < 0) throw new Error(`Provider 不存在: ${providerId}`);
+    if (index < 0) {
+      // 删除类操作里目标已不存在就是期望终态：按幂等处理，其余操作说明 UI 快照过期。
+      if (options.allowMissing) return document;
+      throw new ProviderMutationStaleError(
+        providerId,
+        document.providers.map((provider) => provider.id),
+      );
+    }
     const providers = [...document.providers];
     providers[index] = change(providers[index]!);
     return { ...document, providers };
@@ -118,6 +134,8 @@ export function createUnifiedProviderSettingsMutationTarget(options: {
     },
     deletePersonalProvider: async (providerId) => mutate((document) => {
       const providers = document.providers.filter((provider) => provider.id !== providerId);
+      // 已不存在即期望终态，幂等返回避免把重复删除报成失败。
+      if (providers.length === document.providers.length) return document;
       const next = { ...document, providers };
       if (next.provider === providerId) {
         const first = providers.find((provider) => provider.models?.length);
@@ -137,7 +155,8 @@ export function createUnifiedProviderSettingsMutationTarget(options: {
     addPersonalModel: async (providerId, modelId, config) => mutate((document) => updateProvider(document, providerId, (provider) => ({ ...provider, models: [...(provider.models ?? []), { id: modelId, ...modelConfigFields(config) }] }))),
     renamePersonalModel: async (providerId, currentModelId, nextModelId) => mutate((document) => updateProvider(document, providerId, (provider) => ({ ...provider, models: (provider.models ?? []).map((model) => (typeof model === "string" ? model : model.id) === currentModelId ? { ...(typeof model === "string" ? {} : model), id: nextModelId } : model) }))),
     deletePersonalModel: async (providerId, modelId) => mutate((document) => {
-      const next = updateProvider(document, providerId, (provider) => ({ ...provider, models: (provider.models ?? []).filter((model) => (typeof model === "string" ? model : model.id) !== modelId) }));
+      const next = updateProvider(document, providerId, (provider) => ({ ...provider, models: (provider.models ?? []).filter((model) => (typeof model === "string" ? model : model.id) !== modelId) }), { allowMissing: true });
+      if (next === document) return document;
       return next.model === modelId ? { ...next, model: undefined } : next;
     }),
     setPersonalModelEnabled: async (providerId, modelId, enabled) => mutate((document) => updateModel(document, providerId, modelId, (model) => ({ ...model, ...(enabled ? { enabled: undefined } : { enabled: false }) }))),

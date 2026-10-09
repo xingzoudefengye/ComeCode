@@ -71,9 +71,10 @@ function render() {
   defaults(); const container = $('providers'); container.replaceChildren();
   const selector = $('provider-selector'); selector.replaceChildren();
   if (!draft.providers.some(provider => provider.id === selectedProviderId)) selectedProviderId = '';
+  const nameCounts = providerNameCounts();
   const all = node('option', '全部供应商'); all.value = ''; selector.append(all);
   draft.providers.forEach(provider => {
-    const option = node('option', provider.name || provider.id); option.value = provider.id; selector.append(option);
+    const option = node('option', providerDisplayName(provider, nameCounts)); option.value = provider.id; selector.append(option);
   });
   selector.value = selectedProviderId;
   selector.onchange = () => { selectedProviderId = selector.value; render(); };
@@ -84,7 +85,7 @@ function render() {
     const edit = button('', () => openProviderDialog(provider), 'provider-edit');
     edit.setAttribute('aria-label', '编辑供应商'); edit.title = '编辑供应商';
     edit.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6Z"></path><path d="m14 5 5 5"></path></svg>';
-    name.append(node('strong', provider.name || provider.id), edit, node('span', provider.enabled === false ? '已停用' : '已启用', 'enabled-badge'));
+    name.append(node('strong', providerDisplayName(provider, nameCounts)), edit, node('span', provider.enabled === false ? '已停用' : '已启用', 'enabled-badge'));
     info.append(name, node('span', (provider.models || []).length + ' 个模型', 'provider-meta'));
     const actions = node('div', undefined, 'actions'), menu = node('details', undefined, 'provider-menu');
     const more = node('summary', '⋯'); more.setAttribute('aria-label', '供应商更多操作'); more.title = '供应商更多操作';

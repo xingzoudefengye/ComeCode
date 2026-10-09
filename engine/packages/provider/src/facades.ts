@@ -38,6 +38,22 @@ import type {
   ProviderRegistryServiceSnapshot,
 } from "./registry-service.js";
 
+/**
+ * UI 持有的是旧快照，而当前配置 / Registry 已不含该 Provider 时抛出。
+ * 调用边界应先刷新再重试，而不是把底层的"不存在"直接显示给用户。
+ */
+export class ProviderMutationStaleError extends Error {
+  readonly providerId: string;
+  readonly availableProviderIds: readonly string[];
+
+  constructor(providerId: string, availableProviderIds: readonly string[] = []) {
+    super(`Provider 不存在: ${providerId}`);
+    this.name = "ProviderMutationStaleError";
+    this.providerId = providerId;
+    this.availableProviderIds = Object.freeze([...availableProviderIds]);
+  }
+}
+
 export interface ProviderRegistryFacadeSource {
   getSnapshot(): ProviderRegistryServiceSnapshot | null;
   getView(): ProviderRegistryView;
@@ -436,7 +452,13 @@ export class ProviderSettingsFacade {
     const provider = snapshot.resolution.resolvedProviders.find(
       (item) => item.providerId === providerId,
     );
-    if (!provider) throw new Error(`Provider 不存在: ${providerId}`);
+    if (!provider) {
+      // 旧 UI 快照按已消失的 providerId 操作：抛可识别错误，交由调用边界刷新后重试。
+      throw new ProviderMutationStaleError(
+        providerId,
+        snapshot.resolution.resolvedProviders.map((item) => item.providerId),
+      );
+    }
     // 配置成员与可执行模型不是同一名单：禁用、无权益和不完整模型仍可编辑。
     // Account 的空/替换名单也必须原样使用，不能再与静态 Built-in 取并集。
     return Object.freeze({

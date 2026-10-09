@@ -16,6 +16,7 @@ import {
   type ResolveModelConfigInput,
   type SavePersonalModelDraftInput,
 } from "@zcode/provider";
+import { ProviderMutationStaleError } from "@zcode/provider";
 import { createServiceDescriptor } from "../descriptors.js";
 import type { ModelConnectivityResult } from "@zcode/shared";
 import { createServiceLogger } from "../logger/serviceLogger.js";
@@ -111,6 +112,22 @@ export function createProviderSettingsService(
   ensureReady: () => Promise<void> = async () => {},
   testConnectivity?: ProviderSettingsConnectivityTester,
 ): IProviderSettingsService {
+  // 跨进程/跨端并发时 UI 可能按已消失的 providerId 操作。先刷新 Registry 与来源再重试一次，
+  // 仍失败才提示用户刷新，而不是把底层的"Provider 不存在"直接抛到界面。
+  const runWithStaleRetry = async <T>(reason: string, operation: () => Promise<T>): Promise<T> => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isStaleProviderError(error)) throw error;
+      await facade.refresh(`stale-retry:${reason}`);
+      try {
+        return await operation();
+      } catch (retryError) {
+        if (!isStaleProviderError(retryError)) throw retryError;
+        throw new Error(formatStaleProviderMessage(retryError));
+      }
+    }
+  };
   return {
     onDidChange: toEvent((listener) => facade.onDidChange(listener)),
     getView: async () => {
@@ -131,39 +148,57 @@ export function createProviderSettingsService(
     },
     savePersonalProviderOverlay: async (providerId, config, metadata) => {
       await ensureReady();
-      return facade.savePersonalProviderOverlay(providerId, config, metadata);
+      return runWithStaleRetry("save-provider", () =>
+        facade.savePersonalProviderOverlay(providerId, config, metadata),
+      );
     },
     deletePersonalProvider: async (providerId) => {
       await ensureReady();
-      return facade.deletePersonalProvider(providerId);
+      return runWithStaleRetry("delete-provider", () =>
+        facade.deletePersonalProvider(providerId),
+      );
     },
     reorderPersonalProviders: async (providerIds) => {
       await ensureReady();
-      return facade.reorderPersonalProviders(providerIds);
+      return runWithStaleRetry("reorder-providers", () =>
+        facade.reorderPersonalProviders(providerIds),
+      );
     },
     reorderPersonalModels: async (providerId, modelIds) => {
       await ensureReady();
-      return facade.reorderPersonalModels(providerId, modelIds);
+      return runWithStaleRetry("reorder-models", () =>
+        facade.reorderPersonalModels(providerId, modelIds),
+      );
     },
     addPersonalModel: async (providerId, modelId, config, useRecommendedConfig) => {
       await ensureReady();
-      return facade.addPersonalModel(providerId, modelId, config, useRecommendedConfig);
+      return runWithStaleRetry("add-model", () =>
+        facade.addPersonalModel(providerId, modelId, config, useRecommendedConfig),
+      );
     },
     renamePersonalModel: async (providerId, currentModelId, nextModelId) => {
       await ensureReady();
-      return facade.renamePersonalModel(providerId, currentModelId, nextModelId);
+      return runWithStaleRetry("rename-model", () =>
+        facade.renamePersonalModel(providerId, currentModelId, nextModelId),
+      );
     },
     deletePersonalModel: async (providerId, modelId) => {
       await ensureReady();
-      return facade.deletePersonalModel(providerId, modelId);
+      return runWithStaleRetry("delete-model", () =>
+        facade.deletePersonalModel(providerId, modelId),
+      );
     },
     savePersonalModelDraft: async (input) => {
       await ensureReady();
-      return facade.savePersonalModelDraft(input);
+      return runWithStaleRetry("save-model-draft", () =>
+        facade.savePersonalModelDraft(input),
+      );
     },
     setPersonalModelEnabled: async (providerId, modelId, enabled) => {
       await ensureReady();
-      return facade.setPersonalModelEnabled(providerId, modelId, enabled);
+      return runWithStaleRetry("set-model-enabled", () =>
+        facade.setPersonalModelEnabled(providerId, modelId, enabled),
+      );
     },
     testModelConnectivity: async (input) => {
       await ensureReady();
@@ -207,6 +242,23 @@ export function createProviderSettingsService(
       });
     },
   };
+}
+
+/** 兼容不同打包实例：结构化判定，不依赖 instanceof 的单一类身份。 */
+function isStaleProviderError(error: unknown): error is ProviderMutationStaleError {
+  return (
+    error instanceof ProviderMutationStaleError ||
+    (typeof error === "object" &&
+      error !== null &&
+      (error as { name?: unknown }).name === "ProviderMutationStaleError")
+  );
+}
+
+function formatStaleProviderMessage(error: ProviderMutationStaleError): string {
+  const available = error.availableProviderIds.length
+    ? error.availableProviderIds.join("、")
+    : "无";
+  return `该供应商已不存在（${error.providerId}），界面可能已过期，请刷新后重试。当前可用供应商：${available}`;
 }
 
 export function createModelSelectionService(
