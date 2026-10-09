@@ -83,7 +83,9 @@ export function ContentPane({
           backgroundColor: palette.background,
         },
         scrollbarOptions: {
-          showArrows: true,
+          // 箭头会与 thumb 各自成块，让右侧滚动条看起来像三段拼接；
+          // 会话滚动只保留单一 thumb，鼠标滚轮/键盘仍可翻页。
+          showArrows: false,
         },
         viewportOptions: {
           backgroundColor: palette.background,
