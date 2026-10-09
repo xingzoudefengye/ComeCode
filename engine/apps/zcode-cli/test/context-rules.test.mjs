@@ -27,7 +27,7 @@ test("规则文件按固定顺序合并并支持 CLAUDE.md 与 .comecode/AGENTS.
     "AGENTS.md",
     "AGENTS.md",
     "CLAUDE.md",
-    ".comecode\\AGENTS.md",
+    join(".comecode", "AGENTS.md"),
   ]);
   assert.match(snapshot.userInstructions.content, /用户规则[\s\S]*AGENTS 规则[\s\S]*CLAUDE 规则[\s\S]*ComeCode 规则/u);
 });
