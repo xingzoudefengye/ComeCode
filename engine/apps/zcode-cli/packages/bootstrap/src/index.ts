@@ -31,6 +31,10 @@ export type {
 export { createModelAdapter } from "./model-factory.js";
 export type { CreateModelAdapterOptions } from "./model-factory.js";
 export { startProcessProviderRegistryRuntime } from "./app/process-provider-registry-runtime.js";
+export {
+  refreshCliProviderSnapshot,
+  setCliProviderSnapshotRefresher,
+} from "./app/provider-snapshot-refresh.js";
 export type { ProcessProviderRegistryRuntimeOptions } from "./app/process-provider-registry-runtime.js";
 export {
   addZCodePluginMarketplace,

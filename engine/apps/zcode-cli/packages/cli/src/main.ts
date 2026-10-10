@@ -91,6 +91,8 @@ async function main(): Promise<void> {
           argv,
           env: process.env,
           stderr,
+          // app-server/agent-server 长驻：跟随 config.json 重新投影，新增模型无需重启。
+          watchUnifiedConfig: isProtocol,
         }),
       );
     }

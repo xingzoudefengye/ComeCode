@@ -1,4 +1,4 @@
-import { existsSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, realpathSync, rmSync, watch, type FSWatcher } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
@@ -21,6 +21,10 @@ import type { CliEnv } from "./env.js";
 import { extractDisallowedToolsArgs, parseGlobalArgs } from "./arguments.js";
 
 export const SEA_ZCODE_BUILTIN_PROVIDER_CONFIG_ASSET_KEY = "zcode-provider/zcode-builtin.json";
+
+/** 统一配置文件名（含编辑器写盘用的 config.json.<uuid>.tmp/.bak 中间态）。 */
+const UNIFIED_CONFIG_FILE_PATTERN = /^config\.(json|jsonc|toml)(\..+)?$/i;
+const SNAPSHOT_RELOAD_DEBOUNCE_MS = 250;
 
 const runtimeDirectories = new Set<string>();
 process.once("exit", () => {
@@ -61,6 +65,8 @@ interface PrepareCliProviderRuntimeEnvOptions {
   readonly appVersion?: string;
   readonly platform?: string;
   readonly stderr?: Pick<NodeJS.WriteStream, "write">;
+  /** 长驻协议进程跟随统一配置重新投影运行时快照；一次性命令保持单次快照语义。 */
+  readonly watchUnifiedConfig?: boolean;
 }
 
 /** 为运行 Core 或写入模型选择的 CLI Entry 定位同一 Environment 的 Provider Config。 */
@@ -80,14 +86,16 @@ export async function prepareCliProviderRuntimeEnv(
   runtimeDirectories.add(runtimeDirectory);
   const personalFilePath = join(runtimeDirectory, PERSONAL_PROVIDER_CONFIG_FILE_NAME);
   // 统一配置只在 CLI 边界 materialize，旧 Provider Registry 继续读取 JSON。
-  const config = await materializeUnifiedConfig({
-    cwd: extractCliWorkingDirectory(options.argv),
-    dataRoot: dataBaseDir,
-    env,
-    targetProviderFile: personalFilePath,
-    legacyProviderFile: legacyFilePath,
-    cliOverrides: extractProviderCliOverrides(options.argv),
-  });
+  const materializeSnapshot = () =>
+    materializeUnifiedConfig({
+      cwd: extractCliWorkingDirectory(options.argv),
+      dataRoot: dataBaseDir,
+      env,
+      targetProviderFile: personalFilePath,
+      legacyProviderFile: legacyFilePath,
+      cliOverrides: extractProviderCliOverrides(options.argv),
+    });
+  const config = await materializeSnapshot();
   if (config.hasSource && config.diagnostics.errors.length) throw new Error(config.diagnostics.errors.join("；"));
   const selected = config.providers.find((provider) => provider.id === config.provider);
   const explicitSelection = extractProviderCliOverrides(options.argv).provider?.trim() || env.COMECODE_PROVIDER?.trim();
@@ -105,6 +113,19 @@ export async function prepareCliProviderRuntimeEnv(
   if (environmentSelection && selected?.executable && config.model) {
     // JSON 字符串转义控制字符；只说明选择，不输出 key 或 endpoint。
     options.stderr?.write(`ComeCode Provider: ${JSON.stringify(config.provider)} / ${JSON.stringify(config.model)}（环境配置，CLI 参数优先）\n`);
+  }
+  // app-server/agent-server 是长驻进程：快照只在启动时投影一次，Registry 轮询又只盯快照
+  // 文件，导致运行中新增/停用模型永远进不了 Agent Registry，必须重启才生效。
+  if (options.watchUnifiedConfig) {
+    const snapshotRuntime = watchCliProviderRuntimeSnapshot({
+      dataRoot: dataBaseDir,
+      rematerialize: materializeSnapshot,
+      ...(options.stderr ? { stderr: options.stderr } : {}),
+    });
+    // 协议请求（连接测试等）不能只依赖文件监听的去抖窗口：注册按需重新投影，
+    // 让刚保存的模型在同一次请求内就能进入 Registry。
+    const { setCliProviderSnapshotRefresher } = await import("@zcode/bootstrap");
+    setCliProviderSnapshotRefresher(() => snapshotRuntime.refresh());
   }
   if (explicitZCodeBuiltin && explicitPersonal) {
     return {
@@ -125,6 +146,84 @@ export async function prepareCliProviderRuntimeEnv(
     [ZCODE_BUILTIN_PROVIDER_CONFIG_FILE_ENV]: zcodeBuiltinFilePath,
     [ZCODE_BUILTIN_PROVIDER_BUNDLED_CONFIG_FILE_ENV]: zcodeBuiltinFilePath,
     [ZCODE_PERSONAL_PROVIDER_CONFIG_FILE_ENV]: personalFilePath,
+  };
+}
+
+export interface CliProviderSnapshotRuntime {
+  readonly refresh: () => Promise<void>;
+  readonly dispose: () => void;
+}
+
+/**
+ * 长驻协议进程的运行时快照跟随统一配置重新投影。
+ *
+ * Registry 的 Personal 轮询只看得到投影出来的快照文件；桌面/Web/CLI 新增模型只写统一
+ * config.json，因此必须在来源变更时重新投影同一份快照文件，运行中的 Agent 才能在没有
+ * 重启的情况下解析到新模型。
+ */
+export function watchCliProviderRuntimeSnapshot(options: {
+  readonly dataRoot: string;
+  readonly rematerialize: () => Promise<unknown>;
+  readonly stderr?: Pick<NodeJS.WriteStream, "write">;
+}): CliProviderSnapshotRuntime {
+  let watcher: FSWatcher | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let disposed = false;
+  // 串行化投影：文件事件与按需刷新可能交错，旧一轮结果不能覆盖新配置。
+  let queue: Promise<void> = Promise.resolve();
+
+  const enqueue = (): Promise<void> => {
+    queue = queue.then(async () => {
+      if (disposed) return;
+      try {
+        await options.rematerialize();
+      } catch (error) {
+        // 投影失败保留上一份快照；下一次文件变更或按需刷新仍会重试，不能中断 Agent。
+        options.stderr?.write(
+          `Provider 运行时快照重新投影失败: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+      }
+    });
+    return queue;
+  };
+
+  const schedule = (): void => {
+    if (disposed) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = undefined;
+      void enqueue();
+    }, SNAPSHOT_RELOAD_DEBOUNCE_MS);
+    timer.unref?.();
+  };
+
+  try {
+    watcher = watch(options.dataRoot, { persistent: false }, (_event, filename) => {
+      // 部分平台不提供 filename；无法判定时保守重新投影，投影本身是幂等的。
+      const name = typeof filename === "string" ? filename : "";
+      if (!name || UNIFIED_CONFIG_FILE_PATTERN.test(name)) schedule();
+    });
+    watcher.on("error", () => {
+      // 监听不可用不阻塞运行；重新启动进程仍会读到最新配置。
+      watcher = undefined;
+    });
+  } catch {
+    watcher = undefined;
+  }
+
+  return {
+    /** 取消防抖并立即投影，供需要配置确定性的协议请求等待。 */
+    async refresh(): Promise<void> {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      await enqueue();
+    },
+    dispose(): void {
+      disposed = true;
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      watcher?.close();
+    },
   };
 }
 

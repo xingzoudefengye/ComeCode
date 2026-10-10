@@ -28,6 +28,7 @@ import {
 } from "./zcode-protocol/storage-startup.js";
 import { closeSessionStore, getSessionDbPath } from "./app/session-store.js";
 import { startProcessProviderRegistryRuntime } from "./app/process-provider-registry-runtime.js";
+import { refreshCliProviderSnapshot } from "./app/provider-snapshot-refresh.js";
 import { scheduleStartupLogRetentionCleanup } from "./log-retention.js";
 import { StartupTimer, startupNow } from "./startup-logging.js";
 import { installZCodeProtocolAiSdkWarningLogger } from "./zcode-protocol/ai-sdk-warning-logger.js";
@@ -289,6 +290,9 @@ export async function runZCodeProtocolAgent(
       sessionStore,
       syncAccountProviderConfig: activeProviderRegistryRuntime.syncAccountProviderConfig,
       refreshProviderRegistry: async (reason) => {
+        // 先按需重新投影本进程的运行时快照：桌面刚新增模型就点测试时，文件监听可能
+        // 还在去抖窗口内，只刷新 Registry 会读到旧快照并误报"模型不存在"。
+        await refreshCliProviderSnapshot();
         await activeProviderRegistryRuntime.runtime.registryService.refresh(reason);
       },
       version: options.version,
