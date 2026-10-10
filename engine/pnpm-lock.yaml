@@ -18,6 +18,9 @@ patchedDependencies:
   '@arms/rum-electron@0.0.3':
     hash: 36855354851ea495bc47a03340b0484ff62836b739cad56904b8a69f18e2ae97
     path: patches/@arms__rum-electron@0.0.3.patch
+  '@mbears/opentui-core@0.2.15':
+    hash: e6e54797518eea3c71a6addc1d0f39b8d0a888b359d37b5ec5f1425fb82e3776
+    path: patches/@mbears__opentui-core@0.2.15.patch
 
 importers:
 
@@ -556,7 +559,7 @@ importers:
     dependencies:
       '@mbears/opentui-core':
         specifier: 0.2.15
-        version: 0.2.15(typescript@6.0.2)(web-tree-sitter@0.25.10)
+        version: 0.2.15(patch_hash=e6e54797518eea3c71a6addc1d0f39b8d0a888b359d37b5ec5f1425fb82e3776)(typescript@6.0.2)(web-tree-sitter@0.25.10)
       '@mbears/opentui-react':
         specifier: 0.2.15
         version: 0.2.15(react-devtools-core@7.0.1)(react@19.2.7)(typescript@6.0.2)(web-tree-sitter@0.25.10)(ws@8.18.0)
@@ -11360,7 +11363,7 @@ snapshots:
   '@mbears/opentui-core-win32-x64@0.2.15':
     optional: true
 
-  '@mbears/opentui-core@0.2.15(typescript@6.0.2)(web-tree-sitter@0.25.10)':
+  '@mbears/opentui-core@0.2.15(patch_hash=e6e54797518eea3c71a6addc1d0f39b8d0a888b359d37b5ec5f1425fb82e3776)(typescript@6.0.2)(web-tree-sitter@0.25.10)':
     dependencies:
       bun-ffi-structs: 0.2.2(typescript@6.0.2)
       diff: 9.0.0
@@ -11383,7 +11386,7 @@ snapshots:
 
   '@mbears/opentui-react@0.2.15(react-devtools-core@7.0.1)(react@19.2.7)(typescript@6.0.2)(web-tree-sitter@0.25.10)(ws@8.18.0)':
     dependencies:
-      '@mbears/opentui-core': 0.2.15(typescript@6.0.2)(web-tree-sitter@0.25.10)
+      '@mbears/opentui-core': 0.2.15(patch_hash=e6e54797518eea3c71a6addc1d0f39b8d0a888b359d37b5ec5f1425fb82e3776)(typescript@6.0.2)(web-tree-sitter@0.25.10)
       react: 19.2.7
       react-devtools-core: 7.0.1
       react-reconciler: 0.33.0(react@19.2.7)

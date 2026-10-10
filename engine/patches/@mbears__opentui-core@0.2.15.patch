@@ -1,0 +1,78 @@
+diff --git a/index-1j83z2zx.js b/index-1j83z2zx.js
+index e97f523047394fca78a9af7c9bcf8e62b25e169e..975302788af8bd00362cefa9aac6d19da42158b4 100644
+--- a/index-1j83z2zx.js
++++ b/index-1j83z2zx.js
+@@ -9877,28 +9877,13 @@ class SliderRenderable extends Renderable {
+     buffer.fillRect(this.x, this.y, this.width, this.height, this._backgroundColor);
+     const realStartCell = Math.floor(virtualThumbStart / 2);
+     const realEndCell = Math.ceil(virtualThumbEnd / 2) - 1;
+-    const startX = Math.max(0, realStartCell);
+-    const endX = Math.min(this.width - 1, realEndCell);
+-    for (let realX = startX;realX <= endX; realX++) {
+-      const virtualCellStart = realX * 2;
+-      const virtualCellEnd = virtualCellStart + 2;
+-      const thumbStartInCell = Math.max(virtualThumbStart, virtualCellStart);
+-      const thumbEndInCell = Math.min(virtualThumbEnd, virtualCellEnd);
+-      const coverage = thumbEndInCell - thumbStartInCell;
+-      let char = " ";
+-      if (coverage >= 2) {
+-        char = "\u2588";
+-      } else {
+-        const isLeftHalf = thumbStartInCell === virtualCellStart;
+-        if (isLeftHalf) {
+-          char = "\u258C";
+-        } else {
+-          char = "\u2590";
+-        }
+-      }
+-      for (let y2 = 0;y2 < this.height; y2++) {
+-        buffer.setCellWithAlphaBlending(this.x + realX, this.y + y2, char, this._foregroundColor, this._backgroundColor);
+-      }
++    // ZCode 修复：同竖向滑块，改用整格背景填充，避免半格字形造成碎块观感。
++    if (this._max <= this._min)
++      return;
++    const solidStartX = Math.max(0, realStartCell);
++    const solidEndX = Math.min(this.width - 1, realEndCell);
++    if (solidEndX >= solidStartX) {
++      buffer.fillRect(this.x + solidStartX, this.y, solidEndX - solidStartX + 1, this.height, this._foregroundColor);
+     }
+   }
+   renderVertical(buffer) {
+@@ -9908,28 +9893,15 @@ class SliderRenderable extends Renderable {
+     buffer.fillRect(this.x, this.y, this.width, this.height, this._backgroundColor);
+     const realStartCell = Math.floor(virtualThumbStart / 2);
+     const realEndCell = Math.ceil(virtualThumbEnd / 2) - 1;
+-    const startY = Math.max(0, realStartCell);
+-    const endY = Math.min(this.height - 1, realEndCell);
+-    for (let realY = startY;realY <= endY; realY++) {
+-      const virtualCellStart = realY * 2;
+-      const virtualCellEnd = virtualCellStart + 2;
+-      const thumbStartInCell = Math.max(virtualThumbStart, virtualCellStart);
+-      const thumbEndInCell = Math.min(virtualThumbEnd, virtualCellEnd);
+-      const coverage = thumbEndInCell - thumbStartInCell;
+-      let char = " ";
+-      if (coverage >= 2) {
+-        char = "\u2588";
+-      } else if (coverage > 0) {
+-        const virtualPositionInCell = thumbStartInCell - virtualCellStart;
+-        if (virtualPositionInCell === 0) {
+-          char = "\u2580";
+-        } else {
+-          char = "\u2584";
+-        }
+-      }
+-      for (let x2 = 0;x2 < this.width; x2++) {
+-        buffer.setCellWithAlphaBlending(this.x + x2, this.y + realY, char, this._foregroundColor, this._backgroundColor);
+-      }
++    // ZCode 修复：原来逐格写 █/▀/▄ 字形，字形高度受终端字体行高限制，
++    // 行与行之间会露出轨道底色，表现为滑块被切成多个小方块。
++    // 改成整格背景填充，由终端铺满整个单元格，与原生滚动条一致。
++    if (this._max <= this._min)
++      return;
++    const solidStartY = Math.max(0, realStartCell);
++    const solidEndY = Math.min(this.height - 1, realEndCell);
++    if (solidEndY >= solidStartY) {
++      buffer.fillRect(this.x, this.y + solidStartY, this.width, solidEndY - solidStartY + 1, this._foregroundColor);
+     }
+   }
+   getVirtualThumbSize() {
