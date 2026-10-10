@@ -2,6 +2,7 @@ import React from "react";
 import type { TuiCopy } from "@zcode/i18n";
 import type { Message, ThoughtTranscriptPart, TranscriptPart } from "./app-model.js";
 import { palette } from "./app-model.js";
+import { DARK_TUI_THEME } from "./theme/index.js";
 import { EmptyTranscriptLogo } from "./app-empty-transcript.js";
 import { DEFAULT_TUI_COPY } from "./app-locale.js";
 import { MarkdownText } from "./app-markdown.js";
@@ -86,10 +87,9 @@ export function ContentPane({
           // 箭头会与 thumb 各自成块，让右侧滚动条看起来像三段拼接；
           // 会话滚动只保留单一 thumb，鼠标滚轮/键盘仍可翻页。
           showArrows: false,
-          // ScrollBar 的 track 由 slider 的 backgroundColor 绘制，
-          // 把它设成正文底色即可隐藏轨道，只留下 thumb 滑块。
+          // 显式使用深色轨道，避免浅色主题下跟随正文变亮；不改变原生滑块绘制。
           trackOptions: {
-            backgroundColor: palette.background,
+            backgroundColor: DARK_TUI_THEME.background,
           },
         },
         viewportOptions: {
@@ -310,7 +310,8 @@ export function MessageRow({
             : 0,
         marginBottom: 0,
         minHeight: 1,
-        paddingLeft: isUserMessage ? 1 : 0,
+        // 用户提示符与上方列表标记对齐，不额外向右缩进。
+        paddingLeft: 0,
         paddingRight: isUserMessage ? 1 : 0,
         paddingBottom: 0,
         paddingTop: 0,

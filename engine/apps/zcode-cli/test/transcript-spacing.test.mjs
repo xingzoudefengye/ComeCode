@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { ContentPane } from "../packages/tui/src/app-transcript-components.tsx";
 import { MarkdownText } from "../packages/tui/src/app-markdown.tsx";
+import { useSidebarController } from "../packages/tui/src/app-sidebar-layout.ts";
+import { DARK_TUI_THEME } from "../packages/tui/src/theme/index.ts";
 import { setActiveTuiThemeMode } from "../packages/tui/src/theme/index.ts";
 const require = createRequire(new URL("../packages/tui/package.json", import.meta.url));
 const React = require("react");
@@ -337,7 +339,9 @@ test("用户消息使用引用标记，模型列表保留层级缩进", async (t
   const userLines = userView.captureCharFrame().split("\n");
   // 对齐 Claude Code CLI：只有首段带 "> "，后续段落用空格缩进，
   // 避免多段输入被误读成多条独立消息。
-  assert.ok(userLines.some((line) => line.includes("> 第一段")));
+  const firstUserLine = userLines.find((line) => line.includes("> 第一段"));
+  assert.ok(firstUserLine);
+  assert.equal(firstUserLine.indexOf("> 第一段"), 0);
   assert.ok(userLines.some((line) => line.includes("  第二段")));
   assert.ok(!userLines.some((line) => line.includes("> 第二段")));
 
@@ -355,4 +359,42 @@ test("用户消息使用引用标记，模型列表保留层级缩进", async (t
   assert.ok(nested.indexOf("二级项目") > top.indexOf("一级项目"));
   assert.ok(lines.some((line) => line.includes("第一个步骤")));
   assert.ok(lines.some((line) => line.includes("第二个步骤")));
+});
+
+
+test("宽窄终端默认隐藏右侧介绍栏，保留手动切换", async (t) => {
+  for (const width of [80, 150]) {
+    let controller;
+    function SidebarHarness() {
+      controller = useSidebarController();
+      return React.createElement("box", { width: "100%", height: "100%" });
+    }
+    const view = await render(t, React.createElement(SidebarHarness), width);
+    assert.equal(controller.layout.visible, false);
+    assert.equal(controller.layout.reservedWidth, 0);
+    await React.act(async () => { controller.toggleSidebar(); await view.flush(); });
+    assert.equal(controller.layout.visible, true);
+    assert.equal(controller.layout.overlay, width === 80);
+    await React.act(async () => { controller.toggleSidebar(); await view.flush(); });
+    assert.equal(controller.layout.visible, false);
+  }
+});
+
+test("浅色和深色主题的会话滚动轨道保持显式深色", async (t) => {
+  try {
+    for (const mode of ["light", "dark"]) {
+      setActiveTuiThemeMode(mode);
+      const view = await render(t, React.createElement(ContentPane, {
+        id: `dark-track-${mode}`,
+        focused: false,
+        messages: Array.from({ length: 80 }, (_, index) => ({ role: "user", content: `message-${index}` })),
+      }));
+      const scrollBox = view.renderer.root.findDescendantById(`dark-track-${mode}`);
+      const background = scrollBox.verticalScrollBar.slider.backgroundColor;
+      assert.deepEqual(background.toInts().slice(0, 3), [20, 20, 20]);
+      assert.equal(DARK_TUI_THEME.background, "#141414");
+    }
+  } finally {
+    setActiveTuiThemeMode("dark");
+  }
 });
